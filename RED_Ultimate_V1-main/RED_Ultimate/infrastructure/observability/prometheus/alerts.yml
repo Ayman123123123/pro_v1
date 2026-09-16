@@ -6,28 +6,211 @@ groups:
     for: 2m
     labels: {severity: critical}
     annotations: {summary: "RED backend is unreachable"}
+
   - alert: DependencyDown
-    expr: up{job=~"postgres|redis|mongodb|minio|media-sfu"} == 0
+    expr: up{job=~"postgres|redis|mongodb|minio|media-sfu|nginx"} == 0
     for: 3m
     labels: {severity: critical}
     annotations: {summary: "RED dependency {{ $labels.job }} is unreachable"}
+
   - alert: BackendHighLatency
     expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le)) > 1
     for: 10m
     labels: {severity: warning}
     annotations: {summary: "Backend p95 latency exceeds 1 second"}
+
   - alert: BackendHighErrorRate
     expr: sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count[5m])), 1) > 0.05
     for: 10m
     labels: {severity: warning}
     annotations: {summary: "Backend 5xx rate exceeds 5 percent"}
+
   - alert: PostgreSQLTooManyConnections
     expr: pg_stat_activity_count / clamp_min(pg_settings_max_connections, 1) > 0.85
     for: 10m
     labels: {severity: warning}
     annotations: {summary: "PostgreSQL connections exceed 85 percent"}
+
   - alert: TlsCertificateExpiringSoon
     expr: probe_ssl_earliest_cert_expiry - time() < 1209600
     for: 1h
     labels: {severity: warning}
     annotations: {summary: "TLS certificate expires within 14 days"}
+
+  - alert: DatabaseSlowQueries
+    expr: histogram_quantile(0.95, sum(rate(postgres_query_duration_seconds_bucket[5m])) by (le)) > 5
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "PostgreSQL p95 query latency exceeds 5 seconds"}
+
+  - alert: RedisMemoryHigh
+    expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Redis memory usage exceeds 85 percent"}
+
+  - alert: MongoDBConnectionsHigh
+    expr: mongodb_connections / mongodb_max_connections > 0.8
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "MongoDB connections exceed 80 percent"}
+
+  - alert: MinIODiskSpaceLow
+    expr: minio_disk_free_bytes / minio_disk_total_bytes < 0.15
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "MinIO disk space below 15 percent"}
+
+  - alert: MediaSFUHighCPU
+    expr: process_cpu_seconds_total{job="media-sfu"} > 0.8
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Media SFU CPU usage exceeds 80 percent"}
+
+  - alert: NginxHighLatency
+    expr: histogram_quantile(0.95, sum(rate(nginx_http_request_duration_seconds_bucket[5m])) by (le)) > 2
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Nginx p95 latency exceeds 2 seconds"}
+
+  - alert: NginxHighErrorRate
+    expr: sum(rate(nginx_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(nginx_http_requests_total[5m])), 1) > 0.05
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Nginx 5xx rate exceeds 5 percent"}
+
+- name: infrastructure
+  rules:
+  - alert: HostHighCPU
+    expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Host {{ $labels.instance }} CPU usage exceeds 85 percent"}
+
+  - alert: HostHighMemory
+    expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Host {{ $labels.instance }} memory usage exceeds 90 percent"}
+
+  - alert: HostDiskSpaceLow
+    expr: node_filesystem_avail_bytes / node_filesystem_size_bytes < 0.1
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Host {{ $labels.instance }} disk space below 10 percent"}
+
+  - alert: ContainerHighMemory
+    expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.85
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Container {{ $labels.container }} memory usage exceeds 85 percent"}
+
+  - alert: ContainerHighCPU
+    expr: (rate(container_cpu_usage_seconds_total[5m]) / container_spec_cpu_quota / container_spec_cpu_period) > 0.85
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Container {{ $labels.container }} CPU usage exceeds 85 percent"}
+
+- name: observability
+  rules:
+  - alert: PrometheusDown
+    expr: up{job="prometheus"} == 0
+    for: 1m
+    labels: {severity: critical}
+    annotations: {summary: "Prometheus is unreachable"}
+
+  - alert: AlertmanagerDown
+    expr: up{job="alertmanager"} == 0
+    for: 1m
+    labels: {severity: critical}
+    annotations: {summary: "Alertmanager is unreachable"}
+
+  - alert: GrafanaDown
+    expr: up{job="grafana"} == 0
+    for: 1m
+    labels: {severity: warning}
+    annotations: {summary: "Grafana is unreachable"}
+
+  - alert: TempoDown
+    expr: up{job="tempo"} == 0
+    for: 2m
+    labels: {severity: warning}
+    annotations: {summary: "Tempo is unreachable"}
+
+  - alert: LokiDown
+    expr: up{job="loki"} == 0
+    for: 2m
+    labels: {severity: warning}
+    annotations: {summary: "Loki is unreachable"}
+
+  - alert: PyroscopeDown
+    expr: up{job="pyroscope"} == 0
+    for: 2m
+    labels: {severity: warning}
+    annotations: {summary: "Pyroscope is unreachable"}
+
+  - alert: PromtailDown
+    expr: up{job="promtail"} == 0
+    for: 2m
+    labels: {severity: warning}
+    annotations: {summary: "Promtail is unreachable"}
+
+  - alert: OTelCollectorDown
+    expr: up{job="otel-collector"} == 0
+    for: 2m
+    labels: {severity: warning}
+    annotations: {summary: "OTel Collector is unreachable"}
+
+  - alert: PrometheusTSDBReloadFail
+    expr: prometheus_tsdb_reloads_failures_total > 0
+    for: 5m
+    labels: {severity: critical}
+    annotations: {summary: "Prometheus TSDB reload failed"}
+
+  - alert: PrometheusRuleEvalFail
+    expr: prometheus_rule_evaluation_failures_total > 0
+    for: 5m
+    labels: {severity: warning}
+    annotations: {summary: "Prometheus rule evaluation failed"}
+
+  - alert: PrometheusTargetScrapesFail
+    expr: sum(rate(prometheus_target_scrapes_exceeded_sample_limit_total[5m])) > 0
+    for: 5m
+    labels: {severity: warning}
+    annotations: {summary: "Prometheus target scrapes exceeding sample limit"}
+
+- name: business
+  rules:
+  - alert: ActiveUsersDrop
+    expr: |
+      (
+        sum(increase(red_active_users_total[1h])) /
+        nullif(sum(red_active_users_total offset 1h), 0)
+      ) < 0.5
+    for: 30m
+    labels: {severity: warning}
+    annotations: {summary: "Active users dropped more than 50% in the last hour"}
+
+  - alert: MessageDeliveryFailures
+    expr: sum(rate(red_message_delivery_failures_total[5m])) > 0.01
+    for: 5m
+    labels: {severity: warning}
+    annotations: {summary: "Message delivery failure rate exceeds 1%"}
+
+  - alert: CallSetupFailures
+    expr: sum(rate(red_call_setup_failures_total[5m])) > 0.05
+    for: 5m
+    labels: {severity: warning}
+    annotations: {summary: "Call setup failure rate exceeds 5%"}
+
+  - alert: PushNotificationFailures
+    expr: sum(rate(red_push_notification_failures_total[5m])) > 0.1
+    for: 5m
+    labels: {severity: warning}
+    annotations: {summary: "Push notification failure rate exceeds 10%"}
+
+  - alert: DatabaseMigrationPending
+    expr: flyway_migration_pending > 0
+    for: 1m
+    labels: {severity: critical}
+    annotations: {summary: "Database migration pending - manual intervention required"}

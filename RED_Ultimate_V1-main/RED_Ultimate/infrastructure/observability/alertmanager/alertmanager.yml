@@ -1,12 +1,78 @@
 global:
   resolve_timeout: 5m
+  smtp_smarthost: '${SMTP_HOST:-}'
+  smtp_from: '${SMTP_FROM:-alerts@red-sovereign.local}'
+  smtp_auth_username: '${SMTP_USER:-}'
+  smtp_auth_password: '${SMTP_PASSWORD:-}'
+  smtp_require_tls: true
+
 route:
-  receiver: operator-log
-  group_by: [alertname, job]
+  receiver: 'default'
+  group_by: ['alertname', 'job', 'service', 'severity']
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
+  routes:
+    - receiver: 'critical-alerts'
+      matchers:
+        - severity="critical"
+      group_wait: 0s
+      repeat_interval: 1h
+    - receiver: 'warning-alerts'
+      matchers:
+        - severity="warning"
+      group_wait: 30s
+      repeat_interval: 4h
+    - receiver: 'info-alerts'
+      matchers:
+        - severity="info"
+      group_wait: 1m
+      repeat_interval: 24h
+
 receivers:
-  - name: operator-log
-    # Configure a secure webhook, email, PagerDuty, or Matrix receiver in deployment secrets.
-    webhook_configs: []
+  - name: 'default'
+    webhook_configs:
+      - url: '${WEBHOOK_URL:-}'
+        send_resolved: true
+        http_config:
+          tls_config:
+            insecure_skip_verify: false
+
+  - name: 'critical-alerts'
+    webhook_configs:
+      - url: '${CRITICAL_WEBHOOK_URL:-}'
+        send_resolved: true
+        http_config:
+          tls_config:
+            insecure_skip_verify: false
+    # pagerduty_configs:
+    #   - service_key: '${PAGERDUTY_KEY:-}'
+    #     severity: critical
+
+  - name: 'warning-alerts'
+    webhook_configs:
+      - url: '${WARNING_WEBHOOK_URL:-}'
+        send_resolved: true
+        http_config:
+          tls_config:
+            insecure_skip_verify: false
+
+  - name: 'info-alerts'
+    webhook_configs:
+      - url: '${INFO_WEBHOOK_URL:-}'
+        send_resolved: true
+        http_config:
+          tls_config:
+            insecure_skip_verify: false
+
+inhibit_rules:
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ['alertname', 'job', 'service']
+  - source_matchers:
+      - alertname="Watchdog"
+    target_matchers:
+      - severity="warning"
+    equal: ['job', 'service']

@@ -1,13 +1,15 @@
-# RED Sovereign — Docker Compose Production Override
-# Extends base docker-compose.yml with production settings
-# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# RED Sovereign — Full Observability Stack Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 #
-# Production settings:
-# - Full replicas and resources
-# - 30d Prometheus retention
-# - Alertmanager for alerting
-# - Node Exporter, cAdvisor, Exporters
-# - All services with production resource limits
+# Complete observability stack with:
+# - Prometheus (metrics, 30d retention)
+# - Alertmanager (alerting)
+# - Grafana (dashboards)
+# - Loki (logs)
+# - Tempo (traces)
+# - Pyroscope (profiling)
+# - OTEL Collector (telemetry pipeline)
+# - All exporters
 
 x-logging: &default-logging
   driver: "json-file"
@@ -62,123 +64,6 @@ x-resource-limits-xlarge: &resource-limits-xlarge
         cpus: '2.0'
 
 services:
-  # Production resource overrides
-  postgres:
-    <<: *resource-limits-xlarge
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
-        reservations:
-          memory: 2G
-          cpus: '2.0'
-
-  mongo:
-    <<: *resource-limits-xlarge
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
-        reservations:
-          memory: 2G
-          cpus: '2.0'
-
-  redis:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-    command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --requirepass
-      - "${REDIS_PASSWORD}"
-      - --maxmemory
-      - "2gb"
-      - --maxmemory-policy
-      - "allkeys-lru"
-
-  minio:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-
-  backend:
-    deploy:
-      replicas: 3
-      resources:
-        limits:
-          memory: 3G
-          cpus: '3.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-    environment:
-      SPRING_PROFILES_ACTIVE: "prod"
-      RED_ADMIN_COOKIE_SECURE: "true"
-      JAVA_TOOL_OPTIONS: "-Xms1g -Xmx2g -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
-
-  media-sfu:
-    <<: *resource-limits-xlarge
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-          cpus: '8.0'
-        reservations:
-          memory: 4G
-          cpus: '4.0'
-    environment:
-      MEDIASOUP_WORKERS: "8"
-
-  admin-dashboard:
-    deploy:
-      replicas: 3
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
-        reservations:
-          memory: 512M
-          cpus: '0.5'
-
-  nginx:
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
-        reservations:
-          memory: 512M
-          cpus: '0.5'
-
-  coturn:
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
-        reservations:
-          memory: 512M
-          cpus: '0.5'
-
-  # Production observability stack
   prometheus:
     image: prom/prometheus:v3.1.0
     container_name: red-prometheus
@@ -188,8 +73,10 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=50GB'
       - '--web.enable-lifecycle'
       - '--web.enable-admin-api'
+      - '--web.route-prefix=/'
     ports:
       - "9090:9090"
     volumes:
@@ -226,7 +113,11 @@ services:
     <<: *resource-limits-large
     environment:
       - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_admin_password
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-clock-panel
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-clock-panel,grafana-worldmap-panel
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     ports:
       - "3000:3000"
     volumes:
@@ -236,6 +127,8 @@ services:
       - red-net
     depends_on:
       - prometheus
+      - loki
+      - tempo
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       <<: *healthcheck-defaults
@@ -243,6 +136,91 @@ services:
     secrets:
       - grafana_admin_password
 
+  loki:
+    image: grafana/loki:3.1.0
+    container_name: red-loki
+    restart: unless-stopped
+    <<: *resource-limits-large
+    command:
+      - -config.file=/etc/loki/local-config.yaml
+      - -target=all
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+      - ./infrastructure/observability/loki:/etc/loki
+    networks:
+      - red-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/ready"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+
+  tempo:
+    image: grafana/tempo:2.6.0
+    container_name: red-tempo
+    restart: unless-stopped
+    <<: *resource-limits-large
+    command:
+      - -config.file=/etc/tempo.yaml
+      - -target=all
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - tempo-data:/var/tempo
+      - ./infrastructure/observability/tempo:/etc/tempo
+    networks:
+      - red-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3200/ready"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+
+  pyroscope:
+    image: grafana/pyroscope:1.10.0
+    container_name: red-pyroscope
+    restart: unless-stopped
+    <<: *resource-limits-medium
+    ports:
+      - "4040:4040"
+    volumes:
+      - pyroscope-data:/var/lib/pyroscope
+    networks:
+      - red-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4040/ready"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.122.0
+    container_name: red-otel-collector
+    restart: unless-stopped
+    <<: *resource-limits-medium
+    command:
+      - --config=/etc/otelcol-contrib/config.yaml
+      - --feature-gates=+pkg.translator.prometheus.NormalizeName
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics
+      - "13133:13133" # Health check
+    volumes:
+      - ./infrastructure/observability/otel:/etc/otelcol-contrib
+    networks:
+      - red-net
+    depends_on:
+      - tempo
+      - loki
+      - prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:13133"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+
+  # Exporters
   node-exporter:
     image: prom/node-exporter:v1.8.2
     container_name: red-node-exporter
@@ -328,50 +306,18 @@ services:
       - nginx
     logging: *default-logging
 
-  # Full observability stack (also in base compose)
-  loki:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
-        reservations:
-          memory: 2G
-          cpus: '2.0'
-
-  tempo:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
-        reservations:
-          memory: 2G
-          cpus: '2.0'
-
-  pyroscope:
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-
-  otel-collector:
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: red-blackbox-exporter
+    restart: unless-stopped
+    <<: *resource-limits-small
+    ports:
+      - "9115:9115"
+    volumes:
+      - ./infrastructure/observability/blackbox:/etc/blackbox_exporter
+    networks:
+      - red-net
+    logging: *default-logging
 
 volumes:
   prometheus-data:
@@ -390,6 +336,8 @@ volumes:
 networks:
   red-net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
+    enable_ipv6: false
+
+secrets:
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password.txt

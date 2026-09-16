@@ -1,0 +1,50 @@
+server:
+  http_listen_port: 4040
+  grpc_listen_port: 9097
+  log_level: info
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+  trace_idle_period: 10s
+  wal:
+    enabled: true
+    path: /var/pyroscope/wal
+
+compactor:
+  compaction:
+    block_retention: 7d
+    compacted_block_retention: 1h
+
+storage:
+  profile:
+    backend: local
+    local:
+      path: /var/pyroscope/profiles
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+overrides:
+  defaults:
+    ingestion_rate_limit_mb: 15
+    ingestion_burst_size_mb: 20
+
+metrics_generator:
+  registry:
+    external_labels:
+      source: pyroscope
+      cluster: red-sovereign
+  storage:
+    path: /var/pyroscope/metrics
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
