@@ -91,6 +91,8 @@ val TajawalFamily: FontFamily = PlexArabicFamily
 val YounesPrimary      = Color(0xFF14C79A)
 /** زمرد مضيء للتنبيهات والتوهّج. نص داكن فوقه = 12.78:1. */
 val YounesPrimaryGlow  = Color(0xFF3DE8BC)
+/** زمرد عميق لطرف التدرّج الداكن (هوامش الأزرار والهالات) — وليس لوناً منافساً. */
+val YounesPrimaryDeep  = Color(0xFF00674F)
 /** ذهب إمبراطوري للروابط والشارات. نص داكن فوقه = 10.34:1، وعلى الخلفية 9.96:1. */
 val YounesAccent       = Color(0xFFE0B551)
 /** ذهب فاتح للحدود المميّزة والتدرّجات. */

@@ -64,6 +64,12 @@ import kotlin.math.roundToInt
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.lifecycleScope
 import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.ui.theme.YounesCobalt
+import com.red.sovereign.ui.theme.YounesPrimary
+import com.red.sovereign.ui.theme.YounesPrimaryDeep
+import com.red.sovereign.ui.theme.YounesRuby
+import com.red.sovereign.ui.theme.YounesSurface2
+import com.red.sovereign.ui.theme.YounesVoid
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -273,7 +279,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
     var showVideoToggle by remember { mutableStateOf(viewModel.mode == "VIDEO" || viewModel.video) }
     val isVideoCapable = viewModel.mode == "VIDEO" || viewModel.video ||
         viewModel.callType == IncomingCallActivity.CALL_TYPE_LIVESTREAM
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF060D1A))) {
+    Box(modifier = Modifier.fillMaxSize().background(YounesVoid)) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween,
@@ -303,7 +309,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = if (isVideoCapable) "فيديو" else "صوت",
-                    color = Color(0xFF00C98C),
+                    color = YounesPrimary,
                     fontSize = 16.sp
                 )
             }
@@ -315,12 +321,12 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                     animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
                     label = "pulseScale"
                 )
-                Box(Modifier.size(140.dp).scale(pulse).clip(CircleShape).background(Color(0x3300C98C)))
+                Box(Modifier.size(140.dp).scale(pulse).clip(CircleShape).background(YounesPrimary.copy(alpha = 0.2f)))
                 Box(
                     modifier = Modifier
                         .size(140.dp)
                         .clip(CircleShape)
-                        .background(Brush.radialGradient(listOf(Color(0xFF00C98C), Color(0xFF003023)))),
+                        .background(Brush.radialGradient(listOf(YounesPrimary, YounesPrimaryDeep))),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(inviterName.take(1).uppercase(), color = Color.White, fontSize = 56.sp, fontWeight = FontWeight.Bold)
@@ -343,8 +349,8 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                             checked = showVideoToggle,
                             onCheckedChange = { showVideoToggle = it },
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFF00C98C),
-                                checkedTrackColor = Color(0xFF00C98C).copy(0.4f)
+                                checkedThumbColor = YounesPrimary,
+                                checkedTrackColor = YounesPrimary.copy(alpha = 0.4f)
                             )
                         )
                     }
@@ -360,7 +366,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(Color(0xFFE53935)), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(YounesRuby), contentAlignment = Alignment.Center) {
                             IconButton(onClick = { viewModel.decline(); onFinish() }) {
                                 Icon(Icons.Default.CallEnd, contentDescription = "رفض", tint = Color.White, modifier = Modifier.size(28.dp))
                             }
@@ -373,7 +379,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                             modifier = Modifier
                                 .size(72.dp)
                                 .clip(CircleShape)
-                                .background(if (showVideoToggle && isVideoCapable) Color(0xFF00C98C) else Color(0xFF2196F3)),
+                                .background(if (showVideoToggle && isVideoCapable) YounesPrimary else YounesCobalt),
                             contentAlignment = Alignment.Center
                         ) {
                             IconButton(onClick = {
@@ -421,9 +427,9 @@ private fun SwipeAnswerSlider(
                 .background(
                     Brush.horizontalGradient(
                         listOf(
-                            Color(0xFFE53935).copy(alpha = 0.35f),
-                            Color(0xFF1B2635),
-                            Color(0xFF00C98C).copy(alpha = 0.35f)
+                            YounesRuby.copy(alpha = 0.35f),
+                            YounesSurface2,
+                            YounesPrimary.copy(alpha = 0.35f)
                         )
                     )
                 )
@@ -456,9 +462,9 @@ private fun SwipeAnswerSlider(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.CallEnd, contentDescription = "اسحب للرفض", tint = Color(0xFFE53935), modifier = Modifier.size(26.dp))
+                Icon(Icons.Default.CallEnd, contentDescription = "اسحب للرفض", tint = YounesRuby, modifier = Modifier.size(26.dp))
                 Text("اسحب للرد", color = Color.White.copy(alpha = 0.55f), fontSize = 13.sp)
-                Icon(Icons.Default.Call, contentDescription = "اسحب للقبول", tint = Color(0xFF00C98C), modifier = Modifier.size(26.dp))
+                Icon(Icons.Default.Call, contentDescription = "اسحب للقبول", tint = YounesPrimary, modifier = Modifier.size(26.dp))
             }
             Box(
                 modifier = Modifier
@@ -466,7 +472,7 @@ private fun SwipeAnswerSlider(
                     .size(64.dp)
                     .clip(CircleShape)
                     .background(
-                        Brush.radialGradient(listOf(Color(0xFF00C98C), Color(0xFF00795A)))
+                        Brush.radialGradient(listOf(YounesPrimary, YounesPrimaryDeep))
                     ),
                 contentAlignment = Alignment.Center
             ) {

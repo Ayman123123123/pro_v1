@@ -12,6 +12,16 @@
     <!-- Arabic base — stub parent for TextAppearance.Younes.Arabic.* -->
     <style name="TextAppearance.Younes.Arabic" parent="TextAppearance.Younes" />
 
+    <!-- ===== SPLASH — موحّد عبر كل إصدارات أندرويد عبر core-splashscreen =====
+         يعمل على API 26+ (المكتبة تحاكي سبلاش 31+) ثم ينزع نفسه إلى Theme.Younes.
+         الخلفية زمردية الهوية: خلفية يونس + أيقونة التطبيق المتحركة. -->
+    <style name="Theme.Younes.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/younes_obsidian</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenAnimationDuration">650</item>
+        <item name="postSplashScreenTheme">@style/Theme.Younes</item>
+    </style>
+
     <!-- ===== THEME BASE ===== -->
     <style name="Theme.Younes" parent="android:style/Theme.Material.NoActionBar">
         <!-- الألوان الأساسية -->

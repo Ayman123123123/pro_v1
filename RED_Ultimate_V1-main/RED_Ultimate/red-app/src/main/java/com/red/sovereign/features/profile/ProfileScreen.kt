@@ -221,15 +221,26 @@ fun ProfileScreen(
             supportingText = { Text("${editingBio.length}/280") }
         )
 
+        // حالة المستخدم (قابلة للتعديل)
+        var editingStatus by remember(viewModel.statusText) { mutableStateOf(viewModel.statusText) }
+        OutlinedTextField(
+            value = editingStatus,
+            onValueChange = { editingStatus = it.take(100) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("الحالة (Status)") },
+            singleLine = true,
+            supportingText = { Text("${editingStatus.length}/100") }
+        )
+
         // زر الحفظ
         Button(
             {
-                viewModel.updateProfile(editingName, editingBio) {
+                viewModel.updateProfile(editingName, editingBio, editingStatus) {
                     // عند النجاح: تحديث الاسم المحلي
                 }
             },
             Modifier.fillMaxWidth(),
-            enabled = !viewModel.isSaving && editingName.isNotBlank() && editingName != displayName
+            enabled = !viewModel.isSaving && editingName.isNotBlank() && (editingName != displayName || editingBio != viewModel.bio || editingStatus != viewModel.statusText)
         ) {
             if (viewModel.isSaving) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
             else { Icon(Icons.Default.Check, "حفظ"); Text(" حفظ التغييرات") }

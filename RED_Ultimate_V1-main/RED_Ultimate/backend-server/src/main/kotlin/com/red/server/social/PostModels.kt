@@ -36,7 +36,7 @@ data class PostDocument(
  * خصوصية المنشور. `FRIENDS` أضافها main ويستعملها `FeedService` فعلًا
  * في ترشيح الفيد، ولذلك بقيت.
  */
-enum class PostVisibility { PUBLIC, FRIENDS, LOCAL_YEMEN }
+enum class PostVisibility { PUBLIC, FRIENDS, LOCAL_YEMEN, PRIVATE }
 
 /**
  * نطاق الفيد المطلوب.

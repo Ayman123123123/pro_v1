@@ -152,6 +152,10 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material3.windowsizeclass)
+    implementation(libs.androidx.compose.material3.adaptive)
+    implementation(libs.androidx.compose.material3.adaptive.layout)
+    implementation(libs.androidx.compose.material3.adaptive.navigation)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling.core)
@@ -226,11 +230,16 @@ dependencies {
 
     // ───── Biometric — قفل التطبيق بالبصمة/الوجه ─────
     implementation(libs.androidx.biometric)
-    implementation(libs.androidx.security.crypto)
-    // Tink single-source (CI-proven): tink-android AAR *bundles* core classes at every
-    // version (1.8.0 AND 1.23.0 both duplicate tink-core), so the graph must carry exactly
-    // one of them. The android AAR is the superset (core + AndroidKeystore), pinned modern.
-    implementation("com.google.crypto.tink:tink-android:1.23.0")
+    implementation(libs.androidx.security.crypto)
+
+    // Tink single-source (CI-proven): tink-android AAR *bundles* core classes at every
+
+    // version (1.8.0 AND 1.23.0 both duplicate tink-core), so the graph must carry exactly
+
+    // one of them. The android AAR is the superset (core + AndroidKeystore), pinned modern.
+
+    implementation("com.google.crypto.tink:tink-android:1.23.0")
+
 
     testImplementation("junit:junit:4.13.2")
 }

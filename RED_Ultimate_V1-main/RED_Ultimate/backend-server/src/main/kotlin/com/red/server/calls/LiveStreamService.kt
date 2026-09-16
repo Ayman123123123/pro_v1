@@ -451,9 +451,23 @@ class LiveStreamService(
 
     private val chatHistory = ConcurrentHashMap<String, MutableList<ChatEntry>>()
 
-    fun saveChat(streamId: String, senderId: String, senderName: String, text: String, replyToId: String? = null): ChatEntry {
-        val entry = ChatEntry(senderId = senderId, senderName = senderName, text = text.take(200), replyToId = replyToId?.take(64)?.takeIf { it.isNotBlank() })
+    fun saveChat(streamId: String, senderId: String, senderName: String, text: String, replyToId: String? = null, clientChatId: String? = null): ChatEntry {
         val list = chatHistory.computeIfAbsent(streamId) { mutableListOf() }
+        // معرّف المُرسِل يُعتمد فقط إن كان **فريداً** داخل البث: قبول معرّف قائم كان
+        // سيسمح لعميل بتبديل رسالة غيره أو انتحال معرّفها، لذا نولّد معرّفاً جديداً
+        // عند التصادم بدل الكتابة فوق رسالة قائمة.
+        val id = synchronized(list) {
+            clientChatId?.take(64)?.takeIf { it.isNotBlank() }
+                ?.takeIf { candidate -> list.none { it.id == candidate } }
+                ?: java.util.UUID.randomUUID().toString()
+        }
+        val entry = ChatEntry(
+            id = id,
+            senderId = senderId,
+            senderName = senderName,
+            text = text.take(200),
+            replyToId = replyToId?.take(64)?.takeIf { it.isNotBlank() }
+        )
         synchronized(list) {
             list.add(entry)
             while (list.size > 200) list.removeAt(0)

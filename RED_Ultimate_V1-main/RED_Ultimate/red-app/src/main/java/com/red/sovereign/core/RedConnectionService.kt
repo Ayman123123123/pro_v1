@@ -534,6 +534,7 @@ class RedConnectionService : Service() {
                         .onFailure { android.util.Log.w("RedConnectionService", "store failed for ${message.id}: ${it.message}") }
                     val plaintext = try {
                         when (message.type) {
+                            "GROUP_SYNC", "SYSTEM" -> message.payload.toByteArray()
                             // توزيع مفاتيح المجموعة يُشفَّر زوجياً لكل عضو (ليس SenderKey)
                             "GROUP_KEY_DISTRIBUTION" -> signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
                             "RICH_TEXT" -> {
@@ -569,7 +570,16 @@ class RedConnectionService : Service() {
                         repository.getLocalHistoryEntry(message.id)?.let { isPendingDecryptPlaceholder(it.encryptedPlaintext) } == true
                     }.getOrDefault(false)
                     if (plaintext != null) {
-                        if (message.type == "GROUP_KEY_DISTRIBUTION") {
+                        if (message.type == "GROUP_SYNC") {
+                            val jsonStr = String(plaintext, Charsets.UTF_8)
+                            val groupId = runCatching { json.parseToJsonElement(jsonStr).jsonObject["groupId"]?.jsonPrimitive?.contentOrNull }.getOrNull()
+                            if (groupId != null) {
+                                com.red.sovereign.core.GroupSyncBus.needRefresh(groupId)
+                            }
+                            socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
+                        } else if (message.type == "SYSTEM") {
+                            socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
+                        } else if (message.type == "GROUP_KEY_DISTRIBUTION") {
                             groupCrypto.processDistribution(message.senderId, message.senderDeviceId, plaintext)
                         } else if (message.type == "RICH_TEXT") {
                             val rich = com.red.sovereign.core.RichMessage.decode(plaintext)

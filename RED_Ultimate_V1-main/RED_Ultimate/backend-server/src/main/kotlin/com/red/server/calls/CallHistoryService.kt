@@ -5,6 +5,7 @@ import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
+import org.springframework.data.mongodb.core.query.Update
 import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.Instant
@@ -105,9 +106,14 @@ class CallHistoryService(
         since: Instant? = null,
         resolveName: (String) -> String? = { null }
     ): List<CallHistoryItem> {
-        val party = Criteria().orOperator(
-            Criteria.where("initiatorId").`is`(redId),
-            Criteria.where("targetId").`is`(redId)
+        val party = Criteria().andOperator(
+            Criteria().orOperator(
+                Criteria.where("initiatorId").`is`(redId),
+                Criteria.where("targetId").`is`(redId)
+            ),
+            // السجل المخفي لهذا المستخدم يُستبعد من سجله وحده؛ `$ne` يطابق المستندات
+            // التي لا تحمل حقل hiddenFor أصلاً، فالصفوف القديمة تبقى ظاهرة كما هي.
+            Criteria.where("hiddenFor").ne(redId)
         )
         val criteria = if (since != null) {
             Criteria().andOperator(party, Criteria.where("startedAt").lt(since))
@@ -190,6 +196,42 @@ class CallHistoryService(
             }
         }
         return stored
+    }
+
+    /**
+     * «حذف» سجل مكالمة من سجل [redId] وحده — إخفاء لا محو.
+     *
+     * المستند مشترك بين الطرفين، فمحوه كان سيمحو سجل الطرف الآخر. نضيف معرّف المستدعي
+     * إلى `hiddenFor` فيبقى الصف سليماً للطرف الآخر ويختفي من سجل المستدعي فقط.
+     * ولا نخفي إلا ما يشارك فيه المستدعي فعلاً (initiator أو target) — فلا يُخفى سجل
+     * مكالمة لا تخصه ولو خمّن معرّفها.
+     */
+    fun hideFor(redId: String, callIds: Collection<String>): Int {
+        val ids = callIds.filter { it.isNotBlank() }.distinct()
+        if (ids.isEmpty()) return 0
+        val query = Query(
+            Criteria().andOperator(
+                Criteria.where("_id").`in`(ids),
+                Criteria().orOperator(
+                    Criteria.where("initiatorId").`is`(redId),
+                    Criteria.where("targetId").`is`(redId)
+                )
+            )
+        )
+        return mongo.updateMulti(query, Update().addToSet("hiddenFor", redId), CallHistoryDocument::class.java)
+            .modifiedCount.toInt()
+    }
+
+    /** إخفاء كل سجل [redId] عنه وحده — لا يمس سجل الطرف الآخر. */
+    fun hideAllFor(redId: String): Int {
+        val query = Query(
+            Criteria().orOperator(
+                Criteria.where("initiatorId").`is`(redId),
+                Criteria.where("targetId").`is`(redId)
+            )
+        )
+        return mongo.updateMulti(query, Update().addToSet("hiddenFor", redId), CallHistoryDocument::class.java)
+            .modifiedCount.toInt()
     }
 
     private fun update(id: String, action: (CallHistoryDocument) -> Unit): CallHistoryDocument {

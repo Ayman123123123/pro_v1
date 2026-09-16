@@ -207,12 +207,23 @@ class LiveStreamSignalingClient(
         )
     )
 
-    fun sendChatMessage(streamId: String, userId: String, senderName: String, text: String, replyToId: String? = null) = send(
+    fun sendChatMessage(
+        streamId: String,
+        userId: String,
+        senderName: String,
+        text: String,
+        replyToId: String? = null,
+        chatId: String? = null
+    ) = send(
         LiveStreamSignal(
             type = "CHAT",
             roomId = streamId,
             userId = userId,
             payload = buildMap {
+                // المعرّف يُرسل ليتبنّاه الخادم ويبثّه للجميع، فيتفق المرسل والمستقبلون
+                // والخادم على معرّف واحد. بدونه كان كل طرف يولّد معرّفاً مختلفاً ⇒ الحذف
+                // لا يطابق شيئاً، وتكرار لرسالة المرسل بعد تحديث السجل، واقتباس مكسور.
+                if (!chatId.isNullOrBlank()) put("id", chatId)
                 put("senderName", senderName)
                 put("text", text)
                 if (!replyToId.isNullOrBlank()) put("replyToId", replyToId)

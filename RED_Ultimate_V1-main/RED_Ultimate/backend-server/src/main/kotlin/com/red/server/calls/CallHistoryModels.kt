@@ -25,7 +25,16 @@ data class CallHistoryDocument(
     var roomId: String? = null,
     var participantIds: List<String> = emptyList(),
     var hadScreenShare: Boolean = false,
-    var wasRecorded: Boolean = false
+    var wasRecorded: Boolean = false,
+    /**
+     * معرّفات المستخدمين الذين أخفوا هذا السجل من سجلهم.
+     *
+     * مستند واحد يخدم **الطرفين** (`history()` يطابق initiatorId أو targetId)، فمحو
+     * المستند فعلياً يمحو سجل الطرف الآخر أيضاً. لذلك «الحذف» هنا إخفاء لكل مستخدم:
+     * يبقى الصف سليماً للطرف الآخر ويُستبعد فقط من سجل من أضاف معرّفه.
+     * غياب الحقل = غير مخفي (`$ne` يطابق المستندات التي لا تحمل الحقل) ⇒ الصفوف القديمة متوافقة.
+     */
+    var hiddenFor: MutableSet<String> = mutableSetOf()
 )
 
 enum class CallType { AUDIO_1V1, VIDEO_1V1, GROUP_AUDIO, GROUP_VIDEO, LIVE_STREAM, SPACE }

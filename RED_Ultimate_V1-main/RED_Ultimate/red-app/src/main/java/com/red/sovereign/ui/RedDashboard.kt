@@ -6,7 +6,10 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -297,6 +300,7 @@ import com.red.sovereign.media.PollsScreen
 import com.red.sovereign.ui.theme.PlexArabicFamily
 import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.components.SovereignBottomBar
+import com.red.sovereign.ui.components.SovereignTopBar
 import com.red.sovereign.ui.components.rememberSovereignHaze
 import com.red.sovereign.ui.components.sovereignHazeSource
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -530,6 +534,9 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         return
     }
 
+    val adaptDimens = com.red.sovereign.ui.components.rememberAdaptiveDimens()
+    val isTablet = adaptDimens.isTabletOrFoldable
+
     Scaffold(
         containerColor = SovereignColors.ObsidianDeep,
         floatingActionButton = {
@@ -562,31 +569,71 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             }
         },
         bottomBar = {
-            SovereignBottomBar(
-                currentSection = section,
-                onSectionSelected = { item ->
-                    section = item
-                    if (item == MainSection.CALLS) {
-                        callHistory.load()
-                        directory.refreshPresence()
-                    }
-                },
-                hazeState = hazeState
-            )
+            if (!isTablet) {
+                SovereignBottomBar(
+                    currentSection = section,
+                    onSectionSelected = { item ->
+                        section = item
+                        if (item == MainSection.CALLS) {
+                            callHistory.load()
+                            directory.refreshPresence()
+                        }
+                    },
+                    hazeState = hazeState
+                )
+            }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().sovereignHazeSource(hazeState).background(SovereignColors.ObsidianDeep)) {
-            Column(Modifier.fillMaxSize().padding(padding)) {
-                RedTopBar(account.redId, account.username, compact = SettingsRuntime.current.compactMode, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
+            Row(Modifier.fillMaxSize().padding(padding)) {
+                if (isTablet) {
+                    com.red.sovereign.ui.components.SovereignNavRail(
+                        currentSection = section,
+                        onSectionSelected = { item ->
+                            section = item
+                            if (item == MainSection.CALLS) {
+                                callHistory.load()
+                                directory.refreshPresence()
+                            }
+                        },
+                        hazeState = hazeState
+                    )
+                }
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    SovereignTopBar(
+                        redId = account.redId,
+                        username = account.username,
+                        onSettings = { showSettings = true },
+                        onSearch = { currentScreen = SovereignScreen.SEARCH },
+                        onProfileClick = { currentScreen = SovereignScreen.PROFILE },
+                        hazeState = hazeState
+                    )
                 // 📴 بانر الطابور دون اتصال: يعرض عدد الرسائل المعلقة من Room
                 // ويعيد جدولة العامل الحقيقي OutboxRetryWorker بضغطة واحدة،
                 // وزر العرض يفتح OfflineQueueScreen (القائمة الكاملة retry/delete).
                 OfflineOutboxBanner(onOpenQueue = { currentScreen = SovereignScreen.OFFLINE_QUEUE })
-            when {
-                section == MainSection.HOME -> FeedScreen(account, feed, stories, directory, onCreate = { showCreate = true })
-                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onConversationOpen = { chatConversationOpen = it })
-                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onConversationOpen = { chatConversationOpen = it })
-                section == MainSection.CALLS -> UnifiedCallsScreen(
+            // انتقال ناعم بين التبويبات (fade + انزلاق خفيف) — يتحول إلى قطع
+            // فوري عند تفعيل تقليل الحركة. AnimatedContent لا يعيد إنشاء حالة
+            // الشاشات غير المتغيرة لأن كل شاشة keepCache في المخزن المؤقت.
+            val sectionReduceMotion = com.red.sovereign.ui.theme.AppThemeState.reduceMotion
+            androidx.compose.animation.AnimatedContent(
+                targetState = section,
+                transitionSpec = {
+                    if (sectionReduceMotion) {
+                        androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
+                    } else {
+                        (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)) +
+                            androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(220)) { it / 24 }) togetherWith
+                            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120))
+                    }
+                },
+                label = "MainSectionTransition"
+            ) { animatedSection ->
+                when {
+                    animatedSection == MainSection.HOME -> FeedScreen(account, feed, stories, directory, onCreate = { showCreate = true })
+                    animatedSection == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onConversationOpen = { chatConversationOpen = it })
+                    animatedSection == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onConversationOpen = { chatConversationOpen = it })
+                    animatedSection == MainSection.CALLS -> UnifiedCallsScreen(
                     ownUserId = account.redId,
                     history = callHistory,
                     // بلا هذين المعاملين كان الاستدعاء يُربط بنسخة أضعف محذوفة،
@@ -601,22 +648,24 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     myDisplayName = account.username,
                     onExplore = { currentScreen = SovereignScreen.EXPLORE },
                 )
-                else -> MoreScreen(
-                    account,
-                    onAdmin = { if (account.isAdmin) currentScreen = SovereignScreen.ADMIN },
-                    onSettings = { showSettings = true },
-                    onContacts = { currentScreen = SovereignScreen.CONTACTS },
-                    onDevices = { currentScreen = SovereignScreen.DEVICES },
-                    onPrivacy = { currentScreen = SovereignScreen.PRIVACY },
-                    onBackup = { currentScreen = SovereignScreen.BACKUP },
-                    onCommunities = { currentScreen = SovereignScreen.COMMUNITIES },
-                    onChannels = { currentScreen = SovereignScreen.CHANNELS },
-                    onProfile = { currentScreen = SovereignScreen.PROFILE },
-                    onEvents = { currentScreen = SovereignScreen.EVENTS },
-                    onPolls = { currentScreen = SovereignScreen.POLLS },
-                    onDeviceSettings = { currentScreen = SovereignScreen.DEVICE_SETTINGS }
-                )
+                    else -> MoreScreen(
+                        account,
+                        onAdmin = { if (account.isAdmin) currentScreen = SovereignScreen.ADMIN },
+                        onSettings = { showSettings = true },
+                        onContacts = { currentScreen = SovereignScreen.CONTACTS },
+                        onDevices = { currentScreen = SovereignScreen.DEVICES },
+                        onPrivacy = { currentScreen = SovereignScreen.PRIVACY },
+                        onBackup = { currentScreen = SovereignScreen.BACKUP },
+                        onCommunities = { currentScreen = SovereignScreen.COMMUNITIES },
+                        onChannels = { currentScreen = SovereignScreen.CHANNELS },
+                        onProfile = { currentScreen = SovereignScreen.PROFILE },
+                        onEvents = { currentScreen = SovereignScreen.EVENTS },
+                        onPolls = { currentScreen = SovereignScreen.POLLS },
+                        onDeviceSettings = { currentScreen = SovereignScreen.DEVICE_SETTINGS }
+                    )
+                }
             }
+        }
         }
     }
 }
@@ -739,27 +788,6 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     }
 }
 
-
-@Composable
-private fun RedTopBar(redId: String, username: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) = Row(
-    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 10.dp),
-    verticalAlignment = Alignment.CenterVertically
-) {
-    Image(
-        painterResource(R.drawable.younes_icon_master),
-        contentDescription = "يونس",
-        modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
-        contentScale = ContentScale.Crop
-    )
-    Column(Modifier.weight(1f).padding(start = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("يونس • @$username", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Text(redId, color = AqyalCyanGlow, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-    IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل") }
-    IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
-}
 
 @Composable
 private fun StoryCircle(label: String, own: Boolean, click: () -> Unit) = Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = click)) {
@@ -3729,12 +3757,12 @@ private fun MoreScreen(
     onDeviceSettings: () -> Unit = {}
 ) {
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text("مساحة يونس", style = MaterialTheme.typography.headlineMedium)
         Text("الهوية والخدمات السيادية في مكان واحد", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(Modifier.fillMaxWidth().clickable { onProfile() }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        com.red.sovereign.ui.components.SovereignGlassCard(modifier = Modifier.fillMaxWidth(), onClick = onProfile) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 SovereignAvatar(account.username.take(1))
                 Column(Modifier.padding(horizontal = 12.dp)) {
@@ -3761,7 +3789,10 @@ private fun MoreScreen(
 
 @Composable
 private fun MoreOption(icon: ImageVector, title: String, detail: String, color: Color, enabled: Boolean = true, click: () -> Unit) =
-    Card(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)) {
+    com.red.sovereign.ui.components.SovereignGlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = if (enabled) click else null
+    ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(color.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
                 Icon(icon, null, tint = color)

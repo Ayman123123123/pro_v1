@@ -354,8 +354,11 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 val senderName = intent.getStringExtra(EXTRA_SENDER_NAME).orEmpty()
                 val replyToId = intent.getStringExtra(EXTRA_REPLY_TO_ID)?.takeIf { it.isNotBlank() }
                 if (text.isNotBlank()) {
-                    signaling.sendChatMessage(streamId, userId, senderName, text, replyToId)
+                    // نبني الرسالة المحلية **أولاً** ثم نرسل معرّفها نفسه، فيتحد معرّف
+                    // المرسل مع معرّف الخادم ومعرّف ما يستقبله الآخرون — فلا تتكرر الرسالة
+                    // عند تحديث السجل من الخادم (الدمج بالمعرّف)، ويعمل الحذف والاقتباس.
                     val localMsg = LiveChatMessage(senderId = userId, senderName = senderName.ifBlank { userId }, text = text, replyToId = replyToId)
+                    signaling.sendChatMessage(streamId, userId, senderName, text, replyToId, localMsg.id)
                     LiveStreamRuntime.chatMessages = (LiveStreamRuntime.chatMessages + localMsg).takeLast(LIVE_CHAT_MAX_MESSAGES)
                 }
             }
@@ -809,8 +812,20 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                     }
                 }
                 if (text.isNotBlank()) {
-                    val msg = LiveChatMessage(senderId = senderId, senderName = senderName, text = text, replyToId = replyToId)
-                    LiveStreamRuntime.chatMessages = (LiveStreamRuntime.chatMessages + msg).takeLast(LIVE_CHAT_MAX_MESSAGES)
+                    // نأخذ المعرّف المعتمد من الحمولة. كان يُهمَل فيولّد العميل معرّفاً
+                    // جديداً، فتنفصل معرّفات الشاشة عن سجل الخادم: بث CHAT_DELETED لا
+                    // يطابق شيئاً فيبقى المحذوف ظاهراً، ورسالة المرسل تتكرر بعد تحديث
+                    // السجل. عند غياب الحقل (نسخة قديمة) نرجع لتوليد محلي — توافق خلفي.
+                    val incomingId = signal.payload["id"]?.takeIf { it.isNotBlank() }
+                    val msg = if (incomingId != null) {
+                        LiveChatMessage(id = incomingId, senderId = senderId, senderName = senderName, text = text, replyToId = replyToId)
+                    } else {
+                        LiveChatMessage(senderId = senderId, senderName = senderName, text = text, replyToId = replyToId)
+                    }
+                    // حارس تكرار: نفس المعرّف = الرسالة نفسها (إعادة بث أو تحديث سجل).
+                    if (LiveStreamRuntime.chatMessages.none { it.id == msg.id }) {
+                        LiveStreamRuntime.chatMessages = (LiveStreamRuntime.chatMessages + msg).takeLast(LIVE_CHAT_MAX_MESSAGES)
+                    }
                 }
             }
             "GIFT" -> {

@@ -73,18 +73,13 @@ import com.red.sovereign.R
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.auth.ServerState
+import com.red.sovereign.ui.theme.YounesAccent
 
-// Telegram / WhatsApp High-Contrast Dark Color System
-private val TelegramDarkBg = Color(0xFF0E1621)
-private val TelegramDarkCard = Color(0xFF17212B)
-private val TelegramDarkInput = Color(0xFF242F3D)
-private val TelegramBorder = Color(0xFF2A394A)
-private val CleanAccentGreen = Color(0xFF00A884)
-private val CleanAccentBlue = Color(0xFF2AABEE)
-private val TextWhite = Color(0xFFFFFFFF)
-private val TextSilver = Color(0xFF8E9DAE)
-private val TextMuted = Color(0xFF6C788A)
-private val ErrorRed = Color(0xFFE53935)
+// ملاحظة الألوان: كل الألوان هنا تأتي من MaterialTheme.colorScheme (ثيم يونس) —
+// لا لوحة خاصة بعد الآن. وبهذا تستجيب شاشات الدخول لكل الثيمات
+// (سيادي/تلجرام/واتساب/أوليد/ديناميكي/مخصص) وللوضع الفاتح والتباين العالي.
+// الخلفية نفسها لا تُرسم هنا: MainActivity يغلف التدفق بـ SovereignBackground
+// (تدرج شبكي + هالات زمردي/كوبالت/بنفسج) فتظهر خلف المحتوى مباشرة.
 
 @Composable
 fun AuthFlow(viewModel: AuthViewModel) {
@@ -106,16 +101,16 @@ fun AuthFlow(viewModel: AuthViewModel) {
 
 @Composable
 private fun LoadingScreen() = Centered {
-    CircularProgressIndicator(color = CleanAccentGreen, modifier = Modifier.size(42.dp))
+    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(42.dp))
     Spacer(Modifier.height(16.dp))
-    Text("جارٍ الاتصال بالسيرفر…", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    Text("جارٍ الاتصال بالسيرفر…", color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(6.dp))
-    Text("ثوانٍ معدودة — لن يبقى التطبيق معلّقًا إذا كان الخادم بعيدًا", color = TextSilver, fontSize = 12.sp, textAlign = TextAlign.Center)
+    Text("ثوانٍ معدودة — لن يبقى التطبيق معلّقًا إذا كان الخادم بعيدًا", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, textAlign = TextAlign.Center)
 }
 
 @Composable
 private fun WelcomeScreen(server: ServerState, discover: () -> Unit, register: () -> Unit, login: () -> Unit, setServerUrl: (String) -> String?) = Column(
-    Modifier.fillMaxSize().background(TelegramDarkBg).padding(horizontal = 24.dp, vertical = 18.dp).widthIn(max = 520.dp).verticalScroll(rememberScrollState()),
+    Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 18.dp).widthIn(max = 520.dp).verticalScroll(rememberScrollState()),
     Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
     Alignment.CenterHorizontally
 ) {
@@ -124,72 +119,72 @@ private fun WelcomeScreen(server: ServerState, discover: () -> Unit, register: (
     var serverInputError by remember { mutableStateOf<String?>(null) }
     BrandMark(120)
     Spacer(Modifier.height(18.dp))
-    Text("يونس", style = MaterialTheme.typography.headlineLarge, color = TextWhite, fontWeight = FontWeight.Black)
-    Text("منظومة اتصالات سيادية مشفرة • بدون رقم هاتف", color = CleanAccentBlue, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-    
+    Text("يونس", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Black)
+    Text("منظومة اتصالات سيادية مشفرة • بدون رقم هاتف", color = MaterialTheme.colorScheme.secondary, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+
     Spacer(Modifier.height(20.dp))
-    
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TelegramDarkCard), shape = RoundedCornerShape(16.dp)) {
+
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             when (server) {
                 ServerState.Discovering -> {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CircularProgressIndicator(Modifier.size(18.dp), color = CleanAccentBlue, strokeWidth = 2.dp)
-                        Text("جارٍ التحقق الذكي من شبكة يونس…", color = TextSilver, fontSize = 13.sp)
+                        CircularProgressIndicator(Modifier.size(18.dp), color = MaterialTheme.colorScheme.secondary, strokeWidth = 2.dp)
+                        Text("جارٍ التحقق الذكي من شبكة يونس…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                     }
                 }
-                is ServerState.Ready -> Text("الخادم الآمن: ${server.url} 🟢", color = CleanAccentGreen, fontSize = 12.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                is ServerState.Ready -> Text("الخادم الآمن: ${server.url} 🟢", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
                 is ServerState.Error -> {
-                    Text(server.message, color = ErrorRed, fontSize = 13.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
-                    Text("الافتراضي: ${server.fallbackUrl}", color = TextMuted, fontSize = 11.sp)
+                    Text(server.message, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
+                    Text("الافتراضي: ${server.fallbackUrl}", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f), fontSize = 11.sp)
                 }
             }
             TextButton(discover, enabled = server !is ServerState.Discovering) {
-                Icon(Icons.Default.Wifi, null, tint = CleanAccentBlue, modifier = Modifier.size(18.dp))
-                Text(" إعادة اكتشاف الخادم الآمن", color = CleanAccentBlue, fontSize = 12.sp)
+                Icon(Icons.Default.Wifi, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                Text(" إعادة اكتشاف الخادم الآمن", color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
             }
 
             // ── إدخال عنوان الخادم يدويًا — يعالج حالات الخادم على شبكة أخرى أو عبر نفق ──
             if (!showManualInput) {
                 TextButton({ showManualInput = true; serverInputError = null }) {
-                    Text("تحديد عنوان الخادم يدويًا", color = TextSilver, fontSize = 12.sp)
+                    Text("تحديد عنوان الخادم يدويًا", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             } else {
                 OutlinedTextField(
                     value = serverInput,
                     onValueChange = { serverInput = it; serverInputError = null },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("http://192.168.1.10:8088", color = TextMuted) },
+                    placeholder = { Text("http://192.168.1.10:8088", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextWhite, unfocusedTextColor = TextWhite,
-                        focusedBorderColor = CleanAccentBlue, unfocusedBorderColor = TelegramBorder,
-                        cursorColor = CleanAccentBlue
+                        focusedTextColor = MaterialTheme.colorScheme.onBackground, unfocusedTextColor = MaterialTheme.colorScheme.onBackground,
+                        focusedBorderColor = MaterialTheme.colorScheme.secondary, unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        cursorColor = MaterialTheme.colorScheme.secondary
                     )
                 )
-                serverInputError?.let { Text(it, color = ErrorRed, fontSize = 11.sp, textAlign = TextAlign.Center) }
+                serverInputError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, textAlign = TextAlign.Center) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton({
                         val error = setServerUrl(serverInput)
                         serverInputError = error
                         if (error == null) showManualInput = false
-                    }) { Text("حفظ والاتصال", color = CleanAccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                    TextButton({ showManualInput = false; serverInputError = null }) { Text("إلغاء", color = TextSilver, fontSize = 12.sp) }
+                    }) { Text("حفظ والاتصال", color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    TextButton({ showManualInput = false; serverInputError = null }) { Text("إلغاء", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
                 }
             }
         }
     }
 
     Spacer(Modifier.height(24.dp))
-    
+
     // Top Action Buttons
     Button(
         onClick = register,
         modifier = Modifier.fillMaxWidth().height(50.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = CleanAccentGreen),
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
         shape = RoundedCornerShape(25.dp)
     ) {
-        Text("إنشاء حساب جديد", color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("إنشاء حساب جديد", color = MaterialTheme.colorScheme.onPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 
     Spacer(Modifier.height(12.dp))
@@ -198,9 +193,9 @@ private fun WelcomeScreen(server: ServerState, discover: () -> Unit, register: (
         onClick = login,
         modifier = Modifier.fillMaxWidth().height(50.dp),
         shape = RoundedCornerShape(25.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, CleanAccentBlue)
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary)
     ) {
-        Text("لدي حساب بالفعل", color = CleanAccentBlue, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("لدي حساب بالفعل", color = MaterialTheme.colorScheme.secondary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -231,7 +226,7 @@ private fun RegisterTabScreen(
 
         Text(
             text = "لا نطلب رقم هاتف أو شريحة. يتم توليد مفاتيح التشفير الخاصة بك محلياً بداخل هاتفك.",
-            color = TextSilver,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 13.sp,
             textAlign = TextAlign.Center,
             lineHeight = 19.sp
@@ -239,17 +234,17 @@ private fun RegisterTabScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        Field(name, { name = it }, "الاسم الظاهر (مثال: يونس أحمد)", leading = { Icon(Icons.Default.Badge, null, tint = CleanAccentBlue) })
-        
+        Field(name, { name = it }, "الاسم الظاهر (مثال: يونس أحمد)", leading = { Icon(Icons.Default.Badge, null, tint = MaterialTheme.colorScheme.secondary) })
+
         Field(
             value = username,
             change = { username = it.trim().take(32) },
             label = "اسم المستخدم (الاسم المعرّف)",
             keyboard = KeyboardOptions(imeAction = ImeAction.Next),
-            leading = { Icon(Icons.Default.Person, null, tint = CleanAccentBlue) }
+            leading = { Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.secondary) }
         )
         if (username.isNotEmpty() && !validUsername) {
-            Text("يجب أن يكون 3-32 حرفاً إنكليزياً ويبدأ بحرف دون مسافات.", color = ErrorRed, fontSize = 11.sp)
+            Text("يجب أن يكون 3-32 حرفاً إنكليزياً ويبدأ بحرف دون مسافات.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
         }
 
         PasswordField(password, { password = it.take(128) }, "كلمة المرور (12 حرفاً على الأقل)")
@@ -260,9 +255,9 @@ private fun RegisterTabScreen(
         PasswordField(confirm, { confirm = it.take(128) }, "تأكيد كلمة المرور")
         if (confirm.isNotEmpty()) {
             if (passwordsMatch) {
-                Text("كلمتا المرور متطابقتان ✓", color = CleanAccentGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("كلمتا المرور متطابقتان ✓", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             } else {
-                Text("كلمتا المرور غير متطابقتين ❌", color = ErrorRed, fontSize = 12.sp)
+                Text("كلمتا المرور غير متطابقتين ❌", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         }
 
@@ -272,19 +267,22 @@ private fun RegisterTabScreen(
             onClick = { submitRegister(name, username, password) },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             enabled = valid,
-            colors = ButtonDefaults.buttonColors(containerColor = CleanAccentGreen, disabledContainerColor = CleanAccentGreen.copy(alpha = 0.3f)),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+            ),
             shape = RoundedCornerShape(24.dp)
         ) {
-            Text("إنشاء المفاتيح وإرسال الطلب", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("إنشاء المفاتيح وإرسال الطلب", color = MaterialTheme.colorScheme.onPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
 
         OutlinedButton(
             onClick = back,
             modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(24.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, TelegramBorder)
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            Text("رجوع للشاشة الرئيسية", color = TextSilver, fontSize = 14.sp)
+            Text("رجوع للشاشة الرئيسية", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         }
     }
 }
@@ -308,8 +306,8 @@ private fun LoginTabScreen(
 
         Spacer(Modifier.height(14.dp))
 
-        Field(username, { username = it }, "اسم المستخدم المعرّف", leading = { Icon(Icons.Default.Person, null, tint = CleanAccentBlue) })
-        
+        Field(username, { username = it }, "اسم المستخدم المعرّف", leading = { Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.secondary) })
+
         PasswordField(password, { password = it }, "كلمة المرور")
 
         Spacer(Modifier.height(6.dp))
@@ -318,34 +316,35 @@ private fun LoginTabScreen(
             onClick = { submitLogin(username, password) },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             enabled = username.isNotBlank() && password.isNotBlank(),
-            colors = ButtonDefaults.buttonColors(containerColor = CleanAccentGreen),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             shape = RoundedCornerShape(24.dp)
         ) {
-            Text("تسجيل الدخول", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("تسجيل الدخول", color = MaterialTheme.colorScheme.onPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
 
         TextButton(onClick = showRecovery, modifier = Modifier.fillMaxWidth()) {
-            Text("نسيت كلمة المرور؟ استخدم رمز الاستعادة المحفوظ 🔐", color = CleanAccentBlue, fontSize = 13.sp)
+            Text("نسيت كلمة المرور؟ استخدم رمز الاستعادة المحفوظ 🔐", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
         }
 
         OutlinedButton(
             onClick = back,
             modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(24.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, TelegramBorder)
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            Text("رجوع للشاشة الرئيسية", color = TextSilver, fontSize = 14.sp)
+            Text("رجوع للشاشة الرئيسية", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         }
     }
 }
 
 @Composable
 private fun AuthTabSelector(selectedTab: Int, onSelectTab: (Int) -> Unit) {
+    val trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(44.dp)
-            .background(TelegramDarkInput, RoundedCornerShape(22.dp))
+            .background(trackColor, RoundedCornerShape(22.dp))
             .padding(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -354,11 +353,11 @@ private fun AuthTabSelector(selectedTab: Int, onSelectTab: (Int) -> Unit) {
                 .weight(1f)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(20.dp))
-                .background(if (selectedTab == 0) CleanAccentGreen else Color.Transparent)
+                .background(if (selectedTab == 0) MaterialTheme.colorScheme.primary else Color.Transparent)
                 .clickable { onSelectTab(0) },
             contentAlignment = Alignment.Center
         ) {
-            Text("إنشاء حساب جديد", color = if (selectedTab == 0) TextWhite else TextSilver, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("إنشاء حساب جديد", color = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
 
         Box(
@@ -366,11 +365,11 @@ private fun AuthTabSelector(selectedTab: Int, onSelectTab: (Int) -> Unit) {
                 .weight(1f)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(20.dp))
-                .background(if (selectedTab == 1) CleanAccentBlue else Color.Transparent)
+                .background(if (selectedTab == 1) MaterialTheme.colorScheme.secondary else Color.Transparent)
                 .clickable { onSelectTab(1) },
             contentAlignment = Alignment.Center
         ) {
-            Text("لدي حساب بالفعل", color = if (selectedTab == 1) TextWhite else TextSilver, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("لدي حساب بالفعل", color = if (selectedTab == 1) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -383,25 +382,25 @@ private fun RecoveryScreen(submit: (String, String, String) -> Unit, back: () ->
     var confirm by remember { mutableStateOf("") }
 
     FormColumn("استعادة كلمة المرور بدون سيرفر") {
-        Text("أدخل معرّف يونس وأحد رموز الاستعادة التي قمت بنسخها عند إنشاء الحساب.", color = TextSilver, fontSize = 13.sp, textAlign = TextAlign.Center)
+        Text("أدخل معرّف يونس وأحد رموز الاستعادة التي قمت بنسخها عند إنشاء الحساب.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(10.dp))
         Field(redId, { redId = it.uppercase() }, "معرّف يونس (RED ID)")
         Field(code, { code = it.uppercase() }, "رمز الاستعادة (Recovery Code)")
         PasswordField(password, { password = it.take(128) }, "كلمة المرور الجديدة")
         PasswordField(confirm, { confirm = it.take(128) }, "تأكيد كلمة المرور الجديدة")
-        
+
         Spacer(Modifier.height(10.dp))
         Button(
             onClick = { submit(redId, code, password) },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             enabled = redId.isNotBlank() && code.isNotBlank() && password.length >= 12 && password == confirm,
-            colors = ButtonDefaults.buttonColors(containerColor = CleanAccentGreen),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             shape = RoundedCornerShape(24.dp)
         ) {
-            Text("تغيير كلمة المرور وإلغاء الجلسات", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("تغيير كلمة المرور وإلغاء الجلسات", color = MaterialTheme.colorScheme.onPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
         OutlinedButton(onClick = back, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(24.dp)) {
-            Text("إلغاء والعودة", color = TextSilver)
+            Text("إلغاء والعودة", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -410,20 +409,20 @@ private fun RecoveryScreen(submit: (String, String, String) -> Unit, back: () ->
 private fun PendingScreen(state: AuthState.Pending, check: () -> Unit, login: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     Centered {
-        Icon(Icons.Default.AdminPanelSettings, null, tint = CleanAccentBlue, modifier = Modifier.size(72.dp))
+        Icon(Icons.Default.AdminPanelSettings, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(72.dp))
         Spacer(Modifier.height(10.dp))
-        Text("طلب الحساب بانتظار الاعتماد ⏳", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextWhite)
-        Text("تم إنشاء مفاتيح هويتك المشفرة بنجاح داخل هاتفك ولن تغادر جهازك.", color = TextSilver, textAlign = TextAlign.Center, fontSize = 13.sp)
-        
+        Text("طلب الحساب بانتظار الاعتماد ⏳", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+        Text("تم إنشاء مفاتيح هويتك المشفرة بنجاح داخل هاتفك ولن تغادر جهازك.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, fontSize = 13.sp)
+
         Spacer(Modifier.height(14.dp))
-        
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TelegramDarkInput)) {
+
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
             Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("معرّف يونس الخاص بك:", color = TextMuted, fontSize = 11.sp)
+                Text("معرّف يونس الخاص بك:", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f), fontSize = 11.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(state.redId, color = CleanAccentBlue, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(state.redId, color = MaterialTheme.colorScheme.secondary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     IconButton(onClick = { clipboard.setText(AnnotatedString(state.redId)) }) {
-                        Icon(Icons.Default.ContentCopy, "نسخ", tint = CleanAccentBlue, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.ContentCopy, "نسخ", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -431,67 +430,67 @@ private fun PendingScreen(state: AuthState.Pending, check: () -> Unit, login: ()
 
         if (state.recoveryCodes.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF2C1618))) {
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                 Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("⚠️ رموز الاستعادة — احفظها في مكان آمن خارج الهاتف", color = ErrorRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text(state.recoveryCodes.joinToString("  •  "), fontSize = 12.sp, color = TextWhite, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
+                    Text("⚠️ رموز الاستعادة — احفظها في مكان آمن خارج الهاتف", color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(state.recoveryCodes.joinToString("  •  "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
                     OutlinedButton(
                         onClick = { clipboard.setText(AnnotatedString(state.recoveryCodes.joinToString("\n"))) },
                         modifier = Modifier.fillMaxWidth(),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ErrorRed.copy(alpha = 0.5f))
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
                     ) {
-                        Icon(Icons.Default.ContentCopy, null, tint = ErrorRed, modifier = Modifier.size(16.dp))
-                        Text(" نسخ كافة الرموز الحافظة", color = ErrorRed, fontSize = 12.sp)
+                        Icon(Icons.Default.ContentCopy, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                        Text(" نسخ كافة الرموز الحافظة", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     }
                 }
             }
         }
 
         Spacer(Modifier.height(16.dp))
-        Button(onClick = check, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = CleanAccentGreen), shape = RoundedCornerShape(24.dp)) {
+        Button(onClick = check, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(24.dp)) {
             Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(18.dp))
             Text(" التحقق من اعتماد الحساب", fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = login, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(24.dp)) {
-            Text("تسجيل الدخول لاحقاً", color = TextSilver)
+            Text("تسجيل الدخول لاحقاً", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
 private fun StatusScreen(title: String, description: String, action: () -> Unit) = Centered {
-    Icon(Icons.Default.Lock, null, tint = CleanAccentBlue, modifier = Modifier.size(64.dp))
+    Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(64.dp))
     Spacer(Modifier.height(12.dp))
-    Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+    Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
     Spacer(Modifier.height(6.dp))
-    Text(description, textAlign = TextAlign.Center, color = TextSilver, fontSize = 14.sp)
+    Text(description, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
     Spacer(Modifier.height(20.dp))
-    Button(onClick = action, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = CleanAccentGreen), shape = RoundedCornerShape(24.dp)) {
-        Text("متابعة", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+    Button(onClick = action, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(24.dp)) {
+        Text("متابعة", color = MaterialTheme.colorScheme.onPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun ErrorStatusScreen(title: String, description: String, action: () -> Unit) = Centered {
-    Icon(Icons.Default.Error, null, tint = ErrorRed, modifier = Modifier.size(64.dp))
+    Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(64.dp))
     Spacer(Modifier.height(12.dp))
-    Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ErrorRed)
+    Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
     Spacer(Modifier.height(8.dp))
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF2C1618))) {
-        Text(description, textAlign = TextAlign.Center, color = TextWhite, fontSize = 14.sp, modifier = Modifier.padding(14.dp))
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+        Text(description, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 14.sp, modifier = Modifier.padding(14.dp))
     }
     Spacer(Modifier.height(20.dp))
-    Button(onClick = action, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = CleanAccentBlue), shape = RoundedCornerShape(24.dp)) {
-        Text("محاولة أخرى", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+    Button(onClick = action, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary), shape = RoundedCornerShape(24.dp)) {
+        Text("محاولة أخرى", color = MaterialTheme.colorScheme.onSecondary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun BrandMark(size: Int) = Box(
     Modifier.size(size.dp)
-        .background(Brush.radialGradient(listOf(CleanAccentGreen.copy(alpha = 0.3f), Color.Transparent)), CircleShape)
-        .border(1.dp, CleanAccentGreen.copy(alpha = 0.6f), CircleShape)
+        .background(Brush.radialGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), Color.Transparent)), CircleShape)
+        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), CircleShape)
         .padding(6.dp),
     contentAlignment = Alignment.Center
 ) {
@@ -505,7 +504,7 @@ private fun BrandMark(size: Int) = Box(
 
 @Composable
 private fun Centered(content: @Composable ColumnScope.() -> Unit) = Column(
-    Modifier.fillMaxSize().background(TelegramDarkBg).padding(horizontal = 24.dp, vertical = 18.dp).widthIn(max = 520.dp).animateContentSize(),
+    Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 18.dp).widthIn(max = 520.dp).animateContentSize(),
     Arrangement.Center,
     Alignment.CenterHorizontally,
     content = content
@@ -513,17 +512,17 @@ private fun Centered(content: @Composable ColumnScope.() -> Unit) = Column(
 
 @Composable
 private fun FormColumn(title: String, content: @Composable ColumnScope.() -> Unit) = Column(
-    Modifier.fillMaxSize().background(TelegramDarkBg).padding(horizontal = 16.dp, vertical = 16.dp).widthIn(max = 520.dp).verticalScroll(rememberScrollState()),
+    Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp).widthIn(max = 520.dp).verticalScroll(rememberScrollState()),
     Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
     Alignment.CenterHorizontally
 ) {
     BrandMark(64)
     Spacer(Modifier.height(10.dp))
-    Text("منظومة يونس السيادية 🛡️", style = MaterialTheme.typography.titleLarge, color = TextWhite, fontWeight = FontWeight.Bold)
+    Text("منظومة يونس السيادية 🛡️", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(14.dp))
     Card(
         Modifier.fillMaxWidth().animateContentSize(),
-        colors = CardDefaults.cardColors(containerColor = TelegramDarkCard),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(20.dp)
     ) {
         Column(Modifier.fillMaxWidth().padding(18.dp), Arrangement.spacedBy(12.dp), content = content)
@@ -541,17 +540,17 @@ private fun Field(
     value = value,
     onValueChange = change,
     modifier = Modifier.fillMaxWidth(),
-    label = { Text(label, color = TextSilver, fontSize = 13.sp) },
+    label = { Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) },
     leadingIcon = leading,
     singleLine = true,
     keyboardOptions = keyboard,
     colors = OutlinedTextFieldDefaults.colors(
-        focusedContainerColor = TelegramDarkInput,
-        unfocusedContainerColor = TelegramDarkInput,
-        focusedBorderColor = CleanAccentGreen,
-        unfocusedBorderColor = TelegramBorder,
-        focusedTextColor = TextWhite,
-        unfocusedTextColor = TextWhite
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+        focusedTextColor = MaterialTheme.colorScheme.onBackground,
+        unfocusedTextColor = MaterialTheme.colorScheme.onBackground
     ),
     shape = RoundedCornerShape(12.dp)
 )
@@ -563,22 +562,22 @@ private fun PasswordField(value: String, change: (String) -> Unit, label: String
         value = value,
         onValueChange = change,
         modifier = Modifier.fillMaxWidth(),
-        label = { Text(label, color = TextSilver, fontSize = 13.sp) },
-        leadingIcon = { Icon(Icons.Default.Lock, null, tint = CleanAccentBlue) },
+        label = { Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) },
+        leadingIcon = { Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.secondary) },
         trailingIcon = {
             IconButton(onClick = { visible = !visible }) {
-                Icon(if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility, if (visible) "إخفاء" else "إظهار", tint = TextSilver)
+                Icon(if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility, if (visible) "إخفاء" else "إظهار", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         singleLine = true,
         visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = TelegramDarkInput,
-            unfocusedContainerColor = TelegramDarkInput,
-            focusedBorderColor = CleanAccentGreen,
-            unfocusedBorderColor = TelegramBorder,
-            focusedTextColor = TextWhite,
-            unfocusedTextColor = TextWhite
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            focusedTextColor = MaterialTheme.colorScheme.onBackground,
+            unfocusedTextColor = MaterialTheme.colorScheme.onBackground
         ),
         shape = RoundedCornerShape(12.dp)
     )
@@ -594,7 +593,7 @@ private fun PasswordStrengthBar(password: String, username: String) {
     if (username.isNotBlank() && password.contains(username, ignoreCase = true)) score = 0
 
     val label = when (score) { 0, 1 -> "ضعيفة ⚠️"; 2 -> "مقبولة 🟡"; 3 -> "قوية 🟢"; else -> "قوية جدًا 🛡️" }
-    val color = when (score) { 0, 1 -> ErrorRed; 2 -> Color(0xFFFF9800); else -> CleanAccentGreen }
+    val color = when (score) { 0, 1 -> MaterialTheme.colorScheme.error; 2 -> YounesAccent; else -> MaterialTheme.colorScheme.primary }
     Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
         LinearProgressIndicator(progress = { score / 4f }, modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)), color = color)
         Text("قوة كلمة المرور: $label", color = color, style = MaterialTheme.typography.bodySmall, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))

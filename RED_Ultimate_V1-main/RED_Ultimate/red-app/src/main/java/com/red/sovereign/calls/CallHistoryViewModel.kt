@@ -16,6 +16,8 @@ import com.red.sovereign.core.database.CallLogEntity
 import com.red.sovereign.core.database.LocalRepository
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.text.SimpleDateFormat
@@ -44,6 +46,10 @@ data class CallStatsSummary(
     val topPeer: Pair<String, Int>?,
     val peakHour: Int?
 )
+
+/** جسم طلب حذف سجلات محددة — يطابق DeleteHistoryRequest في الخادم. */
+@Serializable
+private data class HistoryDeleteRequest(val callIds: List<String>)
 
 class CallHistoryViewModel(application: Application) : AndroidViewModel(application) {
     private val client = AuthorizedApiClient(TokenStore(application))
@@ -170,21 +176,55 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
         onDone?.invoke(deleted)
     }
 
+    /**
+     * الحذف محلياً **وعلى الخادم**.
+     *
+     * بدون الخادم كان الحذف المحلي يُلغى عند أول مزامنة: `load()` يجلب صفوف الخادم
+     * ويخزّنها بـ REPLACE فتعود المحذوفة فوراً — أي أن «مسح السجل» كان بلا أثر عملي.
+     * والخادم بدوره يُخفي السجل عن هذا المستخدم وحده (المستند مشترك بين الطرفين)
+     * فلا يتأثر سجل الطرف الآخر.
+     */
     fun deleteCall(callId: String) = viewModelScope.launch {
+        hideOnServer(listOf(callId))
         repository.deleteCallLog(callId)
         calls.removeAll { it.id == callId }
     }
 
     fun deleteCalls(callIds: List<String>) = viewModelScope.launch {
         if (callIds.isEmpty()) return@launch
+        hideOnServer(callIds)
         repository.deleteCallLogs(callIds)
         calls.removeAll { it.id in callIds }
     }
 
     fun clearHistory() = viewModelScope.launch {
+        hideAllOnServer()
         repository.clearCallLogs()
         calls.clear()
     }
+
+    /** يُخفي السجلات على الخادم أولاً. فشل الشبكة لا يمنع الحذف المحلي لكنه يُبلَّغ. */
+    private suspend fun hideOnServer(callIds: List<String>): Boolean {
+        val ids = callIds.filter { it.isNotBlank() }
+        if (ids.isEmpty()) return true
+        val body = json.encodeToString(HistoryDeleteRequest(ids))
+        return when (val r = client.request("POST", "/api/calls/history/delete", body)) {
+            is ApiResult.Success -> true
+            is ApiResult.Error -> {
+                error = "DELETE_SYNC_FAILED: ${r.message} → الحذف محلي فقط وسيعود عند المزامنة"
+                false
+            }
+        }
+    }
+
+    private suspend fun hideAllOnServer(): Boolean =
+        when (val r = client.request("DELETE", "/api/calls/history")) {
+            is ApiResult.Success -> true
+            is ApiResult.Error -> {
+                error = "DELETE_SYNC_FAILED: ${r.message} → الحذف محلي فقط وسيعود عند المزامنة"
+                false
+            }
+        }
 
     fun getStats(): CallStatsSummary {
         val total = calls.size

@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
@@ -61,6 +62,9 @@ class MainActivity : FragmentActivity() {
     private var backgroundedAtElapsedMs: Long? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // سبلاش موحّد عبر كل إصدارات أندرويد (Theme.Younes.Splash في المانيفست).
+        // يجب أن يُستدعى قبل super.onCreate وإلا رمى النظام IllegalStateException.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         startupCoordinator = AppStartupCoordinator(application)
         handleNotificationIntent(intent)

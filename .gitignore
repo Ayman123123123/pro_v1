@@ -208,3 +208,9 @@ replay_pid*.log
 # نسخ .env المحلية المؤرَّخة (تتضاعف بلا حد) — `**/.env.*` أعلاه يغطيها،
 # وهذا السطر يوثّقها صراحةً حتى لا يظن أحد أنها مقصودة
 **/.env.before-*
+# 2026-09-16 cleanup
+hs_err_*
+replay_*
+!*.example
+# VS Code workspace المحلي — ليس كوداً (يغطي pro_new.code-workspace المزال من الفهرس)
+*.code-workspace

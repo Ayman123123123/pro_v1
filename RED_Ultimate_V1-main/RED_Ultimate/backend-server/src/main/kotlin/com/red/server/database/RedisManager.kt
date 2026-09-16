@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
  * │ red:notify:unread:{userId}      │ عداد غير المقروءة          │ 30d منزلق│
  * │ red:notify:queue:{userId}       │ إشعارات مؤقتة (≤100)       │ 30d     │
  * │ red:call:signaling:{callId}     │ إشارات WebRTC مؤقتة        │ 30m     │
+ * │ red:call:pending:{redId}        │ عروض مكالمات للسحب (hash)  │ 120s    │
  * │ red:media:grant:{key}:{grantee} │ صلاحية وسائط مؤقتة         │ 1h      │
  * │ red:search:recent:{userId}      │ آخر 20 بحثًا               │ 30d     │
  * │ red:metrics:realtime            │ مقاييس حية (hash)          │ 48h منزلق│
@@ -176,6 +177,81 @@ class RedisManager(private val redis: StringRedisTemplate) {
     }
 
     // ══════════════════════════════════════════
+    // 📞 عروض المكالمات المعلّقة (صندوق بريد الإيقاظ)
+    // ══════════════════════════════════════════
+
+    // تخزين ذرّي: سقف لكل مستقبل + TTL أصلي في عملية واحدة
+    private val storePendingOfferScript: DefaultRedisScript<Long> = DefaultRedisScript<Long>().apply {
+        setScriptText(
+            """
+            local key = KEYS[1]
+            local field = ARGV[1]
+            local value = ARGV[2]
+            local ttl = tonumber(ARGV[3])
+            local cap = tonumber(ARGV[4])
+            if redis.call('HEXISTS', key, field) == 0 then
+                if redis.call('HLEN', key) >= cap then
+                    return 0
+                end
+            end
+            redis.call('HSET', key, field, value)
+            redis.call('EXPIRE', key, ttl)
+            return 1
+            """.trimIndent()
+        )
+        resultType = Long::class.javaObjectType
+    }
+
+    // سحب + إزالة ذرّية: لا يسحب جهازان العرض نفسه
+    private val takePendingOfferScript: DefaultRedisScript<String> = DefaultRedisScript<String>().apply {
+        setScriptText(
+            """
+            local key = KEYS[1]
+            local field = ARGV[1]
+            if field == '' then
+                local ks = redis.call('HKEYS', key)
+                if #ks == 0 then
+                    return nil
+                end
+                field = ks[1]
+            end
+            local value = redis.call('HGET', key, field)
+            if value then
+                redis.call('HDEL', key, field)
+            end
+            return value
+            """.trimIndent()
+        )
+        resultType = String::class.java
+    }
+
+    /**
+     * يخزّن عرض مكالمة للسحب لاحقاً عند اتصال المستقبل (Path 2 of Multi-Path Delivery).
+     *
+     * hash لكل مستقبل: callId → JSON العرض، بـ TTL أصلي = ttlSeconds. فالمخزن يدوم عبر
+     * إعادة تشغيل الخادم ويُشارَك بين النسخ خلف موازن — بخلاف خريطة الذاكرة السابقة التي
+     * كانت تُفقد كل عرض معلّق عند أي نشر جديد (فتضيع رنّة من تطبيق مقتول بعد وصولها).
+     * يعيد false عند بلوغ سقف المستقبل — لا إسقاط صامت لعروض قائمة.
+     */
+    fun storePendingCallOffer(targetRedId: String, callId: String, offerJson: String, ttlSeconds: Long): Boolean {
+        val stored = redis.execute(
+            storePendingOfferScript,
+            listOf(pendingOfferKey(targetRedId)),
+            callId, offerJson, ttlSeconds.toString(), PENDING_OFFER_PER_USER_CAP.toString()
+        ) ?: 0L
+        return stored == 1L
+    }
+
+    /** يسحب عرضاً ويزيله ذرّياً (بـ callId، أو أي عرض للمستقبل عند null). */
+    fun takePendingCallOffer(targetRedId: String, callId: String?): String? =
+        redis.execute(takePendingOfferScript, listOf(pendingOfferKey(targetRedId)), callId.orEmpty())
+
+    fun pendingCallOfferCount(targetRedId: String): Long =
+        redis.opsForHash<String, String>().size(pendingOfferKey(targetRedId)) ?: 0L
+
+    private fun pendingOfferKey(targetRedId: String) = "red:call:pending:$targetRedId"
+
+    // ══════════════════════════════════════════
     // 🖼️ صلاحيات الوسائط المؤقتة
     // ══════════════════════════════════════════
 
@@ -248,5 +324,10 @@ class RedisManager(private val redis: StringRedisTemplate) {
         )
         redis.opsForSet().remove("red:online", userId)
         redis.opsForZSet().remove("red:presence:index", userId)
+    }
+
+    companion object {
+        /** سقف عروض المكالمات المعلّقة لكل مستقبل — يمنع مستخدماً واحداً من نفخ الذاكرة. */
+        private const val PENDING_OFFER_PER_USER_CAP = 50
     }
 }

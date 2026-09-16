@@ -46,8 +46,13 @@ class UnifiedPushSender {
      * Never logs the endpoint itself - topic URLs are bearer capabilities.
      */
     fun send(endpoint: String, payload: ByteArray): Int {
-        val url = parse(endpoint) ?: return -1
-        val outbound = sealWake(endpoint, payload)
+        // تطبيع واحد يخدم المسارين: `parse` يقصّ الفراغات أصلاً، بينما كان `sealWake`
+        // يشتق مفتاح AES-GCM من السلسلة **كما هي**. فأي فراغ أو زائد في القيمة المخزنة
+        // كان يجعل مفتاح الخادم مخالفاً لمفتاح العميل ⇒ يصل الإيقاظ ولا يُفتح مغلفه،
+        // فيسقط الرنين إلى مجرد مزامنة صامتة (تراجع صامت يصعب تشخيصه).
+        val normalized = endpoint.trim()
+        val url = parse(normalized) ?: return -1
+        val outbound = sealWake(normalized, payload)
         var code = -1
         var attempt = 0
         while (true) {
