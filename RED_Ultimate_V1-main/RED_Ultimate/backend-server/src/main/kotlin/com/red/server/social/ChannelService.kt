@@ -378,4 +378,254 @@ class ChannelService(
         ) ?: 0
         return c > 0
     }
+
+    fun postMessage(
+        actorId: UUID,
+        channelId: String,
+        content: String,
+        messageType: String,
+        payload: String,
+        replyToMessageId: String?,
+        senderDeviceId: Int,
+        ciphertextType: String
+    ): ChannelMessageResponse {
+        val channel = get(channelId) ?: throw NoSuchElementException("Channel not found")
+        require(canPost(actorId, channelId)) { "NOT_AUTHORIZED_TO_POST" }
+        require(content.length in 1..levelPerks(channelId).maxPostLength) { "CONTENT_TOO_LONG" }
+        
+        val messageId = "chmsg_${java.util.UUID.randomUUID().toString().replace("-", "").take(12)}"
+        val now = Instant.now()
+        
+        // Store in PostgreSQL
+        jdbc.update(
+            """INSERT INTO channel_messages(id, channel_id, sender_id, content, message_type, payload, 
+               reply_to_message_id, sender_device_id, ciphertext_type, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            messageId, UUID.fromString(channelId), actorId, content, messageType, payload,
+            replyToMessageId, senderDeviceId, ciphertextType, java.sql.Timestamp.from(now)
+        )
+        
+        // Mirror to MongoDB
+        mongo.save(com.red.server.database.ChannelMessageDocument(
+            uuid = messageId,
+            channelId = channelId,
+            senderId = users.findById(actorId)?.redId ?: "",
+            senderDeviceId = senderDeviceId,
+            payload = java.util.Base64.getDecoder().decode(payload),
+            messageType = messageType,
+            ciphertextType = ciphertextType.toInt(),
+            sequenceNumber = nextChannelSequence(channelId),
+            replyToMessageUuid = replyToMessageId,
+            createdAt = now
+        ))
+        
+        return ChannelMessageResponse(
+            messageId = messageId,
+            channelId = channelId,
+            senderId = users.findById(actorId)?.redId ?: "",
+            content = content,
+            messageType = messageType,
+            timestamp = now,
+            sequenceNumber = nextChannelSequence(channelId) - 1
+        )
+    }
+
+    fun getMessages(
+        actorId: UUID,
+        channelId: String,
+        limit: Int,
+        before: String?,
+        after: String?
+    ): List<ChannelMessageResponse> {
+        require(isMember(actorId, channelId)) { "NOT_A_CHANNEL_MEMBER" }
+        
+        val baseQuery = "SELECT * FROM channel_messages WHERE channel_id=? AND deleted_at IS NULL"
+        var query = baseQuery
+        val params = mutableListOf<Any>()
+        params.add(UUID.fromString(channelId))
+        
+        if (before != null) {
+            query += " AND id < ?"
+            params.add(before)
+        }
+        if (after != null) {
+            query += " AND id > ?"
+            params.add(after)
+        }
+        
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.add(limit.coerceIn(1, 100))
+        
+        return jdbc.query(query, { rs, _ ->
+            ChannelMessageResponse(
+                messageId = rs.getString("id"),
+                channelId = rs.getObject("channel_id", UUID::class.java).toString(),
+                senderId = rs.getObject("sender_id", UUID::class.java).toString(),
+                content = rs.getString("content"),
+                messageType = rs.getString("message_type"),
+                timestamp = rs.getTimestamp("created_at").toInstant(),
+                sequenceNumber = rs.getLong("sequence_number")
+            )
+        }, *params.toTypedArray())
+    }
+
+    fun moderate(
+        actorId: UUID,
+        channelId: String,
+        action: String,
+        targetId: String,
+        value: String?
+    ): Boolean {
+        require(isAdmin(actorId, channelId)) { "NOT_AUTHORIZED" }
+        
+        return when (action.uppercase()) {
+            "DELETE_MESSAGE" -> {
+                val deleted = jdbc.update(
+                    "UPDATE channel_messages SET deleted_at=NOW() WHERE id=? AND channel_id=?",
+                    targetId, UUID.fromString(channelId)
+                ) > 0
+                if (deleted) {
+                    mongo.updateFirst(
+                        Query(Criteria.where("uuid").`is`(targetId).and("channelId").`is`(channelId)),
+                        Update().set("deletedAt", Instant.now()),
+                        com.red.server.database.ChannelMessageDocument::class.java
+                    )
+                }
+                deleted
+            }
+            "PIN_MESSAGE" -> {
+                val perks = levelPerks(channelId)
+                val pinnedCount = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM channel_messages WHERE channel_id=? AND pinned=true",
+                    Int::class.java, UUID.fromString(channelId)
+                ) ?: 0
+                if (pinnedCount >= perks.maxPinnedMessages) {
+                    throw IllegalArgumentException("MAX_PINNED_REACHED")
+                }
+                jdbc.update(
+                    "UPDATE channel_messages SET pinned=true, pinned_at=NOW() WHERE id=? AND channel_id=?",
+                    targetId, UUID.fromString(channelId)
+                ) > 0
+            }
+            "UNPIN_MESSAGE" -> {
+                jdbc.update(
+                    "UPDATE channel_messages SET pinned=false, pinned_at=NULL WHERE id=? AND channel_id=?",
+                    targetId, UUID.fromString(channelId)
+                ) > 0
+            }
+            "MUTE_USER" -> {
+                // Add to muted users table
+                jdbc.update(
+                    "INSERT INTO channel_muted_users(channel_id, user_id, muted_by, muted_at) VALUES (?,?,?,NOW()) ON CONFLICT DO NOTHING",
+                    UUID.fromString(channelId), UUID.fromString(targetId), actorId
+                ) > 0
+            }
+            "UNMUTE_USER" -> {
+                jdbc.update(
+                    "DELETE FROM channel_muted_users WHERE channel_id=? AND user_id=?",
+                    UUID.fromString(channelId), UUID.fromString(targetId)
+                ) > 0
+            }
+            "BAN_USER" -> {
+                jdbc.update(
+                    "UPDATE channel_members SET role='BANNED' WHERE channel_id=? AND user_id=?",
+                    UUID.fromString(channelId), UUID.fromString(targetId)
+                ) > 0
+            }
+            "UNBAN_USER" -> {
+                jdbc.update(
+                    "UPDATE channel_members SET role='SUBSCRIBER' WHERE channel_id=? AND user_id=? AND role='BANNED'",
+                    UUID.fromString(channelId), UUID.fromString(targetId)
+                ) > 0
+            }
+            "SLOWMODE" -> {
+                val seconds = value?.toIntOrNull() ?: 0
+                require(seconds >= 0 && seconds <= 86400) { "INVALID_SLOWMODE" }
+                jdbc.update(
+                    "UPDATE channels SET slow_mode_seconds=?, updated_at=NOW() WHERE id=?",
+                    seconds, UUID.fromString(channelId)
+                ) > 0
+            }
+            "UPDATE_SETTINGS" -> {
+                value?.let { settings ->
+                    // Parse JSON settings
+                    import com.fasterxml.jackson.databind.ObjectMapper
+                    val mapper = ObjectMapper()
+                    val map = mapper.readValue(settings, Map::class.java)
+                    val updateParts = mutableListOf<String>()
+                    val updateParams = mutableListOf<Any>()
+                    
+                    map["allowReactions"]?.let { v ->
+                        updateParts.add("allow_reactions=?")
+                        updateParams.add(v)
+                    }
+                    map["allowThreads"]?.let { v ->
+                        updateParts.add("allow_threads=?")
+                        updateParams.add(v)
+                    }
+                    
+                    if (updateParts.isNotEmpty()) {
+                        updateParams.add(UUID.fromString(channelId))
+                        jdbc.update(
+                            "UPDATE channels SET ${updateParts.joinToString(", ")}, updated_at=NOW() WHERE id=?",
+                            *updateParams.toTypedArray()
+                        ) > 0
+                    } else {
+                        false
+                    }
+                } ?: false
+            }
+            else -> throw IllegalArgumentException("UNKNOWN_MODERATION_ACTION")
+        }
+    }
+
+    private fun nextChannelSequence(channelId: String): Long {
+        val sequence = mongo.findAndModify(
+            Query(Criteria.where("id").`is`("channel:$channelId")), Update().inc("sequence", 1),
+            org.springframework.data.mongodb.core.FindAndModifyOptions.options().upsert(true).returnNew(true),
+            com.red.server.database.ConversationSequence::class.java
+        ) ?: error("Unable to allocate channel sequence")
+        return sequence.sequence
+    }
+
+    /** List channels belonging to a community */
+    fun listByCommunity(communityId: String, userId: UUID?): List<ChannelResponse> {
+        return try {
+            jdbc.query(
+                """SELECT * FROM channels WHERE community_id=? AND is_archived=false ORDER BY subscriber_count DESC""",
+                { rs, _ -> mapChannelRow(rs) },
+                UUID.fromString(communityId)
+            )
+        } catch (_: Exception) { emptyList() }
+    }
+
+    data class CreateChannelRequest(
+        val name: String,
+        val description: String? = null,
+        val isPublic: Boolean = true,
+        val communityId: String
+    )
+
+    data class ChannelResponse(
+        val id: String,
+        val name: String,
+        val username: String?,
+        val description: String?,
+        val ownerId: String,
+        val isPublic: Boolean,
+        val subscriberCount: Int,
+        val createdAt: Instant,
+        val isBroadcast: Boolean = true,
+        val boostsCount: Int = 0
+    )
 }
+
+data class ChannelMessageResponse(
+    val messageId: String,
+    val channelId: String,
+    val senderId: String,
+    val content: String,
+    val messageType: String,
+    val timestamp: Instant,
+    val sequenceNumber: Long
+)

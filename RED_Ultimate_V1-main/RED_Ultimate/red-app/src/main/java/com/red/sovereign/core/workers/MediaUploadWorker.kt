@@ -121,6 +121,14 @@ class MediaUploadWorker(
     private suspend fun fail(entity: MediaUploadEntity, error: String) {
         val dao = RedDatabase.getInstance(applicationContext).mediaUploadDao()
         val next = entity.retryCount + 1
+        // حد المحاولات + DLQ: بلا هذا كانت الوسائط الفاشلة دائمًا تُعاد للأبد
+        // (BACKOFF يقف عند 24h لكن retryCount بلا سقف فيملأ الطابور ويستنزف البطارية).
+        if (next > MAX_ATTEMPTS) {
+            Log.e(TAG, "upload ${entity.messageId} exceeded $MAX_ATTEMPTS attempts ($error) — DLQ drop")
+            runCatching { dao.delete(entity.messageId) }
+            runCatching { File(entity.localPath).delete() }
+            return
+        }
         val delay = BACKOFF.getOrElse(entity.retryCount) { 86_400_000L }
         Log.w(TAG, "upload ${entity.messageId} failed ($error), retry $next")
         runCatching {
@@ -159,6 +167,8 @@ class MediaUploadWorker(
         private const val TAG = "MediaUploadWorker"
         private const val UNIQUE_WORK_NAME = "red-media-upload"
         private const val KEY_MESSAGE_ID = "messageId"
+        /** سقف المحاولات للملف الواحد (موائم لعتبة outbox DLQ=10) قبل الإسقاط. */
+        private const val MAX_ATTEMPTS = 10
         private val BACKOFF = longArrayOf(10_000L, 30_000L, 120_000L, 600_000L, 3_600_000L, 86_400_000L)
 
         /** يُستدعى بعد كل إدراج + عند الإقلاع لمسح المعلق (مزامنة الحديثة). */

@@ -7,6 +7,7 @@ import com.red.server.database.ConversationSequence
 import com.red.server.database.DisappearingSettingsDocument
 import com.red.server.database.GroupMessageDocument
 import com.red.server.database.MessageDocument
+import com.red.server.database.MessageEditHistoryDocument
 import com.red.server.database.MessageReaction
 import com.red.server.groups.GroupMember
 import com.red.server.groups.GroupDocument
@@ -28,6 +29,13 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+
+data class SendResult(
+    val messageId: String,
+    val sequenceNumber: Long,
+    val timestamp: java.time.Instant
+)
 
 @Service
 class MessageService(
@@ -36,6 +44,18 @@ class MessageService(
     private val users: UserAccountRepository,
     private val jdbc: JdbcTemplate
 ) {
+    /**
+     * المرجع الوحيد لفهارس الرسائل (Single Source of Truth).
+     *
+     * الأسماء الكانونية الوحيدة: conv_seq / group_seq / channel_seq للمركّب الفريد
+     * (conversation|group|channel + sequenceNumber)، و pinned_conv / sender_created
+     * و group_pinned للمشتقات. الأسماء الطويلة القديمة
+     * (conversationId_1_sequenceNumber_1 / groupId_1_sequenceNumber_1 /
+     * channelId_1_sequenceNumber_1 / conversationId_1_isPinned_1_pinnedAt_-1 /
+     * senderId_1_createdAt_-1 / groupId_1_isPinned_1_pinnedAt_-1) مهجورة وتُسقط
+     * عند الإقلاع. تعليقات @CompoundIndex على المستندات عقد توثيقي فقط —
+     * لا تُنشئ فهرسًا جديدًا باسم مختلف.
+     */
     @PostConstruct
     fun indexes() {
         // LEGENDARY FIX 2026-09-15: حلّ جذري لتعارض الفهارس (IndexKeySpecsConflict)
@@ -59,6 +79,11 @@ class MessageService(
                 }
             }
         }
+        fun <T : Any> dropLegacy(clazz: Class<T>, legacyName: String) {
+            runCatching { mongo.indexOps(clazz).dropIndex(legacyName) }.onSuccess {
+                log.info("Dropped legacy index {} on {} (canonical name wins)", legacyName, clazz.simpleName)
+            }
+        }
         fun <T : Any> ensureUnique(clazz: Class<T>, fields: List<Pair<String, Sort.Direction>>, uniqueName: String) {
             val ops = mongo.indexOps(clazz)
             val existing = runCatching { ops.indexInfo }.getOrNull() ?: emptyList()
@@ -75,16 +100,24 @@ class MessageService(
         runCatching {
             ensureIndex(MessageDocument::class.java, Index().on("uuid", Sort.Direction.ASC).unique().named("uuid_1"), "uuid_1")
             ensureIndex(MessageDocument::class.java, Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).named("receiverId_1_status_1_sequenceNumber_1"), "receiverId_1_status_1_sequenceNumber_1")
-            ensureUnique(MessageDocument::class.java, listOf("conversationId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "conversationId_1_sequenceNumber_1")
-            ensureIndex(MessageDocument::class.java, Index().on("conversationId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC).named("conversationId_1_isPinned_1_pinnedAt_-1"), "conversationId_1_isPinned_1_pinnedAt_-1")
-            ensureIndex(MessageDocument::class.java, Index().on("senderId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC).named("senderId_1_createdAt_-1"), "senderId_1_createdAt_-1")
+            dropLegacy(MessageDocument::class.java, "conversationId_1_sequenceNumber_1")
+            ensureUnique(MessageDocument::class.java, listOf("conversationId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "conv_seq")
+            dropLegacy(MessageDocument::class.java, "conversationId_1_isPinned_1_pinnedAt_-1")
+            ensureIndex(MessageDocument::class.java, Index().on("conversationId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC).named("pinned_conv"), "pinned_conv")
+            dropLegacy(MessageDocument::class.java, "senderId_1_createdAt_-1")
+            ensureIndex(MessageDocument::class.java, Index().on("senderId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC).named("sender_created"), "sender_created")
             ensureIndex(MessageDocument::class.java, Index().on("disappearAt", Sort.Direction.ASC).named("disappearAt_1"), "disappearAt_1")
+            // retention: سجل تعديلات الرسائل — TTL 365 يومًا على editedAt.
+            ensureIndex(MessageEditHistoryDocument::class.java, Index().on("editedAt", Sort.Direction.ASC).expire(365, TimeUnit.DAYS).named("editedAt_ttl_365d"), "editedAt_ttl_365d")
         }.onFailure { e -> log.warn("Failed to create message indexes: {}", e.message) }
 
         runCatching {
-            ensureIndex(com.red.server.database.GroupMessageDocument::class.java, Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC).named("groupId_1_isPinned_1_pinnedAt_-1"), "groupId_1_isPinned_1_pinnedAt_-1")
-            ensureUnique(com.red.server.database.GroupMessageDocument::class.java, listOf("groupId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "groupId_1_sequenceNumber_1")
-            ensureUnique(com.red.server.database.ChannelMessageDocument::class.java, listOf("channelId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "channelId_1_sequenceNumber_1")
+            dropLegacy(com.red.server.database.GroupMessageDocument::class.java, "groupId_1_isPinned_1_pinnedAt_-1")
+            ensureIndex(com.red.server.database.GroupMessageDocument::class.java, Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC).named("group_pinned"), "group_pinned")
+            dropLegacy(com.red.server.database.GroupMessageDocument::class.java, "groupId_1_sequenceNumber_1")
+            ensureUnique(com.red.server.database.GroupMessageDocument::class.java, listOf("groupId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "group_seq")
+            dropLegacy(com.red.server.database.ChannelMessageDocument::class.java, "channelId_1_sequenceNumber_1")
+            ensureUnique(com.red.server.database.ChannelMessageDocument::class.java, listOf("channelId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "channel_seq")
             ensureIndex(com.red.server.database.PinnedMessageDocument::class.java, Index().on("messageUuid", Sort.Direction.ASC).unique().named("messageUuid_1"), "messageUuid_1")
         }.onFailure { e -> log.warn("Failed to create group/channel indexes: {}", e.message) }
     }
@@ -632,16 +665,18 @@ class MessageService(
     }
 
     /** معرّفات الأعضاء النشطين للمجموعة — للبث الجماعي (مؤشر كتابة إلخ). */
-    /** AUTO-FIX (message reliability): stored messages for this recipient that arrived after `since`. */
+    /** AUTO-FIX (message reliability): stored messages for this recipient that arrived after `since`.
+     * موحّد: سقف 50 وترتيب sequenceNumber (يطابق فهرس receiverId_1_status_1_sequenceNumber_1
+     * ومسار pendingFor المقيد بالجهاز) — لا 500 ولا createdAt. */
     fun pendingFor(redId: String, since: java.time.Instant, limit: Int): List<MessageDocument> {
-        val capped = limit.coerceIn(1, 500)
+        val capped = limit.coerceIn(1, 50)
         val query = Query(
             Criteria.where("receiverId").`is`(redId)
                 .andOperator(
                     Criteria.where("createdAt").gt(since),
                     Criteria.where("deletedForEveryoneAt").isNull()
                 )
-        ).with(Sort.by(Sort.Direction.ASC, "createdAt")).limit(capped)
+        ).with(Sort.by(Sort.Direction.ASC, "sequenceNumber")).limit(capped)
         return mongo.find(query, MessageDocument::class.java)
     }
 
@@ -720,16 +755,105 @@ class MessageService(
 
     private fun rank(status: String) = when (status) { "SENT" -> 1; "DELIVERED" -> 2; "READ" -> 3; else -> 0 }
 
-    companion object {
-        private val log = LoggerFactory.getLogger(MessageService::class.java)
-        // مصدر الحقيقة الوحيد للنمط: RedIdGenerator.PATTERN.
-        // تكرار النمط بصياغات مختلفة هو ما سمح سابقًا بتباين القبول
-        // بين الوحدات (بادئة مقبولة هنا مرفوضة هناك).
-        private val RED_ID = Regex(RedIdGenerator.PATTERN)
-        private val TYPES = setOf("TEXT", "RICH_TEXT", "IMAGE", "VIDEO", "AUDIO", "VOICE", "FILE", "STICKER", "POLL", "SYSTEM", "GROUP_KEY_DISTRIBUTION", "GROUP_MESSAGE")
-        private val GROUP_TYPES = setOf("GROUP_KEY_DISTRIBUTION", "GROUP_MESSAGE")
+    fun sendEncryptedEnvelope(
+        senderRedId: String,
+        conversationId: String,
+        payload: String,
+        messageType: String,
+        senderDeviceId: Int,
+        receiverDeviceId: Int?,
+        ciphertextType: String,
+        replyToMessageId: String? = null,
+        idempotencyKey: String? = null
+    ): SendResult {
+        // Check idempotency
+        idempotencyKey?.let { key ->
+            val existing = redis.opsForValue().get("idempotency:$key")
+            if (existing != null) {
+                val parts = existing.split("|")
+                if (parts.size == 3) {
+                    return SendResult(parts[0], parts[1].toLong(), java.time.Instant.parse(parts[2]))
+                }
+            }
+        }
+
+        val message = RedProtos.ChatMessage.newBuilder()
+            .setId(UuidV7.next())
+            .setConversationId(conversationId)
+            .setSenderId(senderRedId)
+            .setReceiverId(findConversationPeer(senderRedId, conversationId))
+            .setPayload(com.google.protobuf.ByteString.copyFrom(java.util.Base64.getDecoder().decode(payload)))
+            .setType(messageType)
+            .setTimestamp(java.time.Instant.now().toEpochMilli())
+            .setSenderDeviceId(senderDeviceId)
+            .setReceiverDeviceId(receiverDeviceId ?: 1)
+            .setCiphertextType(ciphertextType.toInt())
+            .setSequenceNumber(0)
+            .build()
+
+        val saved = processIncoming(message, replyToMessageId, null)
+
+        val result = SendResult(saved.uuid, saved.sequenceNumber, saved.createdAt)
+        
+        idempotencyKey?.let { key ->
+            redis.opsForValue().set("idempotency:$key", "${result.messageId}|${result.sequenceNumber}|${result.timestamp}", java.time.Duration.ofHours(24))
+        }
+
+        return result
     }
-}
+
+    fun getMessage(messageId: String): MessageDocument? = findMessage(messageId)
+
+    fun editMessage(userRedId: String, messageId: String, newPayload: String, newMessageType: String?): Boolean {
+        val message = findAuthorized(messageId, userRedId)
+            ?: throw NoSuchElementException("Message not found or not authorized")
+        
+        val ageSeconds = java.time.Instant.now().epochSecond - message.createdAt.epochSecond
+        require(ageSeconds <= 900) { "EDIT_WINDOW_EXPIRED" } // 15 minutes
+        
+        val payloadBytes = java.util.Base64.getDecoder().decode(newPayload)
+        require(payloadBytes.size in 1..1_048_576) { "INVALID_PAYLOAD_SIZE" }
+        
+        mongo.updateFirst(
+            Query(Criteria.where("uuid").`is`(messageId)),
+            Update()
+                .set("payload", payloadBytes)
+                .set("messageType", newMessageType ?: message.messageType)
+                .set("editedAt", java.time.Instant.now())
+                .inc("editVersion", 1)
+                .set("isEdited", true),
+            MessageDocument::class.java
+        )
+        
+        return true
+    }
+
+    fun findConversationPeer(senderRedId: String, conversationId: String): String {
+        // Check if it's a self conversation
+        if (conversationId.contains("self") || conversationId.contains("note") || 
+            conversationId == senderRedId || conversationId.contains(senderRedId)) {
+            return senderRedId
+        }
+        
+        // Look up the conversation to find the other participant
+        val latest = mongo.findOne(
+            Query(Criteria.where("conversationId").`is`(conversationId))
+                .with(Sort.by(Sort.Direction.DESC, "sequenceNumber")),
+            MessageDocument::class.java
+        )
+        
+        if (latest != null) {
+            return if (latest.senderId == senderRedId) latest.receiverId else latest.senderId
+        }
+        
+        // Try to infer from conversationId (format: redId1_redId2)
+        val parts = conversationId.split("_")
+        if (parts.size == 2) {
+            return if (parts[0] == senderRedId) parts[1] else parts[0]
+        }
+        
+        throw IllegalArgumentException("Cannot determine conversation peer")
+    }
 
 /**
  * 😀 هدف تفاعل — أين تعيش الرسالة ومن يجب أن يستلم البث.

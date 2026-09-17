@@ -54,14 +54,39 @@ class CallHistoryController(
         }
     }
 
+    /**
+     * مزامنة التدرج باستخدام الترقيم القائم على المؤشر (Cursor-based).
+     * يعيد العناصر الجديدة والمحدثة مع مؤشر الصفحة التالية.
+     */
     @PostMapping("/history/sync")
-    fun syncHistory(@RequestBody(required = false) body: List<Map<String, Any?>>?, auth: Authentication): ResponseEntity<Map<String, Any>> {
+    fun syncHistory(
+        @RequestBody(required = false) request: CallHistorySyncRequest?,
+        auth: Authentication
+    ): ResponseEntity<CallHistorySyncResponse> {
         val user = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
-        // AUTO-FIX (calls history): this endpoint used to be a stub that stored nothing, so call logs
-        // created while offline were silently dropped. Rows are upserted into call_history now.
-        val rows = body ?: emptyList()
-        val stored = runCatching { history.upsertFromSync(user.redId, rows) }.getOrElse { 0 }
-        return ResponseEntity.ok(mapOf("status" to "synced", "received" to rows.size, "stored" to stored))
+        val req = request ?: CallHistorySyncRequest()
+        val result = history.syncHistory(
+            redId = user.redId,
+            cursor = req.cursor,
+            limit = req.limit.coerceIn(1, 200),
+            sinceVersion = req.sinceVersion,
+            filter = req.filter
+        )
+        return ResponseEntity.ok(result)
+    }
+
+    /**
+     * دفع التغييرات المحلية إلى الخادم
+     */
+    @PostMapping("/history/push")
+    fun pushHistory(
+        @RequestBody request: Map<String, Any?>,
+        auth: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val user = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
+        val items = request["items"] as? List<*> ?: emptyList()
+        val stored = runCatching { history.upsertFromSync(user.redId, items.map { it as Map<String, Any?> }) }.getOrElse { 0 }
+        return ResponseEntity.ok(mapOf("status" to "synced", "received" to items.size, "stored" to stored))
     }
 
     /**
@@ -251,9 +276,34 @@ class CallHistoryController(
         var targetRedId: String? = null
     }
 
-    data class DeleteHistoryRequest(val callIds: List<String> = emptyList())
+data class DeleteHistoryRequest(val callIds: List<String> = emptyList())
 
-    /** دعوة إضافية أثناء مكالمة جماعية مستقلة — يرن الجدد ويُسجلون كأعضاء الغرفة. */
+/** طلب مزامنة السجل مع الترقيم القائم على المؤشر */
+data class CallHistorySyncRequest(
+    val cursor: String? = null,
+    val limit: Int = 50,
+    val sinceVersion: Long = 0,
+    val filter: CallHistoryFilter = CallHistoryFilter()
+)
+
+data class CallHistoryFilter(
+    val types: List<String> = emptyList(),
+    val directions: List<String> = emptyList(),
+    val statuses: List<String> = emptyList(),
+    val dateFrom: String? = null,
+    val dateTo: String? = null,
+    val includeDeleted: Boolean = false
+)
+
+/** استجابة مزامنة السجل */
+data class CallHistorySyncResponse(
+    val items: List<CallHistoryItem>,
+    val nextCursor: String?,
+    val hasMore: Boolean,
+    val serverVersion: Long
+)
+
+/** دعوة إضافية أثناء مكالمة جماعية مستقلة — يرن الجدد ويُسجلون كأعضاء الغرفة. */
     @PostMapping("/group/invite-extra")
     fun inviteExtra(
         @RequestBody request: InviteExtraRequest,

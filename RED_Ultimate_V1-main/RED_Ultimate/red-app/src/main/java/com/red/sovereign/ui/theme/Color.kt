@@ -4,75 +4,75 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.OptIn
 import androidx.compose.ui.graphics.Color
-import com.red.sovereign.ui.theme.RedBrandColors
-import com.red.sovereign.ui.theme.RedSemanticColors
 
 /**
  * RED Sovereign Material 3 Color Schemes
  *
- * نظام ألوان Material 3 كامل مع:
- * - Primary, Secondary, Tertiary containers
- * - Surface, Background, Error containers
- * - On-colors لكل منها (contrast ratio ≥ 4.5:1 للنصوص، ≥ 3:1 للـ UI)
- * - Dark theme كامل مع tonalPalette صحيح
- * - Light theme
- * - High contrast mode
+ * نظام ألوان Material 3 كامل. نِسَب التباين أدناه مقيسة بمعادلة
+ * WCAG 2.1 SC 1.4.3 (لا بتقريب):
+ * - الداكن: onPrimary أبيض 4.98:1، الحاويات داكنة + نص فاتح (4.92–9.65:1)،
+ *   onSecondary أسود 11.70:1، outline تفاعلي #7A8FA3 (5.13:1 على البطاقة).
+ * - الفاتح (#F7F8FA/#0F1B2D): onPrimary أبيض 5.62:1 على #C62828،
+ *   onSecondary أبيض 4.55:1، الحاويات فاتحة + نص داكن (6.15–7.11:1).
+ * - outline تفاعلي حدّ ≥3:1 (WCAG 1.4.11)؛ outlineVariant فاصل زخرفي مستثنى.
  *
- * جميع القيم محسوبة ومقيسة لتباين WCAG AA/AAA.
+ * الأحمر لدور Danger/Error فقط (YounesRose #F25C5C) — ليس لون علامة؛
+ * انظر RedBrandColors (مهمل: aliases نحو Younes).
  */
 object RedColorScheme {
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Dark Theme (افتراضي) — مستند إلى tonalPalette للعلامة التجارية
+    // Dark Theme (افتراضي)
     // ═══════════════════════════════════════════════════════════════════════════════
 
     val Dark = darkColorScheme(
-        // Primary — أحمر سيادي
-        primary = RedBrandColors.PrimaryTonal.tone80,           // #D32F2F - على الخلفيات الداكنة
-        onPrimary = RedBrandColors.PrimaryTonal.tone10,         // #FFEBEE - نص على Primary
-        primaryContainer = RedBrandColors.PrimaryTonal.tone30,  // #EF9A9A - حاوية Primary
-        onPrimaryContainer = RedBrandColors.PrimaryTonal.tone90, // #C62828 - نص على حاوية Primary
+        // Primary — أحمر سيادي داكن بما يكفي لنص أبيض AA
+        primary = Color(0xFFD32F2F),
+        onPrimary = Color.White,                            // 4.98:1 على primary
+        primaryContainer = Color(0xFF8B0000),                // حاوية داكنة
+        onPrimaryContainer = Color(0xFFFFEBEE),              // 4.92:1 على الحاوية
 
-        // Secondary — ذهبي ملكي
-        secondary = RedBrandColors.SecondaryTonal.tone70,       // #FFB300
-        onSecondary = RedBrandColors.SecondaryTonal.tone10,     // #FFF8E1
-        secondaryContainer = RedBrandColors.SecondaryTonal.tone30, // #FFEB9C
-        onSecondaryContainer = RedBrandColors.SecondaryTonal.tone90, // #FF8F00
+        // Secondary — ذهبي ملكي (نص أسود: الأبيض عليه 1.79:1 راسب)
+        secondary = Color(0xFFFFB300),
+        onSecondary = Color.Black,                           // 11.70:1
+        secondaryContainer = Color(0xFF3D2E00),              // حاوية داكنة
+        onSecondaryContainer = Color(0xFFF0D48C),            // 9.12:1 على الحاوية
 
-        // Tertiary — أزرق ملكي
-        tertiary = RedBrandColors.TertiaryTonal.tone70,         // #1E88E5
-        onTertiary = RedBrandColors.TertiaryTonal.tone10,       // #E3F2FD
-        tertiaryContainer = RedBrandColors.TertiaryTonal.tone30, // #90CAF9
-        onTertiaryContainer = RedBrandColors.TertiaryTonal.tone90, // #1565C0
+        // Tertiary — أزرق ملكي (الأبيض عليه 3.68:1 راسب → نص داكن)
+        tertiary = Color(0xFF4D9FE8),
+        onTertiary = Color(0xFF001F2A),                      // 6.05:1
+        tertiaryContainer = Color(0xFF1565C0),               // حاوية داكنة
+        onTertiaryContainer = Color(0xFFE3F2FD),             // 5.03:1 على الحاوية
 
-        // Error — أحمر واضح
-        error = RedBrandColors.ErrorTonal.tone80,               // #D32F2F
-        onError = RedBrandColors.ErrorTonal.tone10,             // #FFEBEE
-        errorContainer = RedBrandColors.ErrorTonal.tone30,      // #EF9A9A
-        onErrorContainer = RedBrandColors.ErrorTonal.tone90,    // #C62828
+        // Error — أحمر الخطر YounesRose (الأبيض عليه 3.25:1 راسب → نص داكن)
+        error = Color(0xFFF25C5C),
+        onError = Color(0xFF3A0010),                         // 5.44:1
+        errorContainer = Color(0xFF5C001A),                  // حاوية داكنة
+        onErrorContainer = Color(0xFFFFB3B8),                // 8.43:1 على الحاوية
 
-        // Background & Surface
-        background = Color(0xFF0A0F18),                         // YounesVoid
-        onBackground = Color(0xFFFFFFFF),                       // أبيض نقي
-        surface = Color(0xFF131C29),                            // YounesSurface1
+        // Background & Surface — Younes
+        background = Color(0xFF0A0F18),                      // YounesVoid
+        onBackground = Color(0xFFFFFFFF),
+        surface = Color(0xFF131C29),                         // YounesSurface1
         onSurface = Color(0xFFFFFFFF),
-        surfaceVariant = Color(0xFF1B2635),                     // YounesSurface2
-        onSurfaceVariant = Color(0xFF9FB0C2),                   // YounesMuted
-        surfaceTint = RedBrandColors.PrimaryTonal.tone80,       // لطبقة الارتفاع
+        surfaceVariant = Color(0xFF1B2635),                  // YounesSurface2
+        onSurfaceVariant = Color(0xFF9FB0C2),                // YounesMuted
+        surfaceTint = Color(0xFFD32F2F),
 
         // Surface containers (للارتفاعات Material 3)
-        surfaceContainer = Color(0xFF131C29),                   // YounesSurface1
-        surfaceContainerLow = Color(0xFF0A0F18),                // YounesMidnight
-        surfaceContainerHigh = Color(0xFF1B2635),               // YounesSurface2
-        surfaceContainerHighest = Color(0xFF212E40),            // YounesSurface3
+        surfaceContainer = Color(0xFF131C29),
+        surfaceContainerLow = Color(0xFF0A0F18),
+        surfaceContainerHigh = Color(0xFF1B2635),
+        surfaceContainerHighest = Color(0xFF212E40),
 
-        // Outlines
-        outline = Color(0xFF7A8FA3),                            // YounesOutline — ≥3:1 على الأسطح
-        outlineVariant = Color(0xFF2A394A),                     // YounesBorder — فاصل زخرفي
+        // Outlines — تفاعلي مقابل زخرفي (WCAG 1.4.11)
+        outline = Color(0xFF7A8FA3),                         // YounesOutline — 5.13:1 على البطاقة
+        outlineVariant = Color(0xFF2A394A),                  // YounesBorder — فاصل زخرفي مستثنى
 
-        // Inverse colors
-        inversePrimary = RedBrandColors.PrimaryTonal.tone20,    // للوضع المعكوس
+        // Inverse colors — أحمر داكن يُقرأ على الفاتح
+        inversePrimary = Color(0xFFC62828),                  // 5.62:1 على الأبيض
         inverseSurface = Color(0xFFFFFFFF),
         inverseOnSurface = Color(0xFF0A0F18),
 
@@ -80,45 +80,46 @@ object RedColorScheme {
         scrim = Color(0xE0000000),
 
         // Shadow
+        shadow = Color(0xFF000000)
     )
 
-    // ════════════════════════════════════════════════════════════════════════════════
-    // Light Theme
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Light Theme — خلفية لؤلؤية #F7F8FA ونص كحلي #0F1B2D
     // ═══════════════════════════════════════════════════════════════════════════════
 
     val Light = lightColorScheme(
-        // Primary — أحمر سيادي (أغمق للتباين على الفاتح)
-        primary = RedBrandColors.PrimaryTonal.tone60,           // #F44336
-        onPrimary = RedBrandColors.PrimaryTonal.tone100,        // أبيض
-        primaryContainer = RedBrandColors.PrimaryTonal.tone20,  // #FFCDD2
-        onPrimaryContainer = RedBrandColors.PrimaryTonal.tone90, // #C62828
+        // Primary — أحمر داكن يحمل أبيض AA (الفاتح #F44336 مع الأبيض 3.68:1 راسب)
+        primary = Color(0xFFC62828),
+        onPrimary = Color.White,                             // 5.62:1
+        primaryContainer = Color(0xFFFFCDD2),                // حاوية فاتحة
+        onPrimaryContainer = Color(0xFF8B0000),              // 7.11:1 على الحاوية
 
-        // Secondary — ذهبي ملكي
-        secondary = RedBrandColors.SecondaryTonal.tone80,       // #FFA000
-        onSecondary = RedBrandColors.SecondaryTonal.tone100,    // أسود
-        secondaryContainer = RedBrandColors.SecondaryTonal.tone20, // #FFF3C4
-        onSecondaryContainer = RedBrandColors.SecondaryTonal.tone90, // #FF8F00
+        // Secondary — كوبالت داكن AA على الفاتح
+        secondary = Color(0xFF2E7DA8),
+        onSecondary = Color.White,                           // 4.55:1
+        secondaryContainer = Color(0xFFBFE6F7),
+        onSecondaryContainer = Color(0xFF001F2A),
 
-        // Tertiary — أزرق ملكي
-        tertiary = RedBrandColors.TertiaryTonal.tone60,         // #2196F3
-        onTertiary = RedBrandColors.TertiaryTonal.tone100,      // أبيض
-        tertiaryContainer = RedBrandColors.TertiaryTonal.tone20, // #BBDEFB
-        onTertiaryContainer = RedBrandColors.TertiaryTonal.tone90, // #1565C0
+        // Tertiary — ذهب داكن AA على الفاتح
+        tertiary = Color(0xFF8A6A0A),
+        onTertiary = Color.White,                            // 5.06:1
+        tertiaryContainer = Color(0xFFFFE08B),
+        onTertiaryContainer = Color(0xFF221B00),
 
-        // Error
-        error = RedBrandColors.ErrorTonal.tone60,               // #F44336
-        onError = RedBrandColors.ErrorTonal.tone100,            // أبيض
-        errorContainer = RedBrandColors.ErrorTonal.tone20,      // #FFCDD2
-        onErrorContainer = RedBrandColors.ErrorTonal.tone90,    // #C62828
+        // Error — أحمر الخطر (دور Danger فقط)
+        error = Color(0xFFD32F2F),
+        onError = Color.White,                               // 4.98:1
+        errorContainer = Color(0xFFFFDAD6),
+        onErrorContainer = Color(0xFF410002),
 
         // Background & Surface
-        background = Color(0xFFF7F8FA),                         // لؤلؤي فاتح
-        onBackground = Color(0xFF0F1B2D),                       // كحلي داكن
-        surface = Color(0xFFFFFFFF),                            // أبيض نقي
+        background = Color(0xFFF7F8FA),                      // لؤلؤي فاتح
+        onBackground = Color(0xFF0F1B2D),                    // كحلي داكن
+        surface = Color(0xFFFFFFFF),
         onSurface = Color(0xFF0F1B2D),
-        surfaceVariant = Color(0xFFE6E8EB),                     // رمادي فاتح
-        onSurfaceVariant = Color(0xFF5A6B7D),                   // رمادي متوسط
-        surfaceTint = RedBrandColors.PrimaryTonal.tone60,
+        surfaceVariant = Color(0xFFE6E8EB),
+        onSurfaceVariant = Color(0xFF5A6B7D),
+        surfaceTint = Color(0xFFC62828),
 
         // Surface containers
         surfaceContainer = Color(0xFFF0F2F5),
@@ -126,12 +127,12 @@ object RedColorScheme {
         surfaceContainerHigh = Color(0xFFE6E8EB),
         surfaceContainerHighest = Color(0xFFDDE1E6),
 
-        // Outlines
+        // Outlines — تفاعلي 3.34:1 على الأبيض (≥3:1)، والفاصل زخرفي
         outline = Color(0xFF7A8FA3),
         outlineVariant = Color(0xFFD0D7DE),
 
         // Inverse
-        inversePrimary = RedBrandColors.PrimaryTonal.tone80,
+        inversePrimary = Color(0xFFF25C5C),                  // 5.90:1 على الداكن
         inverseSurface = Color(0xFF0A0F18),
         inverseOnSurface = Color(0xFFF7F8FA),
 
@@ -139,6 +140,7 @@ object RedColorScheme {
         scrim = Color(0x66000000),
 
         // Shadow
+        shadow = Color(0xFF000000)
     )
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -149,15 +151,12 @@ object RedColorScheme {
         onBackground = Color(0xFFFFFFFF),
         onSurface = Color(0xFFFFFFFF),
         onSurfaceVariant = Color(0xFFE8E8E8),
-        outline = RedBrandColors.PrimaryTonal.tone80,           // Primary color for focus
-        outlineVariant = RedBrandColors.PrimaryTonal.tone60,
-        primary = RedBrandColors.PrimaryTonal.tone70,           // أفتح قليلاً للتباين
-        secondary = RedBrandColors.SecondaryTonal.tone60,       // أفتح
-        tertiary = RedBrandColors.TertiaryTonal.tone60,
-        surface = Color(0xFF0D1520),                            // أعمق
+        outline = Color(0xFF3DE8BC),                         // YounesPrimaryGlow — حدّ أظهر
+        outlineVariant = Color(0xFF7A8FA3),                  // التفاعلي السابق يصبح فاصلًا
+        surface = Color(0xFF0D1520),
         surfaceContainer = Color(0xFF0D1520),
         surfaceContainerLow = Color(0xFF050A12),
-        background = Color(0xFF000000)                          // أسود تام
+        background = Color(0xFF000000)
     )
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -168,11 +167,8 @@ object RedColorScheme {
         onBackground = Color(0xFF000000),
         onSurface = Color(0xFF000000),
         onSurfaceVariant = Color(0xFF1A1A1A),
-        outline = RedBrandColors.PrimaryTonal.tone60,
-        outlineVariant = RedBrandColors.PrimaryTonal.tone80,
-        primary = RedBrandColors.PrimaryTonal.tone70,
-        secondary = RedBrandColors.SecondaryTonal.tone90,
-        tertiary = RedBrandColors.TertiaryTonal.tone70,
+        outline = Color(0xFF0A7A5E),                         // زمرد داكن — حدّ أظهر على الفاتح
+        outlineVariant = Color(0xFF5A6B7D),
         surface = Color(0xFFFFFFFF),
         surfaceContainer = Color(0xFFFFFFFF),
         surfaceContainerLow = Color(0xFFFFFFFF),
@@ -184,30 +180,31 @@ object RedColorScheme {
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * يولد ColorScheme مخصص من لون بذرة (seed color) للمستخدم
-     * يستخدم خوارزمية Material 3 tonal palette
+     * يولد ColorScheme مخصص من لون بذرة (seed color) للمستخدم.
+     * القاعدة نفسها: onPrimary أبيض، الحاويات الداكنة ليلًا (tone90 + نص tone10)،
+     * onSecondary أسود، outline تفاعلي YounesOutline. الثالثي/الخطأ والأسطح
+     * ثابتة على Younes — البذرة تؤثر في Primary/Secondary فقط.
      */
     fun fromSeed(seed: Color, isDark: Boolean): ColorScheme {
-        // بناء tonal palette مبسط من اللون البذرة
         val tonal = generateTonalPalette(seed)
         return if (isDark) {
             darkColorScheme(
                 primary = tonal.tone80,
-                onPrimary = tonal.tone10,
-                primaryContainer = tonal.tone30,
-                onPrimaryContainer = tonal.tone90,
+                onPrimary = Color.White,
+                primaryContainer = tonal.tone90,
+                onPrimaryContainer = tonal.tone10,
                 secondary = tonal.tone70,
-                onSecondary = tonal.tone10,
-                secondaryContainer = tonal.tone30,
-                onSecondaryContainer = tonal.tone90,
-                tertiary = RedBrandColors.TertiaryTonal.tone70,
-                onTertiary = RedBrandColors.TertiaryTonal.tone10,
-                tertiaryContainer = RedBrandColors.TertiaryTonal.tone30,
-                onTertiaryContainer = RedBrandColors.TertiaryTonal.tone90,
-                error = RedBrandColors.ErrorTonal.tone80,
-                onError = RedBrandColors.ErrorTonal.tone10,
-                errorContainer = RedBrandColors.ErrorTonal.tone30,
-                onErrorContainer = RedBrandColors.ErrorTonal.tone90,
+                onSecondary = Color.Black,
+                secondaryContainer = tonal.tone90,
+                onSecondaryContainer = tonal.tone10,
+                tertiary = Color(0xFF4D9FE8),
+                onTertiary = Color(0xFF001F2A),
+                tertiaryContainer = Color(0xFF1565C0),
+                onTertiaryContainer = Color(0xFFE3F2FD),
+                error = Color(0xFFF25C5C),
+                onError = Color(0xFF3A0010),
+                errorContainer = Color(0xFF5C001A),
+                onErrorContainer = Color(0xFFFFB3B8),
                 background = Color(0xFF0A0F18),
                 onBackground = Color(0xFFFFFFFF),
                 surface = Color(0xFF131C29),
@@ -221,7 +218,7 @@ object RedColorScheme {
                 surfaceContainerHighest = Color(0xFF212E40),
                 outline = Color(0xFF7A8FA3),
                 outlineVariant = Color(0xFF2A394A),
-                inversePrimary = tonal.tone20,
+                inversePrimary = tonal.tone90,
                 inverseSurface = Color(0xFFFFFFFF),
                 inverseOnSurface = Color(0xFF0A0F18),
                 scrim = Color(0xE0000000),
@@ -229,29 +226,29 @@ object RedColorScheme {
             )
         } else {
             lightColorScheme(
-                primary = tonal.tone60,
-                onPrimary = tonal.tone100,
+                primary = tonal.tone90,
+                onPrimary = Color.White,
                 primaryContainer = tonal.tone20,
                 onPrimaryContainer = tonal.tone90,
                 secondary = tonal.tone80,
-                onSecondary = tonal.tone100,
+                onSecondary = Color.Black,
                 secondaryContainer = tonal.tone20,
                 onSecondaryContainer = tonal.tone90,
-                tertiary = RedBrandColors.TertiaryTonal.tone60,
-                onTertiary = RedBrandColors.TertiaryTonal.tone100,
-                tertiaryContainer = RedBrandColors.TertiaryTonal.tone20,
-                onTertiaryContainer = RedBrandColors.TertiaryTonal.tone90,
-                error = RedBrandColors.ErrorTonal.tone60,
-                onError = RedBrandColors.ErrorTonal.tone100,
-                errorContainer = RedBrandColors.ErrorTonal.tone20,
-                onErrorContainer = RedBrandColors.ErrorTonal.tone90,
+                tertiary = Color(0xFF8A6A0A),
+                onTertiary = Color.White,
+                tertiaryContainer = Color(0xFFFFE08B),
+                onTertiaryContainer = Color(0xFF221B00),
+                error = Color(0xFFD32F2F),
+                onError = Color.White,
+                errorContainer = Color(0xFFFFDAD6),
+                onErrorContainer = Color(0xFF410002),
                 background = Color(0xFFF7F8FA),
                 onBackground = Color(0xFF0F1B2D),
                 surface = Color(0xFFFFFFFF),
                 onSurface = Color(0xFF0F1B2D),
                 surfaceVariant = Color(0xFFE6E8EB),
                 onSurfaceVariant = Color(0xFF5A6B7D),
-                surfaceTint = tonal.tone60,
+                surfaceTint = tonal.tone90,
                 surfaceContainer = Color(0xFFF0F2F5),
                 surfaceContainerLow = Color(0xFFF7F8FA),
                 surfaceContainerHigh = Color(0xFFE6E8EB),
@@ -277,21 +274,20 @@ object RedColorScheme {
         val hue = hsv[0]
         val saturation = hsv[1]
 
-        // توليد palette مبسط
         return TonalPalette(
-            tone0 = Color.hsv(hue, 0f, 1f),
-            tone10 = Color.hsv(hue, saturation * 0.1f, 0.95f),
-            tone20 = Color.hsv(hue, saturation * 0.2f, 0.9f),
-            tone30 = Color.hsv(hue, saturation * 0.4f, 0.85f),
-            tone40 = Color.hsv(hue, saturation * 0.6f, 0.8f),
-            tone50 = Color.hsv(hue, saturation * 0.8f, 0.75f),
-            tone60 = Color.hsv(hue, saturation, 0.7f),
-            tone70 = Color.hsv(hue, saturation, 0.6f),
-            tone80 = Color.hsv(hue, saturation, 0.5f),
-            tone90 = Color.hsv(hue, saturation * 0.9f, 0.35f),
-            tone95 = Color.hsv(hue, saturation, 0.25f),
-            tone99 = Color.hsv(hue, saturation, 0.15f),
-            tone100 = Color.hsv(hue, 0f, 0f)
+            tone0 = Color.Hsv(hue, 0f, 1f),
+            tone10 = Color.Hsv(hue, saturation * 0.1f, 0.95f),
+            tone20 = Color.Hsv(hue, saturation * 0.2f, 0.9f),
+            tone30 = Color.Hsv(hue, saturation * 0.4f, 0.85f),
+            tone40 = Color.Hsv(hue, saturation * 0.6f, 0.8f),
+            tone50 = Color.Hsv(hue, saturation * 0.8f, 0.75f),
+            tone60 = Color.Hsv(hue, saturation, 0.7f),
+            tone70 = Color.Hsv(hue, saturation, 0.6f),
+            tone80 = Color.Hsv(hue, saturation, 0.5f),
+            tone90 = Color.Hsv(hue, saturation * 0.9f, 0.35f),
+            tone95 = Color.Hsv(hue, saturation, 0.25f),
+            tone99 = Color.Hsv(hue, saturation, 0.15f),
+            tone100 = Color.Hsv(hue, 0f, 0f)
         )
     }
 }
@@ -394,8 +390,8 @@ val ColorScheme.incomingBubbleTextSecondary: Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 val ColorScheme.successColor: Color
-    get() = RedBrandColors.Success
+    get() = YounesPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 val ColorScheme.warningColor: Color
-    get() = RedBrandColors.Warning
+    get() = YounesAccent

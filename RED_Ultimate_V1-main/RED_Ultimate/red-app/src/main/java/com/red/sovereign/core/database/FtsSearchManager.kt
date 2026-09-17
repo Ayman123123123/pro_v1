@@ -126,10 +126,6 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
         )
     }
 
-    fun deleteConversation(conversationId: String) {
-        runCatching { db.execSQL("DELETE FROM messages_fts WHERE conversationId = ?", arrayOf(conversationId)) }
-    }
-
     fun indexMessage(messageId: String, conversationId: String, senderId: String, plaintext: String) {
         if (plaintext.length < MIN_QUERY_LENGTH || plaintext.length > MAX_INDEXED_LENGTH) return
         // FTS بلا UNIQUE: احذف القديم أولًا لمنع التكرار (LocalRepository + Paging كانا يفهرسان مرتين).

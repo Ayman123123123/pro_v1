@@ -16,6 +16,9 @@ import java.util.UUID
  * GET /api/channels/{id} — تفاصيل
  * POST /api/channels/{id}/join — انضمام (حد: 20/دقيقة)
  * POST /api/channels/{id}/leave — مغادرة
+ * POST /api/channels/{id}/messages — نشر رسالة
+ * GET /api/channels/{id}/messages — جلب الرسائل
+ * POST /api/channels/{id}/moderate — إشراف (ADMIN فقط)
  *
  * الهدف: منع إغراق القنوات بالرسائل والاشتراكات (Spamming) عند وجود >1000 عضو.
  */
@@ -88,4 +91,91 @@ class ChannelController(
         val ok = channels.leave(UUID.fromString(auth.name), id)
         return ResponseEntity.ok(mapOf("success" to ok))
     }
+
+    @PostMapping("/{id}/messages")
+    fun postMessage(
+        @PathVariable id: String,
+        @Valid @RequestBody request: PostMessageRequest,
+        auth: Authentication
+    ): ResponseEntity<Any> {
+        val userId = UUID.fromString(auth.name)
+        try {
+            val message = channels.postMessage(
+                actorId = userId,
+                channelId = id,
+                content = request.content,
+                messageType = request.messageType,
+                payload = request.payload,
+                replyToMessageId = request.replyToMessageId,
+                senderDeviceId = request.senderDeviceId,
+                ciphertextType = request.ciphertextType
+            )
+            return ResponseEntity.ok(mapOf("success" to true, "message" to message))
+        } catch (e: IllegalArgumentException) {
+            return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to e.message))
+        } catch (e: IllegalAccessException) {
+            return ResponseEntity.status(403).body(mapOf("success" to false, "error" to e.message))
+        }
+    }
+
+    @GetMapping("/{id}/messages")
+    fun getMessages(
+        @PathVariable id: String,
+        @RequestParam(defaultValue = "50") limit: Int,
+        @RequestParam(required = false) before: String?,
+        @RequestParam(required = false) after: String?,
+        auth: Authentication
+    ): ResponseEntity<Any> {
+        val userId = UUID.fromString(auth.name)
+        try {
+            val messages = channels.getMessages(
+                actorId = userId,
+                channelId = id,
+                limit = limit.coerceIn(1, 100),
+                before = before,
+                after = after
+            )
+            return ResponseEntity.ok(mapOf("messages" to messages, "count" to messages.size))
+        } catch (e: IllegalArgumentException) {
+            return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to e.message))
+        }
+    }
+
+    @PostMapping("/{id}/moderate")
+    fun moderate(
+        @PathVariable id: String,
+        @Valid @RequestBody request: ModerateRequest,
+        auth: Authentication
+    ): ResponseEntity<Any> {
+        val userId = UUID.fromString(auth.name)
+        try {
+            val result = channels.moderate(
+                actorId = userId,
+                channelId = id,
+                action = request.action,
+                targetId = request.targetId,
+                value = request.value
+            )
+            return ResponseEntity.ok(mapOf("success" to result, "action" to request.action))
+        } catch (e: IllegalArgumentException) {
+            return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to e.message))
+        } catch (e: SecurityException) {
+            return ResponseEntity.status(403).body(mapOf("success" to false, "error" to e.message))
+        }
+    }
 }
+
+data class PostMessageRequest(
+    val content: String,
+    val messageType: String = "TEXT",
+    val payload: String,
+    val replyToMessageId: String? = null,
+    val senderDeviceId: Int,
+    val ciphertextType: String
+)
+
+data class ModerateRequest(
+    val action: String,
+    val targetId: String,
+    val value: String? = null
+)

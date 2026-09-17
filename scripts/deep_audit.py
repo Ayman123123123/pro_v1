@@ -387,3 +387,11 @@ elif total < 30:
 else:
     print("  🔴 40/100 — REQUIRES ATTENTION")
 print("=" * 78)
+# CI gate: FAIL = any critical/high finding (SQLi, leaked keys, hardcoded
+# passwords, exposed DB ports). Medium/low stay advisory. Non-zero exit so
+# the static-guards job actually fails.
+failed = bool(a.critical or a.high)
+print("=" * 78)
+print(f"  {'❌ FAIL' if failed else '✅ PASS'} (critical={len(a.critical)}, high={len(a.high)})")
+print("=" * 78)
+sys.exit(1 if failed else 0)

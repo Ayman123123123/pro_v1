@@ -65,10 +65,10 @@ services:
     <<: *resource-limits-xlarge
     environment:
       <<: *common-variables
-      - POSTGRES_DB=red_sovereign
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      POSTGRES_DB: "red_sovereign"
+      POSTGRES_USER: "admin"
+      POSTGRES_PASSWORD_FILE: "/run/secrets/db_password"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     command:
       - postgres
       - -c
@@ -100,8 +100,8 @@ services:
     <<: *resource-limits-xlarge
     environment:
       <<: *common-variables
-      - MONGO_INITDB_ROOT_USERNAME=red_user
-      - MONGO_INITDB_ROOT_PASSWORD_FILE=/run/secrets/mongo_password
+      MONGO_INITDB_ROOT_USERNAME: "red_user"
+      MONGO_INITDB_ROOT_PASSWORD_FILE: "/run/secrets/mongo_password"
     command:
       - mongod
       - --wiredTigerCacheSizeGB
@@ -111,7 +111,9 @@ services:
     volumes:
       - mongo-data:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --username red_user --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval \"db.adminCommand('ping')\""]
+      # _FILE model: MONGO_INITDB_ROOT_PASSWORD is never exported in this container,
+      # so read the mounted secret file directly (old probe used an empty env var).
+      test: ["CMD-SHELL", "mongosh --quiet --username red_user --password \"$$(cat /run/secrets/mongo_password)\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\""]
       <<: *healthcheck-defaults
       start_period: 40s
     logging: *default-logging
@@ -141,10 +143,15 @@ services:
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "$$REDIS_PASSWORD", "ping"]
+      # REDISCLI_AUTH avoids `-a` (which leaks the password in `ps` output).
+      # NOTE: keep ./secrets/redis_password.txt identical to the host $REDIS_PASSWORD
+      # interpolated in `command:` above — the server password and this probe must match.
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli --raw ping | grep -q PONG"]
       <<: *healthcheck-defaults
     logging: *default-logging
     networks: ["red-net"]
+    secrets:
+      - redis_password
 
   minio:
     image: minio/minio:RELEASE.2026-06-06T02-44-06Z
@@ -154,8 +161,8 @@ services:
     command: server /data --console-address ":9001"
     environment:
       <<: *common-variables
-      - MINIO_ROOT_USER=redadmin
-      - MINIO_ROOT_PASSWORD_FILE=/run/secrets/minio_password
+      MINIO_ROOT_USER: "redadmin"
+      MINIO_ROOT_PASSWORD_FILE: "/run/secrets/minio_password"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -202,7 +209,6 @@ services:
       context: .
       dockerfile: backend-server/Dockerfile
     image: red-backend:prod
-    container_name: red-backend
     restart: unless-stopped
     <<: *resource-limits-xlarge
     deploy:
@@ -214,61 +220,70 @@ services:
         reservations:
           memory: 1G
           cpus: '1.0'
+    # Secrets model (unified): every credential is mounted via `secrets:` as a *_FILE
+    # pointer and materialized into plain env by backend-server/entrypoint.sh BEFORE
+    # Spring boots (Spring does not resolve *_FILE natively). Activation needs one
+    # Dockerfile line (out of scope here): COPY entrypoint.sh + ENTRYPOINT ["/app/entrypoint.sh"].
+    # NOTE: media-sfu mounts JWT/SFU *_FILE too but Node reads plain JWT_SECRET /
+    # SFU_TICKET_SECRET — the same file_env shim is still TODO on that service.
     environment:
       <<: *common-variables
-      - SPRING_PROFILES_ACTIVE=prod
-      - SERVER_PORT=8080
-      - YOUNES_RUNTIME=docker
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/red_sovereign
-      - SPRING_DATASOURCE_USERNAME=admin
-      - SPRING_DATASOURCE_PASSWORD_FILE=/run/secrets/db_password
-      - SPRING_DATA_MONGODB_URI=mongodb://red_user:$${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/red_sovereign?authSource=admin
-      - MONGO_USER=red_user
-      - MONGO_PASSWORD_FILE=/run/secrets/mongo_password
-      - SPRING_DATA_REDIS_HOST=redis
-      - SPRING_DATA_REDIS_PASSWORD_FILE=/run/secrets/redis_password
-      - JWT_SECRET_FILE=/run/secrets/jwt_secret
-      - SFU_TICKET_SECRET_FILE=/run/secrets/sfu_ticket_secret
-      - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME}
-      - RED_ADMIN_PASSWORD_FILE=/run/secrets/red_admin_password
-      - OPENRELAY_ENABLED=${OPENRELAY_ENABLED:-false}
-      - OPENRELAY_USERNAME=${OPENRELAY_USERNAME:-openrelayproject}
-      - OPENRELAY_PASSWORD=${OPENRELAY_PASSWORD:-openrelayproject}
-      - DB_USER=${DB_USER:-admin}
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ACCESS_KEY=redadmin
-      - MINIO_BUCKET=red-media
-      - MINIO_BUCKET_MEDIA=red-media
-      - MINIO_BUCKET_AVATARS=red-avatars
-      - MINIO_BUCKET_STORIES=red-stories
-      - RED_RETENTION_AUDIT_DAYS=${RED_RETENTION_AUDIT_DAYS:-365}
-      - RED_RETENTION_CDR_DAYS=${RED_RETENTION_CDR_DAYS:-365}
-      - RED_RETENTION_HEALTH_DAYS=${RED_RETENTION_HEALTH_DAYS:-90}
-      - RED_RETENTION_TELEMETRY_DAYS=${RED_RETENTION_TELEMETRY_DAYS:-90}
-      - RED_RETENTION_BATCH_SIZE=${RED_RETENTION_BATCH_SIZE:-10000}
-      - MINIO_PASSWORD_FILE=/run/secrets/minio_password
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
-      - RED_IDENTITY_PRIVATE_KEY_PATH=/run/secrets/red_identity_private_key
-      - RED_IDENTITY_PUBLIC_KEY_PATH=/run/secrets/red_identity_public_key
-      - RED_DEVICE_CERTIFICATE_VALID_DAYS=${RED_DEVICE_CERTIFICATE_VALID_DAYS:-90}
-      - REFRESH_EXPIRATION_DAYS=${REFRESH_EXPIRATION_DAYS:-30}
-      - TURN_SECRET_FILE=/run/secrets/turn_secret
-      - PUSH_ALLOW_HTTP_ENDPOINTS=${PUSH_ALLOW_HTTP_ENDPOINTS:-true}
-      - PUSH_CONNECT_TIMEOUT_MS=${PUSH_CONNECT_TIMEOUT_MS:-5000}
-      - PUSH_READ_TIMEOUT_MS=${PUSH_READ_TIMEOUT_MS:-5000}
-      - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST}
-      - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP}
-      - TURN_PORT=3478
-      - BACKUP_ROOT=/backups
-      - RED_TRUST_X_FORWARDED_FOR=true
-      - SERVER_FORWARD_HEADERS_STRATEGY=framework
-      - RED_ADMIN_COOKIE_SECURE=${RED_ADMIN_COOKIE_SECURE:-true}
-      - JAVA_TOOL_OPTIONS=-Xms512m -Xmx1g -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0
+      SPRING_PROFILES_ACTIVE: "prod"
+      SERVER_PORT: "8080"
+      YOUNES_RUNTIME: "docker"
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/red_sovereign"
+      SPRING_DATASOURCE_USERNAME: "admin"
+      SPRING_DATASOURCE_PASSWORD_FILE: "/run/secrets/db_password"
+      SPRING_DATA_MONGODB_URI: "mongodb://red_user:$${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/red_sovereign?authSource=admin"
+      MONGO_USER: "red_user"
+      MONGO_PASSWORD_FILE: "/run/secrets/mongo_password"
+      SPRING_DATA_REDIS_HOST: "redis"
+      SPRING_DATA_REDIS_PASSWORD_FILE: "/run/secrets/redis_password"
+      JWT_SECRET_FILE: "/run/secrets/jwt_secret"
+      SFU_TICKET_SECRET_FILE: "/run/secrets/sfu_ticket_secret"
+      RED_ADMIN_USERNAME: "${RED_ADMIN_USERNAME}"
+      RED_ADMIN_PASSWORD_FILE: "/run/secrets/red_admin_password"
+      OPENRELAY_ENABLED: "${OPENRELAY_ENABLED:-false}"
+      OPENRELAY_USERNAME: "${OPENRELAY_USERNAME:-openrelayproject}"
+      OPENRELAY_PASSWORD: "${OPENRELAY_PASSWORD:-openrelayproject}"
+      DB_USER: "${DB_USER:-admin}"
+      MINIO_ENDPOINT: "http://minio:9000"
+      MINIO_ACCESS_KEY: "redadmin"
+      MINIO_BUCKET: "red-media"
+      MINIO_BUCKET_MEDIA: "red-media"
+      MINIO_BUCKET_AVATARS: "red-avatars"
+      MINIO_BUCKET_STORIES: "red-stories"
+      RED_RETENTION_AUDIT_DAYS: "${RED_RETENTION_AUDIT_DAYS:-365}"
+      RED_RETENTION_CDR_DAYS: "${RED_RETENTION_CDR_DAYS:-365}"
+      RED_RETENTION_HEALTH_DAYS: "${RED_RETENTION_HEALTH_DAYS:-90}"
+      RED_RETENTION_TELEMETRY_DAYS: "${RED_RETENTION_TELEMETRY_DAYS:-90}"
+      RED_RETENTION_BATCH_SIZE: "${RED_RETENTION_BATCH_SIZE:-10000}"
+      MINIO_PASSWORD_FILE: "/run/secrets/minio_password"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS}"
+      RED_IDENTITY_PRIVATE_KEY_PATH: "/run/secrets/red_identity_private_key"
+      RED_IDENTITY_PUBLIC_KEY_PATH: "/run/secrets/red_identity_public_key"
+      RED_DEVICE_CERTIFATE_VALID_DAYS: "${RED_DEVICE_CERTIFICATE_VALID_DAYS:-90}"
+      REFRESH_EXPIRATION_DAYS: "${REFRESH_EXPIRATION_DAYS:-30}"
+      TURN_SECRET_FILE: "/run/secrets/turn_secret"
+      PUSH_ALLOW_HTTP_ENDPOINTS: "${PUSH_ALLOW_HTTP_ENDPOINTS:-true}"
+      PUSH_CONNECT_TIMEOUT_MS: "${PUSH_CONNECT_TIMEOUT_MS:-5000}"
+      PUSH_READ_TIMEOUT_MS: "${PUSH_READ_TIMEOUT_MS:-5000}"
+      TURN_PUBLIC_HOST: "${TURN_PUBLIC_HOST}"
+      TURN_EXTERNAL_IP: "${TURN_EXTERNAL_IP}"
+      TURN_PORT: "3478"
+      BACKUP_ROOT: "/backups"
+      RED_TRUST_X_FORWARDED_FOR: "true"
+      SERVER_FORWARD_HEADERS_STRATEGY: "framework"
+      RED_ADMIN_COOKIE_SECURE: "${RED_ADMIN_COOKIE_SECURE:-true}"
+      JAVA_TOOL_OPTIONS: "-Xms512m -Xmx1g -XX:+UseZGC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/urandom"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - identity-secrets:/run/secrets/identity:ro
       - backup-data:/backups
+      # Makes entrypoint.sh visible at /app/entrypoint.sh; inert until the Dockerfile
+      # ENTRYPOINT wires it (see environment note above).
+      - ./backend-server/entrypoint.sh:/app/entrypoint.sh:ro
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
@@ -285,6 +300,15 @@ services:
       minio:
         condition: service_healthy
     healthcheck:
+      # Canonical probes (probes enabled in application.yml):
+      #   liveness  = /actuator/health/liveness (no dependencies, always 200 when JVM alive)
+      #   readiness = /actuator/health/readiness (503 while mandatory services are down)
+      # Legacy app aliases kept by HealthController + edge nginx: /health/live, /health.
+      # PREREQ (SecurityConfig, out of scope): permitAll currently matches exact
+      # "/actuator/health" while "/actuator/**" needs ADMIN — subpaths /liveness and
+      # /readiness must be opened to anonymous, else this probe gets 403. Fallback if
+      # not yet fixed: probe http://localhost:8080/health/live instead.
+      # NOTE: backend Dockerfile HEALTHCHECK still probes legacy /health (Dockerfile out of scope).
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health/liveness"]
       interval: 30s
       timeout: 10s
@@ -309,7 +333,6 @@ services:
       context: ./media-sfu
       dockerfile: Dockerfile
     image: red-media-sfu:prod
-    container_name: red-media-sfu
     restart: unless-stopped
     <<: *resource-limits-xlarge
     deploy:
@@ -322,14 +345,16 @@ services:
           cpus: '2.0'
     environment:
       <<: *common-variables
-      - JWT_SECRET_FILE=/run/secrets/jwt_secret
-      - SFU_TICKET_SECRET_FILE=/run/secrets/sfu_ticket_secret
-      - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP}
-      - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP}
-      - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-4}
-      - MEDIASOUP_FORCE_LOCAL_BUILD=${MEDIASOUP_FORCE_LOCAL_BUILD:-}
-      - RTC_MIN_PORT=${RTC_MIN_PORT:-40000}
-      - RTC_MAX_PORT=${RTC_MAX_PORT:-40100}
+      JWT_SECRET_FILE: "/run/secrets/jwt_secret"
+      SFU_TICKET_SECRET_FILE: "/run/secrets/sfu_ticket_secret"
+      # NOTE: Node reads plain JWT_SECRET/SFU_TICKET_SECRET, not *_FILE — same
+      # file_env shim as backend entrypoint.sh is still TODO here (doc only).
+      MEDIASOUP_ANNOUNCED_IP: "${MEDIASOUP_ANNOUNCED_IP}"
+      MEDIASOUP_EXTERNAL_IP: "${MEDIASOUP_EXTERNAL_IP}"
+      MEDIASOUP_WORKERS: "${MEDIASOUP_WORKERS:-4}"
+      MEDIASOUP_FORCE_LOCAL_BUILD: "${MEDIASOUP_FORCE_LOCAL_BUILD:-}"
+      RTC_MIN_PORT: "${RTC_MIN_PORT:-40000}"
+      RTC_MAX_PORT: "${RTC_MAX_PORT:-40100}"
     ports:
       - "4000:4000"
       - "40000-40100:40000-40100/udp"
@@ -353,7 +378,6 @@ services:
       context: ./admin_dashboard
       dockerfile: Dockerfile
     image: red-admin-dashboard:prod
-    container_name: red-admin-dashboard
     restart: unless-stopped
     <<: *resource-limits-small
     deploy:
@@ -375,9 +399,25 @@ services:
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 3. Networking ━━━━━━━━━━━━
+  # TLS bootstrap (one-shot, doc only — uncomment to enable). Fills the `certs`
+  # volume consumed at /etc/ssl/red by nginx. Image built from
+  # infrastructure/tls-init.Dockerfile (mkcert: localhost + red.local + $TLS_SAN_*).
+  # First boot: `docker compose up tls-init` (or add it to nginx depends_on), then start nginx.
+  # tls-init:
+  #   build:
+  #     context: .
+  #     dockerfile: infrastructure/tls-init.Dockerfile
+  #   container_name: red-tls-init
+  #   restart: "no"
+  #   network_mode: none
+  #   environment:
+  #     - TLS_SAN_DNS=${TLS_SAN_DNS:-localhost,red.local}
+  #     - TLS_SAN_IP=${TLS_SAN_IP:-127.0.0.1}
+  #   volumes:
+  #     - certs:/etc/ssl/red
+  #   logging: *default-logging
   nginx:
     image: nginx:1.29.1-alpine
-    container_name: red-proxy
     restart: unless-stopped
     <<: *resource-limits-small
     ports:
@@ -385,7 +425,9 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - certs:/etc/nginx/certs:ro
+      # Must match nginx.conf ssl_certificate paths (/etc/ssl/red/fullchain.pem and
+      # /etc/ssl/red/privkey.pem), populated by the tls-init one-shot below.
+      - certs:/etc/ssl/red:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -401,7 +443,6 @@ services:
 
   coturn:
     image: coturn/coturn:4.6.2-r10
-    container_name: red-turn
     restart: unless-stopped
     <<: *resource-limits-small
     command:
@@ -418,14 +459,12 @@ services:
       - "3478:3478/udp"
       - "5349:5349/tcp"
       - "5349:5349/udp"
-      - "443:443/tcp"
-      - "80:80/tcp"
       - "45000-45050:45000-45050/udp"
       - "45000-45050:45000-45050/tcp"
     environment:
       <<: *common-variables
-      - TURN_SECRET_FILE=/run/secrets/turn_secret
-      - TURN_PASSWORD_FILE=/run/secrets/turn_password
+      TURN_SECRET_FILE: "/run/secrets/turn_secret"
+      TURN_PASSWORD_FILE: "/run/secrets/turn_password"
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/3478' || exit 1"]
       <<: *healthcheck-defaults
@@ -446,6 +485,9 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --web.enable-lifecycle
+      - --web.enable-admin-api
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=50GB
     volumes:
       - ./infrastructure/observability/prometheus:/etc/prometheus
       - prometheus-data:/prometheus
@@ -457,6 +499,22 @@ services:
     logging: *default-logging
     networks: ["red-net"]
 
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: red-alertmanager
+    restart: unless-stopped
+    <<: *resource-limits-small
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./infrastructure/observability/alertmanager:/etc/alertmanager
+      - alertmanager-data:/alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+    networks: ["red-net"]
+
   grafana:
     image: grafana/grafana:11.4.0
     container_name: red-grafana
@@ -464,7 +522,11 @@ services:
     <<: *resource-limits-small
     environment:
       - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_admin_password
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-clock-panel,grafana-worldmap-panel
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - grafana-data:/var/lib/grafana
       - ./infrastructure/observability/grafana:/etc/grafana/provisioning
@@ -506,8 +568,8 @@ services:
       - ./infrastructure/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
     ports:
       - "3200:3200"
-      - "4319:4317"
-      - "4320:4318"
+      - "4317:4317"
+      - "4318:4318"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3200/ready"]
       <<: *healthcheck-defaults
@@ -548,6 +610,114 @@ services:
     logging: *default-logging
     networks: ["red-net"]
 
+  # Exporters
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: red-node-exporter
+    restart: unless-stopped
+    <<: *resource-limits-small
+    pid: host
+    network_mode: host
+    volumes:
+      - /:/host:ro,rslave
+      - /proc:/host/proc:ro,rslave
+      - /sys:/host/sys:ro,rslave
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    logging: *default-logging
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: red-cadvisor
+    restart: unless-stopped
+    <<: *resource-limits-medium
+    privileged: true
+    pid: host
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8080:8080"
+    networks: ["red-net"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: red-postgres-exporter
+    restart: unless-stopped
+    <<: *resource-limits-small
+    environment:
+      - DATA_SOURCE_NAME=postgresql://admin:$${DB_PASSWORD}@postgres:5432/red_sovereign?sslmode=disable
+    ports:
+      - "9187:9187"
+    networks: ["red-net"]
+    depends_on:
+      - postgres
+    logging: *default-logging
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    container_name: red-redis-exporter
+    restart: unless-stopped
+    <<: *resource-limits-small
+    environment:
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=$${REDIS_PASSWORD}
+    ports:
+      - "9121:9121"
+    networks: ["red-net"]
+    depends_on:
+      - redis
+    logging: *default-logging
+
+  mongodb-exporter:
+    image: percona/mongodb_exporter:v0.42.0
+    container_name: red-mongodb-exporter
+    restart: unless-stopped
+    <<: *resource-limits-small
+    environment:
+      - MONGODB_URI=mongodb://red_user:$${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/admin
+    ports:
+      - "9216:9216"
+    networks: ["red-net"]
+    depends_on:
+      - mongo
+    logging: *default-logging
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.2
+    container_name: red-nginx-exporter
+    restart: unless-stopped
+    <<: *resource-limits-small
+    environment:
+      - NGINX_SCRAPE_URI=http://nginx:8088/stub_status
+    ports:
+      - "9113:9113"
+    networks: ["red-net"]
+    depends_on:
+      - nginx
+    logging: *default-logging
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: red-blackbox-exporter
+    restart: unless-stopped
+    <<: *resource-limits-small
+    ports:
+      - "9115:9115"
+    volumes:
+      - ./infrastructure/observability/blackbox:/etc/blackbox_exporter
+    networks: ["red-net"]
+    logging: *default-logging
+
 networks:
   red-net:
     driver: bridge
@@ -563,6 +733,8 @@ volumes:
   minio-data:
     driver: local
   prometheus-data:
+    driver: local
+  alertmanager-data:
     driver: local
   grafana-data:
     driver: local

@@ -302,7 +302,149 @@ class CommunitiesController(
         val colors = listOf("#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#FFD93D", "#6BCB77", "#C780FA")
         return colors.random()
     }
+
+    /** Get community members with roles (paginated) */
+    @GetMapping("/{id}/members")
+    fun getMembers(
+        @PathVariable id: String,
+        @RequestParam(required = false, defaultValue = "0") page: Int,
+        @RequestParam(required = false, defaultValue = "50") size: Int,
+        @RequestParam(required = false) role: String?,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val userId = authentication.name
+        val community = mongo.findById(id, CommunityDocument::class.java)
+            ?: return ResponseEntity.notFound().build()
+        
+        // Only members can see member list
+        val membership = mongo.findOne(
+            Query(Criteria.where("communityId").`is`(id).and("userId").`is`(userId)),
+            CommunityMember::class.java
+        ) ?: return ResponseEntity.status(403).build()
+        
+        var query = Query(Criteria.where("communityId").`is`(id))
+            .with(Sort.by(Sort.Direction.ASC, "joinedAt"))
+        
+        if (role != null && role.isNotBlank()) {
+            query.addCriteria(Criteria.where("role").`is`(role.uppercase()))
+        }
+        
+        val total = mongo.count(query, CommunityMember::class.java)
+        query.skip((page.coerceAtLeast(0) * size.coerceIn(1, 100)).toLong())
+            .limit(size.coerceIn(1, 100))
+        
+        val members = mongo.find(query, CommunityMember::class.java)
+        
+        return ResponseEntity.ok(mapOf(
+            "members" to members.map { m ->
+                mapOf(
+                    "userId" to m.userId,
+                    "userRedId" to m.userRedId,
+                    "username" to m.username,
+                    "role" to m.role.name,
+                    "joinedAt" to m.joinedAt.toString()
+                )
+            },
+            "total" to total,
+            "page" to page,
+            "size" to size
+        ))
+    }
+
+    /** Update member role (ADMIN only) */
+    @PostMapping("/{id}/members/{userId}/role")
+    fun updateMemberRole(
+        @PathVariable id: String,
+        @PathVariable userId: String,
+        @RequestBody request: UpdateRoleRequest,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val actorId = authentication.name
+        val actorMembership = mongo.findOne(
+            Query(Criteria.where("communityId").`is`(id).and("userId").`is`(actorId)),
+            CommunityMember::class.java
+        ) ?: return ResponseEntity.notFound().build()
+        
+        if (actorMembership.role != CommunityRole.ADMIN) {
+            return ResponseEntity.status(403).build()
+        }
+        
+        val targetMembership = mongo.findOne(
+            Query(Criteria.where("communityId").`is`(id).and("userId").`is`(userId)),
+            CommunityMember::class.java
+        ) ?: return ResponseEntity.notFound().build()
+        
+        // Cannot demote the only admin
+        if (targetMembership.role == CommunityRole.ADMIN && request.role != CommunityRole.ADMIN.name) {
+            val adminCount = mongo.count(
+                Query(Criteria.where("communityId").`is`(id).and("role").`is`(CommunityRole.ADMIN.name)),
+                CommunityMember::class.java
+            )
+            if (adminCount <= 1) {
+                return ResponseEntity.status(409).body(mapOf("error" to "CANNOT_DEMOTE_ONLY_ADMIN"))
+            }
+        }
+        
+        val newRole = CommunityRole.valueOf(request.role)
+        mongo.updateFirst(
+            Query(Criteria.where("id").`is`(targetMembership.id)),
+            org.springframework.data.mongodb.core.query.Update().set("role", newRole.name),
+            CommunityMember::class.java
+        )
+        
+        return ResponseEntity.ok(mapOf("success" to true, "userId" to userId, "role" to newRole.name))
+    }
+
+    /** Create a channel within a community (ADMIN/MODERATOR only) */
+    @PostMapping("/{id}/channels")
+    @PreAuthorize("isAuthenticated()")
+    fun createChannel(
+        @PathVariable id: String,
+        @Valid @RequestBody request: CreateChannelRequest,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val userId = authentication.name
+        val community = mongo.findById(id, CommunityDocument::class.java)
+            ?: return ResponseEntity.notFound().build()
+        
+        val membership = mongo.findOne(
+            Query(Criteria.where("communityId").`is`(id).and("userId").`is`(userId)),
+            CommunityMember::class.java
+        ) ?: return ResponseEntity.status(403).build()
+        
+        if (membership.role !in setOf(CommunityRole.ADMIN, CommunityRole.MODERATOR)) {
+            return ResponseEntity.status(403).build()
+        }
+        
+        val channelService = ChannelService(mongo, users)
+        val channel = channelService.create(UUID.fromString(userId), ChannelService.CreateChannelRequest(
+            name = request.name,
+            description = request.description,
+            isPublic = request.isPublic,
+            communityId = id
+        ))
+        
+        return ResponseEntity.ok(mapOf("success" to true, "channel" to channel))
+    }
+
+    /** List channels in a community */
+    @GetMapping("/{id}/channels")
+    fun listChannels(
+        @PathVariable id: String,
+        authentication: Authentication?
+    ): ResponseEntity<List<ChannelResponse>> {
+        val community = mongo.findById(id, CommunityDocument::class.java)
+            ?: return ResponseEntity.notFound().build()
+        
+        val userId = authentication?.name?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+        val channels = ChannelService(mongo, users).listByCommunity(id, userId)
+        return ResponseEntity.ok(channels)
+    }
 }
+
+data class UpdateRoleRequest(
+    val role: String
+)
 
 @org.springframework.data.mongodb.core.mapping.Document(collection = "communities")
 data class CommunityDocument(

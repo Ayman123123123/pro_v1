@@ -212,5 +212,7 @@ replay_pid*.log
 hs_err_*
 replay_*
 !*.example
+# JVM heap dumps (مئات الميجابايت — لا تُتتبع أبداً)
+*.hprof
 # VS Code workspace المحلي — ليس كوداً (يغطي pro_new.code-workspace المزال من الفهرس)
 *.code-workspace

@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 🧵 YOUNES Sovereign — Thread Replies System
- * 
+ *
  * ميزات:
  * - عرض الردود على رسالة معينة في شريط جانبي/أسفل
  * - مؤشر الرسائل غير المقروءة في الثريد
@@ -194,7 +194,7 @@ fun ThreadScreen(
                         }
                     }
                 }
-                
+
                 if (state.unreadCount > 0) {
                     Text(
                         text = "${state.unreadCount} غير مقروء",
@@ -270,7 +270,7 @@ fun ThreadScreen(
                         currentUserId = currentUserId
                     )
                 }
-                
+
                 // تحميل المزيد
                 if (state.hasMore && !state.loading) {
                     item {
@@ -308,7 +308,7 @@ fun ThreadMessageBubble(
 ) {
     val isMe = message.senderId == currentUserId
     val time = java.text.DateFormat.getTimeInstance().format(java.util.Date(message.timestamp))
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -367,14 +367,14 @@ fun ThreadMessageBubble(
                         }
                         Spacer(Modifier.height(4.dp))
                     }
-                    
+
                     Text(
                         text = message.text,
                         color = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 15.sp,
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    
+
                     if (message.forwardOf != null || message.forwardCount > 0) {
                         Spacer(Modifier.height(4.dp))
                         Text(
@@ -508,7 +508,7 @@ fun ThreadPreviewChip(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Forum, null, tint = AqyalGold, modifier = Modifier.size(18.dp))
-                
+
                 Column(crossAxisSize = CrossAxisSize.Min) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("$replyCount رد", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AqyalGold)
@@ -524,7 +524,7 @@ fun ThreadPreviewChip(
                             )
                         }
                     }
-                    
+
                     lastReplyPreview?.let { preview ->
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             lastReplySender?.let { sender ->

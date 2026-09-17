@@ -149,15 +149,15 @@ resource "helm_release" "external_dns" {
     <<-EOT
 provider: cloudflare
 cloudflare:
-  apiToken: ${var.cloudflare_api_token}
+  apiToken: "${var.cloudflare_api_token}"
 sources:
   - ingress
   - service
 domainFilters:
-  - ${var.domain_name}
+  - "${var.domain_name}"
 policy: sync
 interval: 1m
-txtOwnerId: ${var.cluster_name}
+txtOwnerId: "${var.cluster_name}"
 resources:
   requests:
     cpu: 10m
@@ -211,7 +211,7 @@ grafana:
     enabled: true
     storageClassName: gp3
     size: 10Gi
-  adminPassword: ${random_password.grafana_password.result}
+  adminPassword: "${random_password.grafana_password.result}"
   sidecar:
     datasources:
       enabled: true
@@ -259,12 +259,12 @@ resource "helm_release" "aws_lb_controller" {
 
   values = [
     <<-EOT
-clusterName: ${var.cluster_name}
+clusterName: "${var.cluster_name}"
 serviceAccount:
   create: false
   name: aws-load-balancer-controller
-region: ${var.aws_region}
-vpcId: ${module.vpc.vpc_id}
+region: "${var.aws_region}"
+vpcId: "${module.vpc.vpc_id}"
 image:
   repository: 602401143452.dkr.ecr.${var.aws_region}.amazonaws.com/amazon/aws-load-balancer-controller
 resources:

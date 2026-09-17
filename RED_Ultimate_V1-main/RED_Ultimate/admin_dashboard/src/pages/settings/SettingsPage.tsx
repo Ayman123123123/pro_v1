@@ -1,27 +1,25 @@
 import { useState } from 'react';
-import { User, Shield, Bell, Palette, Globe, Key, Database, Download, Save, Loader2, Moon, Sun, Monitor } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { Key, Download, Save, Moon, Sun, Monitor } from 'lucide-react';
 import { cn } from '@/utils';
 import { useUIStore, useAuthStore } from '@/stores';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Form } from '@/components/ui/Form';
+import { Form, FormField } from '@/components/ui/Form';
 import { Tabs } from '@/components/ui/Tabs';
 import { Select } from '@/components/ui/Select';
 
 export function SettingsPage() {
-  const { t } = useTranslation();
   const { theme, setTheme } = useUIStore();
   const { user, updateUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState('profile');
   const [saving, setSaving] = useState(false);
   
   const tabs = [
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'appearance', label: 'Appearance', icon: Palette },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'security', label: 'Security', icon: Shield },
-    { id: 'advanced', label: 'Advanced', icon: Database },
+    { value: 'profile', label: 'Profile' },
+    { value: 'appearance', label: 'Appearance' },
+    { value: 'notifications', label: 'Notifications' },
+    { value: 'security', label: 'Security' },
+    { value: 'advanced', label: 'Advanced' },
   ];
   
   return (
@@ -33,18 +31,18 @@ export function SettingsPage() {
         </div>
       </div>
       
-      <Tabs value={activeTab} onValueChange={setActiveTab} tabs={tabs} />
+      <Tabs value={activeTab} onChange={setActiveTab} tabs={tabs} />
       
       {activeTab === 'profile' && (
         <Card title="Profile Information" subtitle="Update your personal information">
-          <Form onSubmit={async (data) => { setSaving(true); await new Promise(r => setTimeout(r, 1000)); updateUser(data); setSaving(false); }} initialValues={user || {}}>
+          <Form onSubmit={async (data: any) => { setSaving(true); await new Promise(r => setTimeout(r, 1000)); updateUser(data); setSaving(false); }} initialValues={(user as any) || {}}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Form.Field name="displayName" label="Display Name" placeholder="John Doe" required />
-              <Form.Field name="username" label="Username" placeholder="johndoe" required disabled />
-              <Form.Field name="email" label="Email" type="email" placeholder="john@example.com" />
-              <Form.Field name="phone" label="Phone" placeholder="+1 (555) 000-0000" />
+              <FormField name="displayName" label="Display Name" placeholder="John Doe" required />
+              <FormField name="username" label="Username" placeholder="johndoe" required disabled />
+              <FormField name="email" label="Email" type="email" placeholder="john@example.com" />
+              <FormField name="phone" label="Phone" placeholder="+1 (555) 000-0000" />
             </div>
-            <Form.Field name="bio" label="Bio" type="textarea" placeholder="Tell us about yourself..." />
+            <FormField name="bio" label="Bio" type="textarea" placeholder="Tell us about yourself..." />
             <Button variant="primary" type="submit" disabled={saving}>
               <Save className="w-4 h-4 mr-2" />
               {saving ? 'Saving...' : 'Save Changes'}
@@ -216,3 +214,5 @@ export function SettingsPage() {
     </div>
   );
 }
+
+export default SettingsPage;

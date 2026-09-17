@@ -68,8 +68,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.settings.SettingsViewModel
-import com.red.sovereign.ui.theme.AqyalGold
-import com.red.sovereign.ui.theme.SovereignColors
+
+
 
 /** تسميتا منتقي الجودة — تقابلان قيمتي `dataSaverCalls` لا أكثر. */
 private const val QUALITY_SAVER = "توفير البيانات"
@@ -129,13 +129,13 @@ fun CallSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("إعدادات المكالمات", color = Color.White) },
+                title = { Text("إعدادات المكالمات", color = MaterialTheme.colorScheme.onSurface) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = SovereignColors.SurfaceDark
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             )
@@ -156,7 +156,7 @@ fun CallSettingsScreen(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceDarkVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -170,13 +170,13 @@ fun CallSettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.HdrStrong, "جودة", tint = AqyalGold, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.HdrStrong, "جودة", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("جودة الفيديو", color = Color.White, fontSize = 14.sp)
+                            Text("جودة الفيديو", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
                         }
                         Text(
                             if (dataSaverCalls) "توفير البيانات" else "تلقائي حسب الشبكة",
-                            color = AqyalGold,
+                            color = MaterialTheme.colorScheme.tertiary,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -231,7 +231,7 @@ fun CallSettingsScreen(
 
             Card(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { showRingtoneDialog = true },
-                colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceDarkVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
@@ -240,17 +240,17 @@ fun CallSettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.MusicNote, "حوار النغمة", tint = AqyalGold, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.MusicNote, "حوار النغمة", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(24.dp))
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text("حوار النغمة والمعاينة", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("حوار النغمة والمعاينة", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text(
                                 "فتح RingtonePickerDialog مع المعاينة ومفتاح الاهتزاز",
-                                color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp
                             )
                         }
                     }
-                    Text("فتح", color = AqyalGold, fontWeight = FontWeight.Bold)
+                    Text("فتح", color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -295,7 +295,7 @@ fun CallSettingsScreen(
             val isBatteryIgnored = remember { BatteryOptimizationHelper.isBatteryOptimizationIgnored(context) }
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF131B26)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -303,7 +303,7 @@ fun CallSettingsScreen(
                         Icon(
                             if (isBatteryIgnored) Icons.Default.CheckCircle else Icons.Default.BatteryAlert,
                             null,
-                            tint = if (isBatteryIgnored) YounesEmerald else Color(0xFFFFA000),
+                            tint = if (isBatteryIgnored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(Modifier.width(10.dp))
@@ -311,13 +311,13 @@ fun CallSettingsScreen(
                             Text(
                                 if (isBatteryIgnored) "تحسين البطارية مستثنى (مثالي)" else "تحسين البطارية قد يؤخر الرنين",
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 14.sp
                             )
                             Text(
                                 "بدون خوادم Google، يحتاج التطبيق إذن العمل في الخلفية لضمان رنين المكالمات فورياً والتطبيق مقتول.",
                                 fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -332,9 +332,9 @@ fun CallSettingsScreen(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.OpenInNew, null, tint = YounesEmerald, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.OpenInNew, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
-                                    Text("استثناء البطارية", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("استثناء البطارية", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -343,9 +343,9 @@ fun CallSettingsScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.OpenInNew, null, tint = AqyalGold, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.OpenInNew, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("إعدادات التشغيل التلقائي", color = AqyalGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("إعدادات التشغيل التلقائي", color = MaterialTheme.colorScheme.tertiary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -396,7 +396,7 @@ fun CallSettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { confirmClearHistory = true },
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A0A0A)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
@@ -406,9 +406,9 @@ fun CallSettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(Icons.Default.Delete, "حذف سجل المكالمات", tint = Color.Red, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Default.Delete, "حذف سجل المكالمات", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("حذف سجل المكالمات بالكامل", color = Color.Red, fontWeight = FontWeight.SemiBold)
+                    Text("حذف سجل المكالمات بالكامل", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -440,7 +440,7 @@ fun CallSettingsScreen(
 fun SettingsSectionTitle(title: String) {
     Text(
         title,
-        color = AqyalGold,
+        color = MaterialTheme.colorScheme.tertiary,
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
         modifier = Modifier.padding(start = 4.dp)
@@ -483,13 +483,13 @@ private fun UnifiedPushDistributorCard() {
         }
     }
     val accent = when {
-        status.healthy -> YounesEmerald
-        status.installed.isEmpty() -> Color(0xFFFF5252)
-        else -> Color(0xFFFFA000)
+        status.healthy -> MaterialTheme.colorScheme.primary
+        status.installed.isEmpty() -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.tertiary
     }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF131B26)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         shape = RoundedCornerShape(14.dp)
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -509,7 +509,7 @@ private fun UnifiedPushDistributorCard() {
                             else -> "الموزّع غير مُسجَّل بعد"
                         },
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp
                     )
                     Text(
@@ -521,7 +521,7 @@ private fun UnifiedPushDistributorCard() {
                             else -> "اختر موزّعاً لتفعيل الإيقاظ السيادي (بلا خوادم Google)."
                         },
                         fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -535,21 +535,21 @@ private fun UnifiedPushDistributorCard() {
                     Icon(
                         if (pkg == status.active) Icons.Default.CheckCircle else Icons.Default.RadioButtonChecked,
                         null,
-                        tint = if (pkg == status.active) YounesEmerald else Color.White,
+                        tint = if (pkg == status.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         pkg,
-                        color = if (pkg == status.active) YounesEmerald else Color.White,
+                        color = if (pkg == status.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         fontSize = 12.sp
                     )
                 }
             }
             TextButton(onClick = { refreshTick++ }) {
-                Icon(Icons.Default.OpenInNew, null, tint = AqyalGold, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.OpenInNew, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("إعادة الفحص", color = AqyalGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("إعادة الفحص", color = MaterialTheme.colorScheme.tertiary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -590,19 +590,19 @@ fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
             modifier = Modifier
                 .defaultMinSize(minWidth = 96.dp, minHeight = 44.dp)
                 .clip(RoundedCornerShape(22.dp))
-                .background(if (selected) AqyalGold else SovereignColors.SurfaceDark)
+                .background(if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceContainer)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 label,
-                color = if (selected) Color(0xFF0A0F18) else Color.White,
+                color = if (selected) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp
             )
         }
         if (selected) {
-            Icon(Icons.Default.Done, "محدد", tint = AqyalGold, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.Done, "محدد", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -619,7 +619,7 @@ fun SettingRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceDarkVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
@@ -633,10 +633,10 @@ fun SettingRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(icon, title, tint = AqyalGold, modifier = Modifier.size(24.dp))
+                Icon(icon, title, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(24.dp))
                 Column {
-                    Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    Text(description, color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                    Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 }
             }
             if (onCheckedChange != null) {
@@ -644,8 +644,8 @@ fun SettingRow(
                     checked = checked,
                     onCheckedChange = onCheckedChange,
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = AqyalGold,
-                        checkedTrackColor = AqyalGold.copy(alpha = 0.3f)
+                        checkedThumbColor = MaterialTheme.colorScheme.tertiary,
+                        checkedTrackColor = MaterialTheme.colorScheme.tertiaryContainer
                     )
                 )
             }

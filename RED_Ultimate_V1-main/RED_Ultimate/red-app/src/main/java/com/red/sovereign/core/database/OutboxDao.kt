@@ -5,9 +5,11 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.TypeConverters
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+@TypeConverters(RedTypeConverters::class)
 interface OutboxDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(message: OutboxMessageEntity)
@@ -41,6 +43,10 @@ interface OutboxDao {
 
     @Query("DELETE FROM outbox_messages WHERE id = :id")
     suspend fun delete(id: String)
+
+    /** حذف كل عناصر الصادر لمحادثة — يُستدعى ضمن حذف المحادثة (انظر LocalRepository). */
+    @Query("DELETE FROM outbox_messages WHERE conversationId = :convId")
+    suspend fun deleteByConversation(convId: String): Int
 
     @Query("DELETE FROM outbox_messages WHERE status = 'SENT' AND createdAt < :before")
     suspend fun cleanupSent(before: Long): Int

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    YOUNES Sovereign — Official Palette, DARK (values-night/) — 2026-09-16
+    نظير values/colors.xml (الفاتح) بالأسماء نفسها.
+    windowLightStatusBar=false هنا. yns_outline للعنصر التفاعلي (5.13:1 على
+    البطاقة)، وyns_border للفاصل الزخرفي المستثنى من WCAG 1.4.11.
+    الأحمر (yns_error) لدور Danger فقط — ليس لون علامة.
+-->
+<resources>
+    <!-- الأساسيات - الألوان الرئيسية -->
+    <color name="yns_primary">#14C79A</color>
+    <color name="yns_primary_dark">#0FA67F</color>
+    <color name="yns_primary_light">#3DE8BC</color>
+    <color name="yns_primary_variant">#0A7A5E</color>
+
+    <color name="yns_secondary">#E0B551</color>
+    <color name="yns_secondary_dark">#D4A843</color>
+    <color name="yns_secondary_light">#F0D48C</color>
+    <color name="yns_secondary_variant">#B8963E</color>
+
+    <color name="yns_accent">#4D9FE8</color>
+    <color name="yns_accent_dark">#2E7DA8</color>
+    <color name="yns_accent_light">#8FC4F0</color>
+
+    <!-- الخلفية -->
+    <color name="yns_background">#0A0F18</color>
+    <color name="yns_background_variant">#131C29</color>
+    <color name="yns_surface">#131C29</color>
+    <color name="yns_surface_light">#1B2635</color>
+    <color name="yns_surface_elevated">#212E40</color>
+
+    <!-- النص: داكن على الزمرد/الذهب (9:1+ AAA)، أبيض على الأسطح -->
+    <color name="yns_on_primary">#06090F</color>
+    <color name="yns_on_secondary">#06090F</color>
+    <color name="yns_on_background">#FFFFFF</color>
+    <color name="yns_on_surface">#FFFFFF</color>
+    <color name="yns_text_primary">#FFFFFF</color>
+    <color name="yns_text_secondary">#9FB0C2</color>
+    <color name="yns_text_tertiary">#7A8FA3</color>
+    <color name="yns_text_disabled">#4A5B70</color>
+
+    <!-- الحدود والفواصل: yns_outline للعنصر التفاعلي، والباقي زخرفي -->
+    <color name="yns_outline">#7A8FA3</color>
+    <color name="yns_border">#2A394A</color>
+    <color name="yns_border_light">#3A4E63</color>
+    <color name="yns_divider">#232E3D</color>
+
+    <!-- الحالات -->
+    <color name="yns_success">#14C79A</color>
+    <color name="yns_success_light">#3DE8BC</color>
+    <color name="yns_success_background">#0D2B21</color>
+
+    <color name="yns_error">#F25C5C</color>
+    <color name="yns_error_light">#F58383</color>
+    <color name="yns_error_background">#3A1216</color>
+
+    <color name="yns_warning">#E0B551</color>
+    <color name="yns_warning_light">#F0D48C</color>
+    <color name="yns_warning_background">#2A2010</color>
+
+    <color name="yns_info">#4D9FE8</color>
+    <color name="yns_info_light">#8FC4F0</color>
+    <color name="yns_info_background">#0A1A2A</color>
+
+    <!-- خاص: ثوابت العلامة لا تتغير بين الوضعين -->
+    <color name="yns_launcher_background">#0A0F18</color>
+    <color name="younes_launcher_background">#0A0F18</color>
+    <color name="younes_obsidian">#0A0F18</color>
+    <color name="younes_emerald">#14C79A</color>
+    <color name="younes_gold">#E0B551</color>
+
+    <!-- الشفافية -->
+    <color name="yns_overlay_dark">#99000000</color>
+    <color name="yns_overlay_light">#66FFFFFF</color>
+
+    <!-- RTL Support Colors -->
+    <color name="yns_start">#14C79A</color>
+    <color name="yns_end">#E0B551</color>
+
+    <!-- Dark Theme Specific -->
+    <color name="yns_elevation_0">#0A0F18</color>
+    <color name="yns_elevation_1">#131C29</color>
+    <color name="yns_elevation_2">#1B2635</color>
+    <color name="yns_elevation_3">#212E40</color>
+    <color name="yns_elevation_4">#2A394A</color>
+
+    <!-- Status Bar & Navigation Bar -->
+    <color name="yns_status_bar">#0A0F18</color>
+    <color name="yns_navigation_bar">#0A0F18</color>
+</resources>

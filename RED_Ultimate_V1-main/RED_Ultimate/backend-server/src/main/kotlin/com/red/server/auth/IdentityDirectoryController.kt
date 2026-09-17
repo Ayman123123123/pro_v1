@@ -6,6 +6,7 @@ import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.repository.UserDeviceRepository
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
@@ -39,7 +40,7 @@ class IdentityDirectoryController(
     }
 
     /** Called only when a sender lacks a session. The returned one-time pair is atomically consumed. */
-    @GetMapping("/{redId}/{deviceId}/prekey")
+    @PostMapping("/{redId}/{deviceId}/prekey/consume")
     fun consumeBundle(@PathVariable redId: String, @PathVariable deviceId: UUID, auth: org.springframework.security.core.Authentication): PreKeyBundleResponse {
         val viewerId = java.util.UUID.fromString(auth.name)
         val user = users.findByRedId(redId.trim().uppercase())?.takeIf { it.status == com.red.server.auth.model.AccountStatus.APPROVED }

@@ -25,15 +25,15 @@ spec:
         version: v1.0.0
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8088"
+        prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
     spec:
       serviceAccountName: red-backend
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -42,10 +42,10 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 8088
+              containerPort: 8080
               protocol: TCP
             - name: actuator
-              containerPort: 8088
+              containerPort: 8080
               protocol: TCP
           envFrom:
             - configMapRef:
@@ -67,7 +67,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: 8088
+              port: 8080
             initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 10
@@ -75,7 +75,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: 8088
+              port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -83,21 +83,15 @@ spec:
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: 8088
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 30
           volumeMounts:
-            - name: tls-cert
-              mountPath: /etc/ssl/certs
-              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: tls-cert
-          secret:
-            secretName: tls-cert
         - name: tmp
           emptyDir:
             medium: Memory
@@ -139,8 +133,8 @@ spec:
   type: ClusterIP
   ports:
     - name: http
-      port: 8088
-      targetPort: 8088
+      port: 8080
+      targetPort: 8080
       protocol: TCP
   selector:
     app: red-backend

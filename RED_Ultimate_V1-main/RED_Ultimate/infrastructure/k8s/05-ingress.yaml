@@ -6,12 +6,10 @@ metadata:
   labels:
     app: red-ingress
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-    nginx.ingress.kubernetes.io/websocket-services: "red-backend"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/configuration-snippet: |
       # Security headers
@@ -38,7 +36,7 @@ spec:
               service:
                 name: red-backend
                 port:
-                  number: 8088
+                  number: 8080
 
     # Admin Dashboard
     - host: admin.red-sovereign.example.com
@@ -50,4 +48,4 @@ spec:
               service:
                 name: red-admin-dashboard
                 port:
-                  number: 80
+                  number: 3000

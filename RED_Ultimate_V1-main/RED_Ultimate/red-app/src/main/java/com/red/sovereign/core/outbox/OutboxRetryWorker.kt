@@ -149,7 +149,18 @@ class OutboxRetryWorker(
             }
 
             val sending = try { dao.markSending(msg.id) } catch (e: Exception) { Log.w(TAG, "markSending failed for ${msg.id}", e); 0 }
-            if (sending == 0) continue // سبق أن أخذها عامل آخر — تخطي
+            if (sending == 0) {
+                // خلل: markSending في DAO يشترط status='PENDING' بينما الاستعلام يجلب
+                // PENDING+FAILED — فرسائل FAILED كانت تُتخطى للأبد (continue دائم).
+                // إحياء لمرة واحدة إلى PENDING ثم الاستيلاء؛ بلا هذا لا تصل FAILED لـ DLQ أبدًا.
+                if (msg.status == OutboxMessageEntity.STATUS_FAILED) {
+                    try { dao.updateStatus(msg.id, OutboxMessageEntity.STATUS_PENDING) } catch (e: Exception) { Log.w(TAG, "revive FAILED failed for ${msg.id}", e); continue }
+                    val reclaimed = try { dao.markSending(msg.id) } catch (e: Exception) { Log.w(TAG, "re-markSending failed for ${msg.id}", e); 0 }
+                    if (reclaimed == 0) continue // سبق أن أخذها عامل آخر — تخطي
+                } else {
+                    continue // سبق أن أخذها عامل آخر — تخطي
+                }
+            }
 
             // إرسال عبر Intent إلى RedConnectionService
             val sendResult = trySendViaService(msg)

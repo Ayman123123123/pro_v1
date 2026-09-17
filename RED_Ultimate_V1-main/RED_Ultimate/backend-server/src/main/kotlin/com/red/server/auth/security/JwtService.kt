@@ -6,6 +6,7 @@ import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import jakarta.annotation.PostConstruct
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.env.Environment
 import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -21,14 +22,25 @@ class JwtService(
     @Value("\${red.jwt.access-expiration-minutes:15}") private val accessExpirationMinutes: Long,
     @Value("\${red.jwt.issuer:red-sovereign}") private val issuer: String,
     @Value("\${red.jwt.audience:red-app}") private val audience: String,
-    @Value("\${red.jwt.sfu-secret:}") private val configuredSfuSecret: String
+    @Value("\${red.jwt.sfu-secret:}") private val configuredSfuSecret: String,
+    private val environment: Environment? = null
 ) {
     @PostConstruct
     fun validateSecret() {
         require(configuredSecret.isNotBlank()) {
             "FATAL: JWT_SECRET environment variable is not set. The server cannot start without a valid secret."
         }
+        // SFU media tickets must not silently fall back to the login key in production.
+        // Fail fast when the prod profile is active and no dedicated secret is configured.
+        if (isProdProfile() && configuredSfuSecret.isBlank()) {
+            throw IllegalStateException(
+                "FATAL: SFU_TICKET_SECRET (red.jwt.sfu-secret) is not set, but the 'prod' profile is active."
+            )
+        }
     }
+
+    private fun isProdProfile(): Boolean =
+        environment?.activeProfiles?.any { it.equals("prod", ignoreCase = true) } == true
 
     private val expirationMs: Long
         get() = accessExpirationMinutes.coerceIn(1, 60 * 24) * 60_000

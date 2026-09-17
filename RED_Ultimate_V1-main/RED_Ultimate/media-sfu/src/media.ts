@@ -13,17 +13,35 @@ export interface ConsumeResult {
 }
 
 export class MediaManager {
+  private readonly maxProducersPerKind: number;
+
+  constructor(maxProducersPerKind: number = 4) {
+    // Mirrors config.maxProducersPerKind (default 4).
+    this.maxProducersPerKind = maxProducersPerKind;
+  }
+
   async produce(
     transport: WebRtcTransport,
     options: ProducerOptions,
     peer: Peer,
     room: Room
   ): Promise<ProduceResult> {
+    if (options.kind !== 'audio' && options.kind !== 'video') {
+      throw new Error('Invalid kind: expected audio|video');
+    }
+    const codecs = (options.rtpParameters as RtpParameters | undefined)?.codecs;
+    if (!options.rtpParameters || !Array.isArray(codecs) || codecs.length === 0) {
+      throw new Error('Invalid rtpParameters: missing codecs');
+    }
+    if (options.kind === 'video' && options.encodings && options.encodings.length > 3) {
+      throw new Error('Max 3 encodings for video');
+    }
+
     const kindCount = Array.from(peer.producers.values())
       .filter(p => p.kind === options.kind).length;
 
-    if (kindCount >= 4) {
-      throw new Error(`Max 4 producers per kind`);
+    if (kindCount >= this.maxProducersPerKind) {
+      throw new Error(`Max ${this.maxProducersPerKind} producers per kind`);
     }
 
     const producer = await transport.produce({
@@ -31,12 +49,12 @@ export class MediaManager {
       rtpParameters: options.rtpParameters,
       encodings: options.encodings,
       appData: {
+        ...options.appData,
         peerId: peer.id,
         redId: peer.redId,
         kind: options.kind,
         simulcast: options.simulcast ?? false,
         displayName: options.appData?.displayName,
-        ...options.appData,
       } as ProducerAppData,
     });
 

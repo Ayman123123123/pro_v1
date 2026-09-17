@@ -58,6 +58,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +93,9 @@ fun YounesSettingsSheet(
     authViewModel: AuthViewModel,
     logout: () -> Unit,
     dismiss: () -> Unit,
+    // قفز من الرسائل المميّزة إلى المحادثة (يمرَّر من الشاشة المضيفة؛ افتراضي no-op
+    // حتى لا ينكسر أي منادٍ موجود).
+    onOpenConversation: (String) -> Unit = {},
     // ربط P0: يسمح لشاشة إعدادات الجهاز بفتح صفحة داخلية مباشرة
     // (AppLock/ReadReceipts→PRIVACY، Theme→APPEARANCE، الإشعارات→NOTIFICATIONS،
     // AutoDownload→CHATS، Storage→DATA، Profile→ACCOUNT، Sessions→DEVICES،
@@ -129,7 +133,7 @@ fun YounesSettingsSheet(
                 // كانت مكتوبة بالكامل لكن غير موصولة بأي تنقّل، فبقيت كوداً ميتاً.
                 SettingsPage.SERVER_ADVANCED -> SmartServerSettingsScreen(onBack = { page = SettingsPage.SERVER })
                 SettingsPage.FOLDERS -> FolderSettings()
-                SettingsPage.STARRED -> StarredSettings()
+                SettingsPage.STARRED -> StarredSettings(onOpenConversation = onOpenConversation)
                 SettingsPage.BLOCKED -> BlockedSettings()
                 SettingsPage.ABOUT -> AboutSettings()
                 SettingsPage.NETWORK_DIAG -> NetworkDiagnosticsScreen(onBack = { page = SettingsPage.SERVER })
@@ -570,17 +574,77 @@ private fun WallpaperSettings() {
     }
 }
 
-@Composable private fun StarredSettings() {
+@Composable private fun StarredSettings(onOpenConversation: (String) -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val org = remember { com.red.sovereign.core.ChatOrganizationStore(context) }
+    val repo = remember { com.red.sovereign.core.database.LocalRepository(context) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val revision = org.revision
-    val ids = remember(revision) { org.starredIds() }
+    // معرّفات قديمة (نظام النجوم السابق) ليست في Room — تُعرض كبديل فقط.
+    val legacyIds = remember(revision) { org.starredIds() }
+    val starred by repo.getAllStarredMessages().collectAsState(initial = emptyList())
+    var query by remember { mutableStateOf("") }
+    val q = query.trim()
+    val filtered = remember(starred, q) {
+        val sorted = starred.sortedByDescending { it.starredAt }
+        if (q.length < 2) sorted
+        else sorted.filter {
+            it.messageText.contains(q, ignoreCase = true) ||
+                it.conversationId.contains(q, ignoreCase = true) ||
+                it.senderId.contains(q, ignoreCase = true)
+        }
+    }
+    val legacyOnly = remember(legacyIds, starred) {
+        legacyIds.filter { id -> starred.none { it.messageId == id } }
+    }
     SettingsList {
-        item { InfoCard("الرسائل المميّزة", if (ids.isEmpty()) "نجّم رسالة من الضغط الطويل داخل المحادثة." else "${ids.size} رسالة محفوظة محلياً", Icons.Default.Star) }
-        items(ids.toList(), key = { it }) { id ->
+        item { InfoCard("الرسائل المميّزة", if (starred.isEmpty() && legacyOnly.isEmpty()) "نجّم رسالة من الضغط الطويل داخل المحادثة." else "${starred.size + legacyOnly.size} رسالة محفوظة محلياً", Icons.Default.Star) }
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("بحث في المميّزة") },
+                placeholder = { Text("اكتب كلمتين على الأقل…") }
+            )
+        }
+        if (filtered.isEmpty() && legacyOnly.isEmpty()) {
+            item { Text(if (q.length >= 2) "لا نتائج مطابقة لبحثك." else "لا رسائل مميّزة بعد.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        items(filtered, key = { it.messageId }) { msg ->
             Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(id.take(16), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        msg.messageText.ifBlank { "(رسالة بلا نص)" },
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "المحادثة: ${msg.conversationId.take(12)}… · ${msg.messageType}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton({ onOpenConversation(msg.conversationId) }) { Text("فتح المحادثة") }
+                        TextButton({
+                            scope.launch {
+                                repo.unstarMessage(msg.messageId)
+                                if (org.isStarred(msg.messageId)) org.toggleStarred(msg.messageId)
+                            }
+                        }) { Text("إزالة") }
+                    }
+                }
+            }
+        }
+        items(legacyOnly, key = { it }) { id ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("رسالة مميّزة قديمة (بلا نص محفوظ)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(id, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     TextButton({ org.toggleStarred(id) }) { Text("إزالة") }
                 }
             }

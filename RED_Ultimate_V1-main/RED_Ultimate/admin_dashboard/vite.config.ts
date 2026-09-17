@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import checker from 'vite-plugin-checker';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import path from 'path';
 
 const apiTarget = process.env.RED_API_TARGET || 'http://127.0.0.1:8088';
@@ -15,6 +16,14 @@ const proxy = {
 
 export default defineConfig({
   plugins: [
+    tanstackRouter({
+      target: 'react',
+      autoCodeSplitting: true,
+      routesDirectory: './src/routes',
+      generatedRouteTree: './src/routeTree.gen.ts',
+      quoteStyle: 'single',
+      semicolons: true,
+    }),
     react(),
     checker({
       typescript: true,
@@ -32,6 +41,7 @@ export default defineConfig({
       '@/utils': path.resolve(__dirname, './src/utils'),
       '@/types': path.resolve(__dirname, './src/types'),
       '@/styles': path.resolve(__dirname, './src/styles'),
+      '@/routes': path.resolve(__dirname, './src/routes'),
     },
   },
   build: {
@@ -44,9 +54,17 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
-          'vendor-router': ['react-router-dom'],
-          'vendor-charts': ['echarts', 'echarts-for-react'],
-          'vendor-ui': ['antd', '@ant-design/icons'],
+          'vendor-router': ['@tanstack/react-router'],
+          'vendor-query': ['@tanstack/react-query'],
+          'vendor-table': ['@tanstack/react-table'],
+          'vendor-virtual': ['@tanstack/react-virtual'],
+          'vendor-charts': ['recharts', '@visx/axis', '@visx/shape', '@visx/scale', '@visx/xychart', '@visx/tooltip', '@visx/gradient', '@visx/group', '@visx/responsive', '@visx/mock-data'],
+          'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select', '@radix-ui/react-tabs', '@radix-ui/react-tooltip', '@radix-ui/react-toast', '@radix-ui/react-popover', '@radix-ui/react-avatar', '@radix-ui/react-label', '@radix-ui/react-switch', '@radix-ui/react-slider', '@radix-ui/react-progress', '@radix-ui/react-checkbox', '@radix-ui/react-radio-group', '@radix-ui/react-separator', '@radix-ui/react-scroll-area', '@radix-ui/react-collapsible', '@radix-ui/react-accordion', '@radix-ui/react-aspect-ratio', '@radix-ui/react-hover-card', '@radix-ui/react-context-menu', '@radix-ui/react-menubar', '@radix-ui/react-navigation-menu', '@radix-ui/react-toggle', '@radix-ui/react-toggle-group', '@radix-ui/react-alert-dialog', '@radix-ui/react-avatar'],
+          'vendor-ui-antd': ['antd', '@ant-design/icons'],
+          'vendor-forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+          'vendor-i18n': ['i18next', 'react-i18next'],
+          'vendor-socket': ['socket.io-client'],
+          'vendor-utils': ['date-fns', 'clsx', 'tailwind-merge', 'class-variance-authority', 'lucide-react', 'cmdk', 'vaul', 'embla-carousel-react', 'react-day-picker', 'react-resizable-panels'],
         },
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',

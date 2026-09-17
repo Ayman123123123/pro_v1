@@ -54,7 +54,7 @@ fun SovereignTopBar(
     onProfileClick: () -> Unit = {},
     isEncrypted: Boolean = true,
     serverState: com.red.sovereign.core.ConnectionStatusRepository.ServerUiState =
-        com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.ONLINE,
+        com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.CONNECTING,
     serverRetryInSec: Long = 0,
     onServerClick: () -> Unit = {},
     hazeState: dev.chrisbanes.haze.HazeState? = null

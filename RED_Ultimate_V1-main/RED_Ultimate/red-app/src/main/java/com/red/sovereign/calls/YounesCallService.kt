@@ -158,7 +158,8 @@ ACTION_START -> {
                 }
                 // حارس الانشغال: لا تسحق مكالمة قائمة (1:1/جماعية/مؤتمر/زوم/بث).
                 if (CallServiceIntegration.hasActiveCall(this)) {
-                    CallRuntime.state = CallUiState.Busy
+                    outgoingPending = false
+                    CallRuntime.state = CallUiState.Busy(peer = target)
                     updateNotification("مشغول — أنهِ المكالمة الحالية أولاً")
                     mainScope.launch {
                         runCatching {
@@ -171,12 +172,20 @@ ACTION_START -> {
                 runCatching {
                     val own = com.red.sovereign.auth.TokenStore(this).redId
                     if (own.isNotBlank() && target == own) {
+                        outgoingPending = false
                         CallRuntime.state = CallUiState.Error("لا يمكنك الاتصال بنفسك")
+                        updateNotification("لا يمكنك الاتصال بنفسك")
+                        mainScope.launch {
+                            runCatching {
+                                android.widget.Toast.makeText(this@YounesCallService, "لا يمكنك الاتصال بنفسك", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
                         return START_STICKY
                     }
                 }
                 // حارس السيرفر طافي: اعرض الحالة بدل قصف المحاولات المزعجة.
                 if (!com.red.sovereign.core.ConnectionStatusRepository.isOnline) {
+                    outgoingPending = false
                     CallRuntime.state = CallUiState.Error("السيرفر غير متصل — تحقق من الاتصال وحاول لاحقًا")
                     updateNotification("السيرفر غير متصل — تعذّر بدء المكالمة")
                     return START_STICKY
@@ -792,9 +801,18 @@ override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
      * يُستدعى من `onNetworkStats` لتسجيل الـ Telemetry.
      */
     private fun onStatsReceived(stats: NetworkStats) {
-        // ملاحظة: لا نستدعي engine.adjustQuality هنا — التكييف النشط يتم عبر
-        // WebRtcEngine.applyAdaptiveBitrate (profiles + simulcast) داخل pollStats.
-        // الجمع بين النظامين كان يتعارض كل دورة (أحدهما يخفض والآخر يرفع).
+        // Update CallQualityManager for UI indicators
+        CallQualityManager.update(
+            rttMs = stats.rttMs.toInt(),
+            packetLoss = stats.packetLossPercent.toFloat(),
+            bitrateKbps = stats.bandwidthKbps.toInt(),
+            fps = stats.framesPerSecond,
+            jitterMs = stats.jitterMs.toInt()
+        )
+        
+        // Apply adaptive bitrate via engine
+        engine?.applyAdaptiveBitrate(stats)
+        
         CallTelemetry.onNetworkStats(stats)
     }
     override fun onError(message: String) {

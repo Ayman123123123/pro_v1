@@ -35,6 +35,21 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
+enum class RecurrenceRule(val label: String, val cronExpression: String?) {
+    NONE("مرة واحدة", null),
+    DAILY("يومياً", "0 0 * * *"),
+    WEEKLY("أسبوعياً", "0 0 * * 0"),
+    MONTHLY("شهرياً", "0 0 1 * *"),
+    YEARLY("سنوياً", "0 0 1 1 *"),
+    CUSTOM("مخصص", null)
+    
+    companion object {
+        fun fromCron(cron: String?): RecurrenceRule {
+            return values().firstOrNull { it.cronExpression == cron } ?: NONE
+        }
+    }
+}
+
 data class ScheduledMessage(
     val id: String,
     val recipientId: String,
@@ -42,8 +57,21 @@ data class ScheduledMessage(
     val messageText: String,
     val scheduledTime: Long,
     val createdAt: Long,
-    val status: String = "PENDING"
-)
+    val status: String = "PENDING",
+    val recurrence: RecurrenceRule = RecurrenceRule.NONE,
+    val cronExpression: String? = null,
+    val timezone: String = "UTC",
+    val nextRunTime: Long? = null,
+    val runCount: Int = 0,
+    val maxRuns: Int? = null,
+    val endDate: Long? = null
+) {
+    val isRecurring: Boolean
+        get() = recurrence != RecurrenceRule.NONE
+    
+    val isActive: Boolean
+        get() = status == "PENDING" && (endDate == null || endDate!! > System.currentTimeMillis())
+}
 
 /**
  * P0-D: حمولة الرسالة المجدولة — JSON بدل ترميز `a|b|c|d`.
@@ -55,7 +83,14 @@ private data class ScheduledPayload(
     val recipientId: String,
     val recipientName: String,
     val messageText: String,
-    val scheduledTime: Long
+    val scheduledTime: Long,
+    val recurrence: String = "NONE",
+    val cronExpression: String? = null,
+    val timezone: String = "UTC",
+    val nextRunTime: Long? = null,
+    val runCount: Int = 0,
+    val maxRuns: Int? = null,
+    val endDate: Long? = null
 )
 
 private val ScheduledJson = Json { ignoreUnknownKeys = true; explicitNulls = false }
@@ -82,6 +117,51 @@ private fun decodeScheduledPayload(text: String): ScheduledPayload? {
 
 private fun encodeScheduledPayload(payload: ScheduledPayload): ByteArray =
     ScheduledJson.encodeToString(ScheduledPayload.serializer(), payload).toByteArray(Charsets.UTF_8)
+
+private fun toPayload(message: ScheduledMessage): ScheduledPayload = ScheduledPayload(
+    recipientId = message.recipientId,
+    recipientName = message.recipientName,
+    messageText = message.messageText,
+    scheduledTime = message.scheduledTime,
+    recurrence = message.recurrence.name,
+    cronExpression = message.cronExpression,
+    timezone = message.timezone,
+    nextRunTime = message.nextRunTime,
+    runCount = message.runCount,
+    maxRuns = message.maxRuns,
+    endDate = message.endDate
+)
+
+private fun fromPayload(id: String, payload: ScheduledPayload, createdAt: Long, status: String): ScheduledMessage = ScheduledMessage(
+    id = id,
+    recipientId = payload.recipientId,
+    recipientName = payload.recipientName,
+    messageText = payload.messageText,
+    scheduledTime = payload.scheduledTime,
+    createdAt = createdAt,
+    status = status,
+    recurrence = RecurrenceRule.valueOf(payload.recurrence),
+    cronExpression = payload.cronExpression,
+    timezone = payload.timezone,
+    nextRunTime = payload.nextRunTime,
+    runCount = payload.runCount,
+    maxRuns = payload.maxRuns,
+    endDate = payload.endDate
+)
+
+private fun scheduledMessageToPayload(msg: ScheduledMessage): ScheduledPayload = ScheduledPayload(
+    recipientId = msg.recipientId,
+    recipientName = msg.recipientName,
+    messageText = msg.messageText,
+    scheduledTime = msg.scheduledTime,
+    recurrence = msg.recurrence.name,
+    cronExpression = msg.cronExpression,
+    timezone = msg.timezone,
+    nextRunTime = msg.nextRunTime,
+    runCount = msg.runCount,
+    maxRuns = msg.maxRuns,
+    endDate = msg.endDate
+)
 
 class ScheduledMessageWorker(
     context: Context,
@@ -676,15 +756,7 @@ private suspend fun loadScheduledMessages(context: Context): List<ScheduledMessa
                 val text = String(localMessage.plaintext, Charsets.UTF_8)
                 // P0-D: JSON أولاً + ترحيل legacy `a|b|c|d`.
                 val payload = decodeScheduledPayload(text) ?: return@mapNotNull null
-                ScheduledMessage(
-                    id = localMessage.id,
-                    recipientId = payload.recipientId,
-                    recipientName = payload.recipientName,
-                    messageText = payload.messageText,
-                    scheduledTime = payload.scheduledTime,
-                    createdAt = localMessage.timestamp,
-                    status = localMessage.status
-                )
+                fromPayload(localMessage.id, payload, localMessage.timestamp, localMessage.status)
             } catch (e: Exception) {
                 null
             }
@@ -699,18 +771,29 @@ private suspend fun createScheduledMessage(
     recipientId: String,
     recipientName: String,
     messageText: String,
-    scheduledTime: Long
+    scheduledTime: Long,
+    recurrence: RecurrenceRule = RecurrenceRule.NONE,
+    cronExpression: String? = null,
+    timezone: String = "UTC",
+    maxRuns: Int? = null,
+    endDate: Long? = null
 ): ScheduledMessage {
     val id = "scheduled_${System.currentTimeMillis()}_${Random().nextInt(10000)}"
     // P0-D: JSON بدل `a|b|c|d` — آمن مع `|` والأسطر واليونيكود.
-    val plaintext = encodeScheduledPayload(
-        ScheduledPayload(
-            recipientId = recipientId,
-            recipientName = recipientName,
-            messageText = messageText,
-            scheduledTime = scheduledTime
-        )
-    )
+    val plaintext = encodeScheduledPayload(toPayload(ScheduledMessage(
+        id = id,
+        recipientId = recipientId,
+        recipientName = recipientName,
+        messageText = messageText,
+        scheduledTime = scheduledTime,
+        createdAt = System.currentTimeMillis(),
+        status = "PENDING",
+        recurrence = recurrence,
+        cronExpression = cronExpression,
+        timezone = timezone,
+        maxRuns = maxRuns,
+        endDate = endDate
+    )))
 
     val messageStore = MessageStore(context)
     val localMessage = LocalMessage(
@@ -732,20 +815,18 @@ private suspend fun createScheduledMessage(
         messageText = messageText,
         scheduledTime = scheduledTime,
         createdAt = System.currentTimeMillis(),
-        status = "PENDING"
+        status = "PENDING",
+        recurrence = recurrence,
+        cronExpression = cronExpression,
+        timezone = timezone,
+        maxRuns = maxRuns,
+        endDate = endDate
     )
 }
 
 private suspend fun updateScheduledMessage(context: Context, message: ScheduledMessage) {
     // P0-D: JSON فقط.
-    val plaintext = encodeScheduledPayload(
-        ScheduledPayload(
-            recipientId = message.recipientId,
-            recipientName = message.recipientName,
-            messageText = message.messageText,
-            scheduledTime = message.scheduledTime
-        )
-    )
+    val plaintext = encodeScheduledPayload(toPayload(message))
 
     val messageStore = MessageStore(context)
     messageStore.updateLocalHistoryText(message.id, plaintext)

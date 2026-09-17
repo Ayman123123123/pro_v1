@@ -86,13 +86,14 @@ class ScheduledPostWorker(
                 }
                 is com.red.sovereign.auth.ApiResult.Error -> {
                     Log.w(TAG, "فشل النشر المجدول $id: ${result.message} — إعادة")
-                    notifyFailure(applicationContext, text, result.message)
+                    // تنبيه واحد فقط عند أول فشل؛ تكرار التنبيه كل retry = إزعاج.
+                    if (runAttemptCount == 0) notifyFailure(applicationContext, text, result.message)
                     Result.retry()
                 }
             }
         }.getOrElse { e ->
             Log.w(TAG, "استثناء النشر المجدول $id — إعادة", e)
-            notifyFailure(applicationContext, text, e.message ?: "خطأ غير متوقع")
+            if (runAttemptCount == 0) notifyFailure(applicationContext, text, e.message ?: "خطأ غير متوقع")
             Result.retry()
         }
     }
@@ -121,6 +122,7 @@ class ScheduledPostWorker(
                     .setStyle(NotificationCompat.BigTextStyle().bigText("${text.take(140)}\n$reason"))
                     .setContentIntent(content)
                     .setAutoCancel(true)
+                    .setOnlyAlertOnce(true)
                     .build()
                 if (Build.VERSION.SDK_INT < 33 ||
                     ActivityCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED

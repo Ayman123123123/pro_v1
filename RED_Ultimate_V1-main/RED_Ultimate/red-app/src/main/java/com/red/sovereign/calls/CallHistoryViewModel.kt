@@ -64,6 +64,12 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
     var searchQuery by mutableStateOf("")
     var selectedFilter by mutableStateOf(CallFilterType.ALL)
 
+    // ── Cursor-based pagination for history sync ──────────────
+    private var syncCursor: String? = null
+    private var syncHasMore = true
+    private var serverVersion = 0L
+    var isSyncing = false; private set
+
     // ── Paging للسجل (يتفوق على واتساب في القوائم الطويلة) ──────────────
     var visibleLimit by mutableStateOf(PAGE_SIZE); private set
     var isLoadingMore by mutableStateOf(false); private set
@@ -90,7 +96,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
                 CallFilterType.VIDEO -> item.type.equals("VIDEO", ignoreCase = true)
             }
 
-            matchesQuery && matchesCategory
+            matchesQuery && matchesCategory && !item.deletedForMe
         }
     }
 
@@ -130,6 +136,94 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
         isLoadingMore = false
     }
 
+    /** مزامنة التدرج باستخدام الترقيم القائم على المؤشر (Cursor-based) */
+    fun syncHistory() = viewModelScope.launch {
+        if (isSyncing) return@launch
+        isSyncing = true
+        error = null
+        
+        try {
+            val request = CallHistorySyncRequest(
+                cursor = syncCursor,
+                limit = PAGE_SIZE,
+                sinceVersion = serverVersion
+            )
+            val body = json.encodeToString(request)
+            when (val result = client.request("POST", "/api/calls/history/sync", body)) {
+                is ApiResult.Success -> runCatching {
+                    json.decodeFromString<CallHistorySyncResponse>(result.value)
+                }.onSuccess { response ->
+                    if (response.items.isNotEmpty()) {
+                        // Merge with conflict resolution (server wins for newer versions)
+                        val merged = mergeWithConflictResolution(calls.toList(), response.items)
+                        repository.saveCallLogs(merged.map { it.toCallLogEntity() })
+                        calls.clear()
+                        calls.addAll(merged)
+                    }
+                    syncCursor = response.nextCursor
+                    syncHasMore = response.hasMore
+                    serverVersion = response.serverVersion
+                    if (!response.hasMore) {
+                        remoteExhausted = true
+                    }
+                }.onFailure { 
+                    error = "SYNC_PARSE_FAILED: ${it.message}"
+                }
+                is ApiResult.Error -> error = "SYNC_FAILED: ${result.message}"
+            }
+        } finally {
+            isSyncing = false
+        }
+    }
+
+    /** حل التعارضات: الأحدث يفوز (بناءً على version و updatedAt) */
+    private fun mergeWithConflictResolution(local: List<CallHistoryItem>, remote: List<CallHistoryItem>): List<CallHistoryItem> {
+        val map = local.associateBy { it.id }.toMutableMap()
+        
+        for (item in remote) {
+            val existing = map[item.id]
+            if (existing == null) {
+                map[item.id] = item
+            } else {
+                // Compare versions - higher version wins
+                if (item.version > existing.version) {
+                    map[item.id] = item
+                } else if (item.version == existing.version) {
+                    // Same version - compare updatedAt
+                    val localTime = parseCallTimestamp(existing.updatedAt) ?: parseCallTimestamp(existing.startedAt) ?: 0L
+                    val remoteTime = parseCallTimestamp(item.updatedAt) ?: parseCallTimestamp(item.startedAt) ?: 0L
+                    if (remoteTime > localTime) {
+                        map[item.id] = item
+                    }
+                }
+                // If local is newer, keep local
+            }
+        }
+        
+        // Also add local items that aren't in remote (new local calls)
+        // They will be synced to server on next push
+        
+        return map.values.toList().sortedByDescending { 
+            parseCallTimestamp(it.startedAt) ?: 0L 
+        }
+    }
+
+    /** Push local changes to server */
+    fun pushLocalChanges() = viewModelScope.launch {
+        val unsynced = calls.filter { it.version <= serverVersion }
+        if (unsynced.isEmpty()) return@launch
+        
+        val body = json.encodeToString(mapOf("items" to unsynced))
+        when (val result = client.request("POST", "/api/calls/history/push", body)) {
+            is ApiResult.Success -> {
+                // Update local versions
+                unsynced.forEach { it.copy(version = serverVersion + 1) }
+                // Items will be updated on next sync
+            }
+            is ApiResult.Error -> error = "PUSH_FAILED: ${result.message}"
+        }
+    }
+
     init {
         viewModelScope.launch {
             repository.getCallLogs().collectLatest { entities ->
@@ -162,7 +256,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
             runCatching { applyRetentionPolicy() }
             return@launch
         }
-        load()
+        syncHistory()
     }
 
     suspend fun applyRetentionPolicy(): Int {

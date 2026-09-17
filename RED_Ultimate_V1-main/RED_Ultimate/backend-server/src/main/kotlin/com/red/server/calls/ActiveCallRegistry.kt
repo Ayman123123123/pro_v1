@@ -31,7 +31,7 @@ class ActiveCallRegistry(private val redis: StringRedisTemplate) {
     /** يُحدِّث وقت النشاط (يسجّل المكالمة نشطة في عدادات اللوحة ويؤجّل انتهاء صلاحيتها). */
     fun touch(callId: String) {
         active[callId]?.let { active[callId] = it.copy(lastActivityAt = Instant.now()) }
-        redis.opsForZSet().add(CALLS_KEY, callId, System.currentTimeMillis().toDouble())
+        runCatching { redis.opsForZSet().add(CALLS_KEY, callId, System.currentTimeMillis().toDouble()) }
     }
 
     /** هل المستخدم في مكالمة نشطة حالياً (1:1 أو جماعية)؟ */
@@ -53,7 +53,7 @@ class ActiveCallRegistry(private val redis: StringRedisTemplate) {
     /** يُستدعى عند END/REJECT/BUSY لإزالة المكالمة كاملة من العدادات. */
     fun unregister(callId: String) {
         active.remove(callId)
-        redis.opsForZSet().remove(CALLS_KEY, callId)
+        runCatching { redis.opsForZSet().remove(CALLS_KEY, callId) }
     }
 
     /** لقطة المكالمات النشطة الحالية لعرضها في لوحة الأدمن. */
@@ -73,7 +73,7 @@ class ActiveCallRegistry(private val redis: StringRedisTemplate) {
     @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
     fun expireStale() {
         val cutoff = Instant.now().minusMillis(STALE_AFTER_MS)
-        redis.opsForZSet().removeRangeByScore(CALLS_KEY, 0.0, cutoff.toEpochMilli().toDouble())
+        runCatching { redis.opsForZSet().removeRangeByScore(CALLS_KEY, 0.0, cutoff.toEpochMilli().toDouble()) }
         active.entries.removeIf { it.value.lastActivityAt.isBefore(cutoff) }
     }
 

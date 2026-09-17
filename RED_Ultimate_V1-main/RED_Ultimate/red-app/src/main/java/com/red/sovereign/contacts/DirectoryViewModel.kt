@@ -70,8 +70,41 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
             requests.clear(); requests.addAll(incoming)
             outgoingRequests.clear(); outgoingRequests.addAll(outgoing)
             refreshPresence(people)
+            fetchBlocked()
         }
             .onFailure { state = DirectoryState.Error("INVALID_CONTACT_RESPONSE") }
+    }
+
+    /**
+     * يجلب قائمة المحظورين من الخادم (GET /api/contacts/blocked) عند كل refresh
+     * بدل الاعتماد على الذاكرة اللحظية فقط. فشل الشبكة هنا لا يُفشل التحديث
+     * كاملاً — تُحفَظ القيمة المحلية السابقة.
+     */
+    private suspend fun fetchBlocked() {
+        when (val response = client.request("GET", "/api/contacts/blocked")) {
+            is ApiResult.Success -> {
+                val ids = runCatching {
+                    json.decodeFromString<List<PublicRedProfile>>(response.value)
+                }.getOrNull()?.map { it.redId }
+                    ?: runCatching {
+                        json.decodeFromString<List<String>>(response.value)
+                    }.getOrNull()
+                    ?: runCatching {
+                        com.red.sovereign.core.parseJsonList(response.value).mapNotNull { entry ->
+                            when (entry) {
+                                is String -> entry
+                                is Map<*, *> -> entry["redId"]?.toString() ?: entry["red_id"]?.toString()
+                                else -> null
+                            }
+                        }
+                    }.getOrNull()
+                if (ids != null) {
+                    blocked.clear()
+                    blocked.addAll(ids.filter { it.isNotBlank() }.distinct())
+                }
+            }
+            is ApiResult.Error -> Unit // إبقاء الذاكرة اللحظية عند تعذّر الخادم
+        }
     }
 
     fun refreshPresence() = viewModelScope.launch { refreshPresence(contacts) }

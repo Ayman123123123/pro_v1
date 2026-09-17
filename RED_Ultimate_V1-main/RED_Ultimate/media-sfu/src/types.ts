@@ -1,4 +1,4 @@
-import type { Router, Worker, WebRtcTransport, Producer, Consumer, PipeTransport, AudioLevelObserver, RtpCapabilities } from 'mediasoup';
+import type { Router, Worker, WebRtcTransport, Producer, Consumer, PipeTransport, AudioLevelObserver, RtpCapabilities, IceParameters, IceCandidate, DtlsParameters, SctpParameters, RtpParameters } from 'mediasoup';
 import type { WebSocket } from 'ws';
 
 export interface MediaCodecs {
@@ -80,6 +80,11 @@ export interface RecordingOptions {
   metadata?: Record<string, string>;
 }
 
+export interface RtmpOutput {
+  url: string;
+  streamKey?: string;
+}
+
 export interface LiveStreamOptions {
   rtmpUrl: string;
   streamKey: string;
@@ -91,14 +96,18 @@ export interface LiveStreamOptions {
   videoBitrate: number;
   audioBitrate: number;
   includeAudio: boolean;
+  // Additional RTMP outputs (YouTube, Twitch, Custom)
+  rtmpOutputs?: RtmpOutput[];
+  // SRT output for lower latency
+  srtUrl?: string;
 }
 
 export interface TransportInfo {
   id: string;
-  iceParameters: any;
-  iceCandidates: any[];
-  dtlsParameters: any;
-  sctpParameters: any;
+  iceParameters: IceParameters;
+  iceCandidates: IceCandidate[];
+  dtlsParameters: DtlsParameters;
+  sctpParameters: SctpParameters | undefined;
   direction: 'send' | 'recv';
 }
 
@@ -181,7 +190,7 @@ export interface CreateTransportMessage extends WebSocketMessage {
 export interface ConnectTransportMessage extends WebSocketMessage {
   type: 'connectTransport';
   transportId: string;
-  dtlsParameters: any;
+  dtlsParameters: DtlsParameters;
 }
 
 export interface ProduceMessage extends WebSocketMessage {
@@ -269,7 +278,7 @@ export interface ServerEvents {
   'recordingStopped': { recordingId: string; roomId: string };
   'liveStreamStarted': { streamId: string; roomId: string; rtmpUrl: string };
   'liveStreamStopped': { streamId: string; roomId: string };
-  'iceRestartNeeded': { transportId: string };
+  'iceRestartNeeded': { transportId: string; iceParameters?: IceParameters };
   'connectionStateChange': { peerId: string; state: 'connected' | 'disconnected' | 'failed' };
 }
 
@@ -280,10 +289,11 @@ export interface AuthClaims {
   redId: string;
   exp: number;
   iat?: number;
+  iss?: string;
+  aud?: string | string[];
   sfuGroupId?: string;
   sfuCanProduce?: boolean;
   sfuCanConsume?: boolean;
-  sfuRoomId?: string;
   [key: string]: any;
 }
 

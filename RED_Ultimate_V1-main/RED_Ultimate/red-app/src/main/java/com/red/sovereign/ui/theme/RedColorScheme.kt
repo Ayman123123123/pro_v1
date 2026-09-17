@@ -3,37 +3,52 @@ package com.red.sovereign.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * RED Sovereign Brand Colors — الهوية اللونية السيادية
+ * RED Sovereign Brand Colors — مهمل (Deprecated).
  *
- * هذه الألوان تمثل علامة RED Sovereign التجارية وتستخدم كأساس
- * لتوليد مخططات Material 3 الكاملة (Light/Dark/High Contrast).
+ * المصدر الوحيد للهوية اللونية هو لوحة Younes في RedTheme.kt
+ * (YounesPrimary #14C79A، YounesAccent #E0B551، YounesCobalt #4D9FE8…).
+ * كل أعضاء هذا الكائن aliases نحو Younes — لا قيم مستقلة جديدة.
  *
- * جميع القيم محسوبة ومقيسة لتباين WCAG AA/AAA.
+ * الأحمر (YounesRose #F25C5C / YounesRuby) لدور Danger/Error فقط:
+ * مؤشر البث، زر الإنهاء، حالات الفشل. ممنوع استعماله كلون علامة
+ * (Primary/Secondary) — كان ذلك أصل عيوب التباين (أبيض على أحمر فاتح).
  */
+@Deprecated(
+    "المصدر الوحيد Younes في RedTheme.kt — هذا الكائن aliases للتوافق فقط",
+    ReplaceWith("YounesPrimary")
+)
 object RedBrandColors {
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // الألوان الأساسية للعلامة التجارية (Brand Colors)
+    // Aliases نحو Younes — لا قيم مستقلة
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    /** أحمر سيادي عميق — Primary Brand Color */
-    val Primary = Color(0xFFC62828)
-    /** ذهبي/عنبري ملكي — Secondary Brand Color */
-    val Secondary = Color(0xFFFFB300)
-    /** أزرق ملكي عميق — Tertiary/Accent Brand Color */
-    val Tertiary = Color(0xFF1565C0)
-    /** أخضر زمردي — Success */
-    val Success = Color(0xFF2E7D32)
-    /** برتقالي غامق — Warning */
-    val Warning = Color(0xFFEF6C00)
-    /** أحمر واضح — Error */
-    val Error = Color(0xFFD32F2F)
+    /** كان أحمرًا سياديًا — أصبح زمرد Younes (الأحمر لدور Danger فقط). */
+    @Deprecated("استعمل YounesPrimary — الأحمر لدور Danger فقط", ReplaceWith("YounesPrimary"))
+    val Primary = YounesPrimary
+    /** ذهبي Younes. */
+    @Deprecated("استعمل YounesAccent", ReplaceWith("YounesAccent"))
+    val Secondary = YounesAccent
+    /** كوبالت Younes. */
+    @Deprecated("استعمل YounesCobalt", ReplaceWith("YounesCobalt"))
+    val Tertiary = YounesCobalt
+    /** النجاح زمرد Younes. */
+    @Deprecated("استعمل YounesPrimary", ReplaceWith("YounesPrimary"))
+    val Success = YounesPrimary
+    /** التحذير ذهب Younes. */
+    @Deprecated("استعمل YounesAccent", ReplaceWith("YounesAccent"))
+    val Warning = YounesAccent
+    /** الخطأ = الدور الشرعي الوحيد للأحمر (YounesRose). */
+    @Deprecated("استعمل YounesRose — الأحمر لدور Danger فقط", ReplaceWith("YounesRose"))
+    val Error = YounesRose
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // تدرجات لونية للعلامة التجارية (Tonals) — لتوليد ColorScheme كامل
+    // Tonal palettes مجمّدة — للتوافق المصدري فقط، ممنوع الاستعمال الجديد.
+    // الأحمر منها صالح لدور Danger/Error فقط (ErrorTonal).
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    // Primary (Red) tonal palette — من 0 (أبيض) إلى 100 (أسود)
+    // Primary (Sovereign Red) tonal palette — من 0 (أبيض) إلى 100 (أسود)
+    @Deprecated("مجمّد للتوافق — استعمل Younes* مباشرة")
     val PrimaryTonal = TonalPalette(
         tone0 = Color(0xFFFFFFFF),
         tone10 = Color(0xFFFFEBEE),
@@ -41,16 +56,17 @@ object RedBrandColors {
         tone30 = Color(0xFFEF9A9A),
         tone40 = Color(0xFFE57373),
         tone50 = Color(0xFFEF5350),
-        tone60 = Color(0xFFF44336),  // Primary base
+        tone60 = Color(0xFFF44336),
         tone70 = Color(0xFFE53935),
-        tone80 = Color(0xFFD32F2F),  // Primary container (dark)
-        tone90 = Color(0xFFC62828),  // Primary container (light)
+        tone80 = Color(0xFFD32F2F),
+        tone90 = Color(0xFFC62828),
         tone95 = Color(0xFFB71C1C),
         tone99 = Color(0xFF8B0000),
         tone100 = Color(0xFF000000)
     )
 
-    // Secondary (Gold/Amber) tonal palette
+    // Secondary (Royal Gold) tonal palette
+    @Deprecated("مجمّد للتوافق — استعمل YounesAccent مباشرة")
     val SecondaryTonal = TonalPalette(
         tone0 = Color(0xFFFFFFFF),
         tone10 = Color(0xFFFFF8E1),
@@ -59,15 +75,16 @@ object RedBrandColors {
         tone40 = Color(0xFFFFE082),
         tone50 = Color(0xFFFFD54F),
         tone60 = Color(0xFFFFCA28),
-        tone70 = Color(0xFFFFB300),  // Secondary base
+        tone70 = Color(0xFFFFB300),
         tone80 = Color(0xFFFFA000),
-        tone90 = Color(0xFFFF8F00),  // Secondary container (light)
+        tone90 = Color(0xFFFF8F00),
         tone95 = Color(0xFFFF6F00),
         tone99 = Color(0xFFE65100),
         tone100 = Color(0xFF000000)
     )
 
     // Tertiary (Royal Blue) tonal palette
+    @Deprecated("مجمّد للتوافق — استعمل YounesCobalt مباشرة")
     val TertiaryTonal = TonalPalette(
         tone0 = Color(0xFFFFFFFF),
         tone10 = Color(0xFFE3F2FD),
@@ -78,13 +95,14 @@ object RedBrandColors {
         tone60 = Color(0xFF2196F3),
         tone70 = Color(0xFF1E88E5),
         tone80 = Color(0xFF1976D2),
-        tone90 = Color(0xFF1565C0),  // Tertiary base
+        tone90 = Color(0xFF1565C0),
         tone95 = Color(0xFF0D47A1),
         tone99 = Color(0xFF0A3D91),
         tone100 = Color(0xFF000000)
     )
 
     // Success (Emerald Green) tonal palette
+    @Deprecated("مجمّد للتوافق — استعمل YounesPrimary مباشرة")
     val SuccessTonal = TonalPalette(
         tone0 = Color(0xFFFFFFFF),
         tone10 = Color(0xFFE8F5E9),
@@ -95,13 +113,14 @@ object RedBrandColors {
         tone60 = Color(0xFF4CAF50),
         tone70 = Color(0xFF43A047),
         tone80 = Color(0xFF388E3C),
-        tone90 = Color(0xFF2E7D32),  // Success base
+        tone90 = Color(0xFF2E7D32),
         tone95 = Color(0xFF1B5E20),
         tone99 = Color(0xFF0D4F14),
         tone100 = Color(0xFF000000)
     )
 
     // Warning (Deep Orange) tonal palette
+    @Deprecated("مجمّد للتوافق — استعمل YounesAccent مباشرة")
     val WarningTonal = TonalPalette(
         tone0 = Color(0xFFFFFFFF),
         tone10 = Color(0xFFFFF3E0),
@@ -112,13 +131,14 @@ object RedBrandColors {
         tone60 = Color(0xFFFF9800),
         tone70 = Color(0xFFFB8C00),
         tone80 = Color(0xFFF57C00),
-        tone90 = Color(0xFFEF6C00),  // Warning base
+        tone90 = Color(0xFFEF6C00),
         tone95 = Color(0xFFE65100),
         tone99 = Color(0xFFBF360C),
         tone100 = Color(0xFF000000)
     )
 
-    // Error (Clear Red) tonal palette
+    // Error (Clear Red) tonal palette — الدور الشرعي الوحيد للأحمر (Danger)
+    @Deprecated("للتوافق — للدور الجديد استعمل YounesRose مباشرة")
     val ErrorTonal = TonalPalette(
         tone0 = Color(0xFFFFFFFF),
         tone10 = Color(0xFFFFEBEE),
@@ -128,7 +148,7 @@ object RedBrandColors {
         tone50 = Color(0xFFEF5350),
         tone60 = Color(0xFFF44336),
         tone70 = Color(0xFFE53935),
-        tone80 = Color(0xFFD32F2F),  // Error base
+        tone80 = Color(0xFFD32F2F),
         tone90 = Color(0xFFC62828),
         tone95 = Color(0xFFB71C1C),
         tone99 = Color(0xFF8B0000),
@@ -136,6 +156,7 @@ object RedBrandColors {
     )
 
     // Neutral tonal palette (for surfaces, backgrounds)
+    @Deprecated("مجمّد للتوافق — استعمل أسطح Younes مباشرة")
     val NeutralTonal = TonalPalette(
         tone0 = Color(0xFFFFFFFF),
         tone10 = Color(0xFFF5F5F5),
@@ -153,6 +174,7 @@ object RedBrandColors {
     )
 
     // Neutral Variant tonal palette (for outlines, dividers)
+    @Deprecated("مجمّد للتوافق — استعمل YounesOutline/YounesBorder مباشرة")
     val NeutralVariantTonal = TonalPalette(
         tone0 = Color(0xFFFFFFFF),
         tone10 = Color(0xFFF5F5F5),
@@ -209,35 +231,36 @@ data class TonalPalette(
 
 /**
  * ألوان دلالية للرسائل والحالات (Semantic Colors for Messages/States)
- * تستخدم في شاشات المحادثة والمؤشرات.
+ * تستخدم في شاشات المحادثة والمؤشرات — مربوطة مباشرة بلوحة Younes
+ * (زمرد/ذهب/كوبالت/وردة الخطر)، بلا اعتماد على RedBrandColors المهمل.
  */
 object RedSemanticColors {
 
-    // رسالة مشفرة — أخضر مع opacity
-    val EncryptedMessage = RedBrandColors.SuccessTonal.tone40.copy(alpha = 0.85f)
-    val EncryptedMessageBackground = RedBrandColors.SuccessTonal.tone10
-    val EncryptedMessageText = RedBrandColors.SuccessTonal.tone90
+    // رسالة مشفرة — زمرد Younes
+    val EncryptedMessage = YounesPrimary.copy(alpha = 0.85f)
+    val EncryptedMessageBackground = Color(0xFF0D2B21)
+    val EncryptedMessageText = YounesPrimaryGlow
 
-    // رسالة معلقة — برتقالي
-    val PendingMessage = RedBrandColors.WarningTonal.tone60
-    val PendingMessageBackground = RedBrandColors.WarningTonal.tone10
-    val PendingMessageText = RedBrandColors.WarningTonal.tone90
+    // رسالة معلقة — ذهب Younes
+    val PendingMessage = YounesAccent
+    val PendingMessageBackground = Color(0xFF2A2010)
+    val PendingMessageText = YounesAccentSoft
 
-    // رسالة فاشلة — أحمر
-    val FailedMessage = RedBrandColors.ErrorTonal.tone60
-    val FailedMessageBackground = RedBrandColors.ErrorTonal.tone10
-    val FailedMessageText = RedBrandColors.ErrorTonal.tone90
+    // رسالة فاشلة — وردة الخطر (الدور الشرعي للأحمر)
+    val FailedMessage = YounesRose
+    val FailedMessageBackground = Color(0xFF3A1216)
+    val FailedMessageText = Color(0xFFFFB3B8)
 
     // رسالة نظام — رمادي محايد
-    val SystemMessage = RedBrandColors.NeutralTonal.tone60
-    val SystemMessageBackground = RedBrandColors.NeutralTonal.tone10
-    val SystemMessageText = RedBrandColors.NeutralTonal.tone90
+    val SystemMessage = Color(0xFF757575)
+    val SystemMessageBackground = Color(0xFFF5F5F5)
+    val SystemMessageText = Color(0xFF212121)
 
     // مؤشرات الحالة
-    val Sending = RedBrandColors.SecondaryTonal.tone60
-    val Sent = RedBrandColors.NeutralTonal.tone60
-    val Delivered = RedBrandColors.TertiaryTonal.tone60
-    val Read = RedBrandColors.TertiaryTonal.tone60
+    val Sending = YounesAccent
+    val Sent = Color(0xFF757575)
+    val Delivered = YounesCobalt
+    val Read = YounesCobalt
 
     // فقاعات المحادثة
     val OutgoingBubble = Color(0xFF14304F)

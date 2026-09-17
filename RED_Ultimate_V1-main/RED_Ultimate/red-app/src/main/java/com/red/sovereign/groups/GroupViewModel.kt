@@ -20,8 +20,10 @@ import com.red.sovereign.core.database.LocalRepository
 import com.red.sovereign.core.GroupSyncBus
 import com.red.sovereign.media.MediaApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -133,6 +135,34 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
             is ApiResult.Error -> state = GroupState.Error(result.message)
         }
     }
+
+    /**
+     * P0-F: اكتشاف المجموعات العامة من الخادم — GET /api/groups/discover?q=&limit=
+     * (عامة فقط، حد 1..20، q حتى 64 حرفًا) — بدل الفلترة المحلية فقط.
+     * النتائج في [discoveredGroups] حتى لا تُستبدل قائمة مجموعاتي.
+     */
+    val discoveredGroups = mutableStateListOf<Group>()
+    var discoverState: GroupState by mutableStateOf(GroupState.Ready); private set
+    private var discoverJob: Job? = null
+
+    fun discover(query: String, limit: Int = 20) {
+        discoverJob?.cancel()
+        val q = query.trim()
+        if (q.isEmpty()) { discoveredGroups.clear(); discoverState = GroupState.Ready; return }
+        discoverJob = viewModelScope.launch {
+            delay(300)
+            discoverState = GroupState.Loading
+            val enc = java.net.URLEncoder.encode(q.take(64), "UTF-8")
+            when (val result = client.request("GET", "/api/groups/discover?q=$enc&limit=${limit.coerceIn(1, 20)}")) {
+                is ApiResult.Success -> runCatching { json.decodeFromString<List<Group>>(result.value) }
+                    .onSuccess { discoveredGroups.clear(); discoveredGroups.addAll(it); discoverState = GroupState.Ready }
+                    .onFailure { discoverState = GroupState.Error("INVALID_GROUP_RESPONSE") }
+                is ApiResult.Error -> discoverState = GroupState.Error(result.message)
+            }
+        }
+    }
+
+    fun clearDiscovered() { discoverJob?.cancel(); discoveredGroups.clear(); discoverState = GroupState.Ready }
 
     /**
      * إنشاء مجموعة مع صورة اختيارية: تُرفع عبر MediaApi ثم PATCH /api/groups/{id}/avatar

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Monitor, Smartphone, MapPin, Shield, X, Download, Filter, MoreVertical, RotateCcw, Eye, Trash2 } from 'lucide-react';
+import { Activity, Monitor, Smartphone, MapPin, Shield, X, Download, Filter, MoreVertical, RotateCcw, AlertTriangle } from 'lucide-react';
 import { useAllSessions, mutations } from '@/api/queries';
 import { cn, formatRelativeTime } from '@/utils';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Badge } from '@/components/ui/Badge';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
 import { Dialog } from '@/components/ui/Dialog';
+import { Form, FormField } from '@/components/ui/Form';
 
 const mockSessions = Array.from({ length: 100 }, (_, i) => ({
   id: `session-${i}`,
@@ -32,7 +33,7 @@ const mockSessions = Array.from({ length: 100 }, (_, i) => ({
 export function SessionsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(0);
-  const [size, setSize] = useState(25);
+  const [size] = useState(25);
   const [search, setSearch] = useState('');
   const [platform, setPlatform] = useState('');
   const [trusted, setTrusted] = useState('');
@@ -45,13 +46,15 @@ export function SessionsPage() {
   const revokeMutation = mutations.useRevokeSession();
   const revokeAllMutation = mutations.useRevokeAllSessions();
   
-  const displaySessions = mockSessions.slice(page * size, (page + 1) * size);
-  const totalPages = Math.ceil(mockSessions.length / size);
+  // البيانات الحقيقية من الخادم أولاً، والوهمية احتياط فقط عند غيابها
+  const source = Array.isArray(sessions) && sessions.length > 0 ? sessions : mockSessions;
+  const displaySessions = source.slice(page * size, (page + 1) * size);
+  const totalPages = Math.ceil(source.length / size);
   
   const columns = [
     {
       key: 'user',
-      header: 'User',
+      title: 'User',
       cell: (s: any) => (
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-yn-green/15 flex items-center justify-center text-xs text-yn-green font-bold">
@@ -66,7 +69,7 @@ export function SessionsPage() {
     },
     {
       key: 'device',
-      header: 'Device',
+      title: 'Device',
       cell: (s: any) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-yn-blue/15 flex items-center justify-center">
@@ -81,7 +84,7 @@ export function SessionsPage() {
     },
     {
       key: 'location',
-      header: 'Location',
+      title: 'Location',
       cell: (s: any) => (
         <div className="flex items-center gap-2">
           <MapPin className="w-4 h-4 text-yn-text-muted" />
@@ -91,15 +94,15 @@ export function SessionsPage() {
     },
     {
       key: 'ipAddress',
-      header: 'IP Address',
+      title: 'IP Address',
       cell: (s: any) => <span className="font-mono text-yn-text-secondary text-sm">{s.ipAddress}</span>,
     },
     {
       key: 'status',
-      header: 'Status',
+      title: 'Status',
       cell: (s: any) => (
         <div className="flex items-center gap-2">
-          <Badge variant={s.isTrusted ? 'green' : 'gold'} dot>
+          <Badge variant={s.isTrusted ? 'green' : 'gold'}>
             {s.isTrusted ? 'Trusted' : 'Untrusted'}
           </Badge>
           {s.isCurrent && <Badge variant="blue" className="ml-1">Current</Badge>}
@@ -108,7 +111,7 @@ export function SessionsPage() {
     },
     {
       key: 'riskScore',
-      header: 'Risk Score',
+      title: 'Risk Score',
       cell: (s: any) => (
         <div className="flex items-center gap-2">
           <div className="w-20 h-2 bg-yn-navy rounded-full overflow-hidden">
@@ -120,17 +123,17 @@ export function SessionsPage() {
     },
     {
       key: 'createdAt',
-      header: 'Created',
+      title: 'Created',
       cell: (s: any) => <span className="text-yn-text-secondary">{formatRelativeTime(s.createdAt)}</span>,
     },
     {
       key: 'lastActivityAt',
-      header: 'Last Activity',
+      title: 'Last Activity',
       cell: (s: any) => <span className="text-yn-text-secondary">{formatRelativeTime(s.lastActivityAt)}</span>,
     },
     {
       key: 'actions',
-      header: 'Actions',
+      title: 'Actions',
       cell: (s: any) => (
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
@@ -147,7 +150,6 @@ export function SessionsPage() {
               <RotateCcw className="w-4 h-4 mr-2" />
               Revoke All User Sessions
             </DropdownMenu.Item>
-            <DropdownMenu.Separator />
             <DropdownMenu.Item onClick={() => { /* trust */ }}>
               <Shield className="w-4 h-4 mr-2" />
               {s.isTrusted ? 'Mark Untrusted' : 'Mark Trusted'}
@@ -179,10 +181,10 @@ export function SessionsPage() {
       
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard label="Total Sessions" value={mockSessions.length} icon={Activity} color="blue" />
-        <StatCard label="Active Now" value={mockSessions.filter(s => new Date(s.lastActivityAt).getTime() > Date.now() - 300000).length} icon={Activity} color="green" />
-        <StatCard label="Trusted Devices" value={mockSessions.filter(s => s.isTrusted).length} icon={Shield} color="gold" />
-        <StatCard label="High Risk" value={mockSessions.filter(s => s.riskScore > 70).length} icon={AlertTriangle} color="danger" />
+        <StatCard label="Total Sessions" value={source.length} icon={Activity} color="blue" />
+        <StatCard label="Active Now" value={source.filter(s => new Date(s.lastActivityAt).getTime() > Date.now() - 300000).length} icon={Activity} color="green" />
+        <StatCard label="Trusted Devices" value={source.filter(s => s.isTrusted).length} icon={Shield} color="gold" />
+        <StatCard label="High Risk" value={source.filter(s => s.riskScore > 70).length} icon={AlertTriangle} color="danger" />
       </div>
       
       <div className="yn-card yn-card-liquid yn-glass">
@@ -206,33 +208,32 @@ export function SessionsPage() {
         <DataTable columns={columns} data={displaySessions} isLoading={isLoading} rowKey="id" emptyMessage="No sessions found" />
         
         <Pagination
-          currentPage={page}
+          page={page}
           totalPages={totalPages}
-          totalItems={mockSessions.length}
-          onPageChange={setPage}
-          onPageSizeChange={setSize}
-          pageSize={size}
+          onChange={setPage}
         />
       </div>
       
-      <Dialog open={revokeDialogOpen} onClose={() => { setRevokeDialogOpen(false); setRevokingSession(null); }} title="Revoke Session" description="This will immediately terminate the selected session. The user will need to log in again.">
+      <Dialog open={revokeDialogOpen} onClose={() => { setRevokeDialogOpen(false); setRevokingSession(null); }} title="Revoke Session">
+        <p className="text-sm text-yn-text-secondary mb-4">This will immediately terminate the selected session. The user will need to log in again.</p>
         {revokingSession && (
-          <Form onSubmit={(data) => { revokeMutation.mutate({ sessionId: revokingSession.id, reason: data.reason }); setRevokeDialogOpen(false); setRevokingSession(null); }}>
+          <Form onSubmit={(data: any) => { revokeMutation.mutate({ sessionId: revokingSession.id, reason: data.reason }); setRevokeDialogOpen(false); setRevokingSession(null); }}>
             <p className="text-sm text-yn-text-secondary mb-4">
               Revoking session for <span className="font-medium text-yn-text">{revokingSession.username}</span> on <span className="font-medium text-yn-text">{revokingSession.deviceName}</span>
             </p>
-            <Form.Field name="reason" label="Reason" type="textarea" placeholder="Reason for revocation" required />
+            <FormField name="reason" label="Reason" type="textarea" placeholder="Reason for revocation" required />
           </Form>
         )}
       </Dialog>
       
-      <Dialog open={revokeAllDialogOpen} onClose={() => { setRevokeAllDialogOpen(false); setRevokeAllUser(null); }} title="Revoke All User Sessions" description="This will terminate ALL sessions for the selected user across all devices.">
+      <Dialog open={revokeAllDialogOpen} onClose={() => { setRevokeAllDialogOpen(false); setRevokeAllUser(null); }} title="Revoke All User Sessions">
+        <p className="text-sm text-yn-text-secondary mb-4">This will terminate ALL sessions for the selected user across all devices.</p>
         {revokeAllUser && (
-          <Form onSubmit={(data) => { revokeAllMutation.mutate(revokeAllUser.userId); setRevokeAllDialogOpen(false); setRevokeAllUser(null); }}>
+          <Form onSubmit={(data: any) => { revokeAllMutation.mutate(revokeAllUser.userId); setRevokeAllDialogOpen(false); setRevokeAllUser(null); }}>
             <p className="text-sm text-yn-text-secondary mb-4">
               Revoking all sessions for <span className="font-medium text-yn-text">{revokeAllUser.username}</span>
             </p>
-            <Form.Field name="reason" label="Reason" type="textarea" placeholder="Reason for mass revocation" required />
+            <FormField name="reason" label="Reason" type="textarea" placeholder="Reason for mass revocation" required />
           </Form>
         )}
       </Dialog>
@@ -255,3 +256,5 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: n
     </div>
   );
 }
+
+export default SessionsPage;

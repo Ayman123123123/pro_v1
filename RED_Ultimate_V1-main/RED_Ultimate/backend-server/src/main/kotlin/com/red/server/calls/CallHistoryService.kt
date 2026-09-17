@@ -234,6 +234,97 @@ class CallHistoryService(
             .modifiedCount.toInt()
     }
 
+    /**
+     * مزامنة التدرج باستخدام الترقيم القائم على المؤشر (Cursor-based).
+     * يستخدم cursor كإزاحة زمنية (startedAt) للصفحة التالية.
+     */
+    fun syncHistory(
+        redId: String,
+        cursor: String?,
+        limit: Int,
+        sinceVersion: Long,
+        filter: CallHistoryFilter
+    ): CallHistorySyncResponse {
+        val party = Criteria().andOperator(
+            Criteria().orOperator(
+                Criteria.where("initiatorId").`is`(redId),
+                Criteria.where("targetId").`is`(redId)
+            ),
+            Criteria.where("hiddenFor").ne(redId)
+        )
+
+        val criteria = cursor?.let { cursorInstant ->
+            Criteria().andOperator(
+                party,
+                Criteria.where("startedAt").lt(cursorInstant)
+            )
+        } ?: party
+
+        // Apply filters
+        filter.types?.ifNotEmpty { criteria.and("type").`in`(it) }
+        filter.directions?.ifNotEmpty { 
+            // We can't easily filter by direction since it's derived
+            // Skip for now, could be added with a direction field in the document
+        }
+        filter.statuses?.ifNotEmpty { criteria.and("status").`in`(it) }
+        filter.dateFrom?.let { 
+            runCatching { Instant.parse(it) }?.getOrNull()?.let { criteria.and("startedAt").gte(it) } 
+        }
+        filter.dateTo?.let { 
+            runCatching { Instant.parse(it) }?.getOrNull()?.let { criteria.and("startedAt").lte(it) } 
+        }
+
+        val query = Query(criteria)
+            .with(Sort.by(Sort.Direction.DESC, "startedAt"))
+            .limit(limit.coerceIn(1, 200).toLong() + 1) // +1 to check if there's more
+
+        val docs = mongo.find(query, CallHistoryDocument::class.java)
+        
+        val hasMore = docs.size > limit
+        val pageDocs = if (hasMore) docs.dropLast(1) else docs
+        
+        val nextCursor = if (hasMore && pageDocs.isNotEmpty()) {
+            pageDocs.last().startedAt.toString()
+        } else null
+
+        val serverVersion = System.currentTimeMillis() // Simple version based on timestamp
+
+        val items = pageDocs.map { call ->
+            val outgoing = call.initiatorId == redId
+            val peerId = if (outgoing) call.targetId else call.initiatorId
+            CallHistoryItem(
+                id = call.id,
+                peerId = peerId,
+                peerLabel = if (outgoing) call.targetLabel else call.initiatorId,
+                direction = if (outgoing) "OUTGOING" else "INCOMING",
+                type = call.type,
+                route = call.route,
+                status = call.status,
+                startedAt = call.startedAt.toString(),
+                answeredAt = call.answeredAt?.toString(),
+                endedAt = call.endedAt?.toString(),
+                mediaServerId = call.mediaServerId,
+                durationSeconds = call.durationSeconds,
+                qualityScore = call.qualityScore,
+                callSource = call.callSource,
+                groupId = call.groupId,
+                roomId = call.roomId,
+                participantIds = call.participantIds,
+                hadScreenShare = call.hadScreenShare,
+                wasRecorded = call.wasRecorded,
+                version = call.version ?: 1,
+                updatedAt = call.updatedAt?.toString()
+            )
+        }
+
+        return CallHistorySyncResponse(
+            items = items,
+            nextCursor = nextCursor,
+            hasMore = hasMore,
+            serverVersion = serverVersion
+        )
+    }
+
     private fun update(id: String, action: (CallHistoryDocument) -> Unit): CallHistoryDocument {
         val doc = mongo.findById(id, CallHistoryDocument::class.java)
             ?: throw NoSuchElementException("Call not found: $id")

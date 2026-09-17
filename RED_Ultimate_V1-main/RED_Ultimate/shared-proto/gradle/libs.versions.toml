@@ -5,11 +5,16 @@
 # Protobuf
 protobuf = "3.25.5"
 protobuf-gradle = "0.10.0"
+protobuf-kotlin = "3.25.5"
 
 # Java / Kotlin
 java = "21"
-kotlin = "2.3.21"
+kotlin = "2.0.21"
 kotlin-jvm-target = "21"
+
+# Serialization
+kotlinx-serialization = "1.6.3"
+kotlinx-serialization-protobuf = "1.6.3"
 
 # Build
 gradle = "8.11"
@@ -17,16 +22,22 @@ gradle = "8.11"
 [plugins]
 java-library = { id = "java-library" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-gradle" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlinx-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 
 [libraries]
 # Protobuf
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
-protobuf-grpc = { module = "io.grpc:grpc-protobuf", version = "1.66.0" }
-protobuf-grpc-stub = { module = "io.grpc:grpc-stub", version = "1.66.0" }
+protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf-kotlin" }
+protobuf-grpc = { module = "io.grpc:grpc-protobuf", version = "1.62.1" }
+protobuf-grpc-stub = { module = "io.grpc:grpc-stub", version = "1.62.1" }
 
-# Kotlin (for potential Kotlin-specific protobuf extensions)
+# Kotlin Serialization
 kotlin-stdlib-jdk8 = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.ref = "kotlin" }
+kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinx-serialization" }
+kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinx-serialization-protobuf" }
 
 [bundles]
-protobuf-runtime = ["protobuf-java"]
+protobuf-runtime = ["protobuf-java", "protobuf-kotlin"]
 protobuf-grpc = ["protobuf-grpc", "protobuf-grpc-stub"]
+serialization = ["kotlinx-serialization-core", "kotlinx-serialization-protobuf"]

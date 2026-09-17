@@ -85,6 +85,9 @@ class LanCallManager(
     private var activeCallId: String = ""
     private var iAmCaller = false
     private var haveLocalOffer = false
+    /** dedup العروض المكررة (إعادة إرسال الشبكة) بنفس callId أثناء RINGING. */
+    private val ringingDedup = mutableMapOf<String, Long>()
+    private val DEDUP_TTL_MS = 30_000L
 
     var events: Events? = null
 
@@ -107,10 +110,14 @@ class LanCallManager(
         scope.launch {
             presence.peersFlow.collect { found ->
                 val contacts = runCatching { contactRedIds() }.getOrDefault(emptySet())
+                val myIp = myAdvertisedHost()
                 _peers.value = found.filter {
                     it.redId != myRedId.trim().uppercase() &&
                         it.port > 0 &&
-                        LanNet.isPrivateIpv4(it.host)
+                        LanNet.isPrivateIpv4(it.host) &&
+                        // تفعيل فحص نفس الشبكة الفرعية: تجاهل أقران شبكة مختلفة
+                        // (يبقى الاكتشاف يعمل إن تعذر تحديد عنواننا).
+                        (myIp.isBlank() || LanNet.sameSubnet(myIp, it.host))
                 }.map { p ->
                     if (p.redId in contacts) p.copy(verified = true) else p
                 }
@@ -228,6 +235,10 @@ class LanCallManager(
         runCatching { rtc?.release() }
         rtc = null
         activePeer = null
+        // إبقاء بصمة dedup لفترة TTL بعد انتهاء الرنين لابتلاع إعادة الإرسال المتأخرة
+        // (بدل رفضها)، مع تنظيف البصمات المنتهية فقط.
+        val now = System.currentTimeMillis()
+        ringingDedup.entries.removeAll { now - it.value >= DEDUP_TTL_MS }
         activeCallId = ""
         pendingOffer = null
         haveLocalOffer = false
@@ -289,6 +300,27 @@ class LanCallManager(
 
     private fun onRemoteOffer(msg: LanMsg) {
         if (msg.callId.isBlank()) return
+        // dedup: إعادة إرسال نفس العرض أثناء RINGING ليست مكالمة جديدة —
+        // تُتجاهل بصمت ولا تُرفض بـ BYE (كانت تقع في فرع "مشغول" وتقتل الرنين).
+        if (_state.value == LanCallState.RINGING && msg.callId == activeCallId) {
+            Log.i(TAG, "dedup offer ${msg.callId} during RINGING — ignored")
+            return
+        }
+        val seenAt = ringingDedup[msg.callId]
+        if (seenAt != null && System.currentTimeMillis() - seenAt < DEDUP_TTL_MS &&
+            _state.value == LanCallState.RINGING
+        ) {
+            Log.i(TAG, "dedup map hit ${msg.callId} — ignored")
+            return
+        }
+        // تفعيل فحص نفس الشبكة الفرعية على مسار الإشارة (دفاع بالعمق مع فلتر الاكتشاف).
+        if (msg.host.isNotBlank()) {
+            val mine = myAdvertisedHost()
+            if (mine.isNotBlank() && !LanNet.sameSubnet(mine, msg.host)) {
+                Log.w(TAG, "offer from different subnet ${msg.host} (mine=$mine) — rejected")
+                return
+            }
+        }
         val sdp = unsealSdp(msg)
         if (sdp.isNullOrBlank()) {
             Log.w(TAG, "offer sealed-unreadable from ${msg.from} — ignored")
@@ -301,6 +333,7 @@ class LanCallManager(
                 activeCallId = msg.callId
                 iAmCaller = false
                 pendingOffer = sdp
+                ringingDedup[msg.callId] = System.currentTimeMillis()
                 _incoming.value = IncomingLanCall(msg.callId, peer, msg.media.ifBlank { "voice" })
                 _state.value = LanCallState.RINGING
                 armRingTimeout(RING_TIMEOUT_IN_MS)
@@ -393,6 +426,13 @@ class LanCallManager(
         }
         if (!LanNet.isPrivateIpv4(msg.host)) {
             Log.w(TAG, "offer from non-private host ${msg.host} — rejected")
+            return null
+        }
+        // تفعيل sameSubnet هنا أيضًا: عنوان خارج /24 الخاصة بنا مرفوض
+        // (يمنع عروض عبر VPN/شبكة مختلفة رغم كونها private).
+        val mine = myAdvertisedHost()
+        if (mine.isNotBlank() && !LanNet.sameSubnet(mine, msg.host)) {
+            Log.w(TAG, "offer outside our subnet ${msg.host} (mine=$mine) — rejected")
             return null
         }
         val contacts = runCatching { contactRedIds() }.getOrDefault(emptySet())

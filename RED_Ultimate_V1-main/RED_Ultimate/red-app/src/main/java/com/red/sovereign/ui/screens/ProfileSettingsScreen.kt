@@ -23,7 +23,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.util.Log
 import com.red.sovereign.settings.SettingsViewModel
-import com.red.sovereign.ui.theme.*
+import com.red.sovereign.ui.theme.YounesPrimary
+import com.red.sovereign.ui.theme.YounesMuted
+import com.red.sovereign.ui.theme.YounesOnSurface
+import com.red.sovereign.ui.theme.YounesVoid
+import com.red.sovereign.ui.theme.YounesSurface
 import com.red.sovereign.auth.TokenStore
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,13 +67,13 @@ fun ProfileSettingsScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = YounesVoid,
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = "الإعدادات السيادية",
-                        color = YounesOnSurface,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 20.sp,
                         fontFamily = PlexArabicFamily,
                         fontWeight = FontWeight.Bold
@@ -80,12 +84,12 @@ fun ProfileSettingsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = "العودة",
-                            tint = YounesOnSurface
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = YounesSurface.copy(alpha = 0.85f)
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f)
                 )
             )
         }
@@ -104,7 +108,7 @@ fun ProfileSettingsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(YounesSurface, RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(16.dp))
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -112,12 +116,12 @@ fun ProfileSettingsScreen(
                         modifier = Modifier
                             .size(72.dp)
                             .clip(CircleShape)
-                            .background(YounesPrimary.copy(alpha = 0.2f)),
+                            .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = displayName.take(1).ifBlank { "R" },
-                            color = YounesPrimary,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                             fontSize = 32.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -126,7 +130,7 @@ fun ProfileSettingsScreen(
                     Column {
                         Text(
                             text = displayName,
-                            color = YounesOnSurface,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 20.sp,
                             fontFamily = PlexArabicFamily,
                             fontWeight = FontWeight.Bold
@@ -134,15 +138,15 @@ fun ProfileSettingsScreen(
                         if (redId.isNotBlank()) {
                             Text(
                                 text = redId,
-                                color = YounesMuted,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 14.sp,
                                 fontFamily = PlexArabicFamily
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Badge(
-                            containerColor = YounesPrimary.copy(alpha = 0.2f),
-                            contentColor = YounesPrimary
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                         ) {
                             Text("حساب موثق ومؤمن", modifier = Modifier.padding(horizontal = 6.dp))
                         }
@@ -259,7 +263,7 @@ fun ProfileSettingsScreen(
                         icon = Icons.Rounded.DeleteForever,
                         title = "التدمير الذاتي (Burn)",
                         subtitle = "إتلاف السجلات فوراً",
-                        titleColor = Color(0xFFE53935),
+                        titleColor = MaterialTheme.colorScheme.error,
                         onClick = onSelfDestruct
                     )
                 }
@@ -278,12 +282,12 @@ fun SettingsSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(YounesSurface, RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(16.dp))
             .padding(vertical = 8.dp)
     ) {
         Text(
             text = title,
-            color = YounesPrimary,
+            color = MaterialTheme.colorScheme.primary,
             fontSize = 14.sp,
             fontFamily = PlexArabicFamily,
             fontWeight = FontWeight.Bold,
@@ -298,7 +302,7 @@ fun SettingsItem(
     icon: ImageVector,
     title: String,
     subtitle: String? = null,
-    titleColor: Color = YounesOnSurface,
+    titleColor: Color = MaterialTheme.colorScheme.onSurface,
     onClick: (() -> Unit)? = null,
     action: (@Composable () -> Unit)? = null
 ) {
@@ -312,7 +316,7 @@ fun SettingsItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = YounesMuted,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.width(16.dp))
@@ -327,7 +331,7 @@ fun SettingsItem(
             if (subtitle != null) {
                 Text(
                     text = subtitle,
-                    color = YounesMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     fontFamily = PlexArabicFamily
                 )
@@ -339,7 +343,7 @@ fun SettingsItem(
             Icon(
                 imageVector = Icons.Rounded.ChevronRight,
                 contentDescription = null,
-                tint = YounesMuted,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
             )
         }

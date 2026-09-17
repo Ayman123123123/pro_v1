@@ -1,0 +1,486 @@
+package com.red.sovereign.features.channels
+
+import android.content.Context
+import androidx.compose.foundation.gestures.Orientation
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.red.sovereign.auth.ApiResult
+import com.red.sovereign.auth.AuthorizedApiClient
+import com.red.sovereign.auth.TokenStore
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.serialization.json.Json
+
+/**
+ * Enhanced ChannelsViewModel with ML Discovery, Categories, Smart Search,
+ * Channel Peek, Subscription Animations, Granular Notifications
+ */
+class ChannelsViewModel(
+    private val api: ChannelsApi,
+    private val mlEngine: MLDiscoveryEngine,
+    private val context: Context,
+    private val tokenStore: TokenStore
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(ChannelsUiState())
+    val uiState: StateFlow<ChannelsUiState> = _uiState.asStateFlow()
+
+    private var searchJob: kotlinx.coroutines.Job? = null
+    private var discoveryJob: kotlinx.coroutines.Job? = null
+    private var peekJob: kotlinx.coroutines.Job? = null
+
+    init {
+        loadInitialData()
+    }
+
+    private fun loadInitialData() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            async {
+                refreshChannels()
+            }.await()
+            async {
+                loadDiscoveryFeed()
+            }.await()
+            async {
+                loadSubscriptions()
+            }.await()
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    // ─── Tabs & Categories ───
+    fun setTab(tab: ChannelTab) {
+        _uiState.update { it.copy(activeTab = tab, query = "") }
+        if (tab == ChannelTab.DISCOVER) {
+            loadDiscoveryFeed()
+        }
+    }
+
+    fun setCategory(category: ChannelCategory?) {
+        _uiState.update { it.copy(selectedCategory = category) }
+        if (category != null) {
+            loadCategoryChannels(category)
+        } else {
+            refreshChannels()
+        }
+    }
+
+    // ─── Smart Search with Fuzzy Matching ───
+    fun onQueryChange(query: String) {
+        _uiState.update { it.copy(query = query) }
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            delay(300) // debounce
+            performSmartSearch(query)
+        }
+    }
+
+    private suspend fun performSmartSearch(query: String) {
+        if (query.isBlank()) {
+            _uiState.update { it.copy(searchResults = emptyList(), searchSuggestions = getRecentSearches()) }
+            return
+        }
+
+        val mergedResults = when (val result = api.searchMerged(
+            local = getLocalSearchItems(),
+            query = query,
+            limit = 30
+        )) {
+            is ApiResult.Success -> result.value
+            is ApiResult.Error -> getLocalSearchItems()
+        }
+
+        val suggestions = generateSearchSuggestions(query, mergedResults)
+        val channels = mergedResults.map { item ->
+            _uiState.value.channels.find { it.id == item.id } ?: Channel(
+                id = item.id, name = item.name, username = item.username
+            )
+        }
+
+        _uiState.update {
+            it.copy(
+                searchResults = channels,
+                searchSuggestions = suggestions,
+                isSearching = false
+            )
+        }
+        saveRecentSearch(query)
+    }
+
+    private fun getLocalSearchItems(): List<ChannelSearchItem> {
+        return _uiState.value.channels.map { it.toSearchItem() }
+    }
+
+    private fun generateSearchSuggestions(query: String, results: List<ChannelSearchItem>): List<SearchSuggestion> {
+        val suggestions = mutableListOf<SearchSuggestion>()
+
+        // Recent searches
+        getRecentSearches().filter { it.text.contains(query, true) }
+            .forEach { suggestions.add(it) }
+
+        // Channel matches
+        results.take(5).forEach { channel ->
+            suggestions.add(SearchSuggestion(
+                text = channel.name,
+                type = SuggestionType.CHANNEL,
+                channelId = channel.id
+            ))
+        }
+
+        // Category matches
+        ChannelCategory.values().filter { it.displayName.contains(query, true) }
+            .take(3).forEach { category ->
+                suggestions.add(SearchSuggestion(
+                    text = it.displayName,
+                    type = SuggestionType.CATEGORY,
+                    category = category
+                ))
+            }
+
+        // Trending tags
+        _uiState.value.channels.flatMap { it.tags }
+            .distinct()
+            .filter { it.contains(query, true) }
+            .take(3).forEach { tag ->
+                suggestions.add(SearchSuggestion(
+                    text = "#$tag",
+                    type = SuggestionType.TAG
+                ))
+            }
+
+        return suggestions
+    }
+
+    // ─── Discovery Feed (ML-powered) ───
+    private suspend fun loadDiscoveryFeed() {
+        discoveryJob?.cancel()
+        discoveryJob = viewModelScope.launch {
+            val userEmbedding = UserEmbeddingStorage.get(context) ?: UserEmbedding(
+                vector = FloatArray(64) { 0f },
+                lastUpdated = System.currentTimeMillis()
+            )
+
+            val allChannels = _uiState.value.channels
+            val prefs = UserSession.preferences
+
+            val recommendations = mlEngine.generateRecommendations(
+                userEmbedding = userEmbedding,
+                candidateChannels = allChannels,
+                userPreferences = prefs,
+                limit = 50
+            )
+
+            val feed = DiscoveryFeed(
+                forYou = recommendations.take(10),
+                trending = allChannels
+                    .sortedByDescending { it.growthStats?.velocity ?: 0.0 }
+                    .take(10)
+                    .map { ChannelRecommendation(
+                        channel = it,
+                        score = (it.growthStats?.velocity ?: 1.0).toFloat().coerceIn(0f, 1f),
+                        reason = RecommendationReason.TRENDING_IN_AREA,
+                        confidence = 0.8f,
+                        features = RecommendationFeatures()
+                    ) },
+                nearby = emptyList(), // Would populate if nearby enabled
+                categories = ChannelCategory.values().associateWith { cat ->
+                    allChannels.filter { it.category == cat }
+                        .sortedByDescending { it.subscriberCount }
+                        .take(5)
+                        .map { ChannelRecommendation(
+                            channel = it,
+                            score = 0.7f,
+                            reason = RecommendationReason.CATEGORY_MATCH,
+                            confidence = 0.7f,
+                            features = RecommendationFeatures()
+                        ) }
+                },
+                lastRefreshed = System.currentTimeMillis()
+            )
+
+            _uiState.update { it.copy(discoveryFeed = feed) }
+        }
+    }
+
+    private suspend fun loadCategoryChannels(category: ChannelCategory) {
+        _uiState.update { it.copy(isLoadingCategory = true) }
+        // In production, call API with category filter
+        _uiState.update { it.copy(isLoadingCategory = false) }
+    }
+
+    // ─── Channel Peek (Long Press Preview) ───
+    fun onChannelLongPress(channel: Channel) {
+        peekJob?.cancel()
+        peekJob = viewModelScope.launch {
+            val peekData = fetchChannelPeek(channel)
+            _uiState.update { it.copy(peekData = peekData, showPeek = true) }
+        }
+    }
+
+    fun dismissPeek() {
+        peekJob?.cancel()
+        _uiState.update { it.copy(showPeek = false, peekData = null) }
+    }
+
+    private suspend fun fetchChannelPeek(channel: Channel): ChannelPeekData {
+        // Fetch recent messages and media for preview
+        val messagesResult = api.getRecentMessages(channel.id, limit = 5)
+        val mediaResult = api.getChannelMedia(channel.id, limit = 6)
+
+        val messages = when (messagesResult) {
+            is ApiResult.Success -> messagesResult.value
+            else -> emptyList()
+        }
+
+        val media = when (mediaResult) {
+            is ApiResult.Success -> mediaResult.value
+            else -> emptyList()
+        }
+
+        return ChannelPeekData(
+            channel = channel,
+            recentMessages = messages,
+            mediaPreview = media,
+            memberCount = channel.subscriberCount,
+            isLive = channel.scheduledMessageCount > 0, // placeholder
+            currentViewers = 0
+        )
+    }
+
+    // ─── Subscription with Animation & Haptic ───
+    fun subscribe(channel: Channel, onAnimationComplete: () -> Unit = {}) {
+        _uiState.update { it.copy(subscribingChannelId = channel.id) }
+        viewModelScope.launch {
+            when (val result = api.join(channel.id)) {
+                is ApiResult.Success -> {
+                    _uiState.update { current ->
+                        current.copy(
+                            subscribedChannelIds = current.subscribedChannelIds + channel.id,
+                            channels = current.channels.map {
+                                if (it.id == channel.id) it.copy(subscriberCount = it.subscriberCount + 1) else it
+                            },
+                            subscribingChannelId = null,
+                            lastSubscribedChannel = channel
+                        )
+                    }
+                    triggerHapticFeedback()
+                    onAnimationComplete()
+                    // Update ML embedding
+                    mlEngine.updateUserEmbedding(listOf(ChannelInteraction(channel, InteractionType.JOIN)))
+                }
+                is ApiResult.Error -> {
+                    _uiState.update { it.copy(subscribingChannelId = null, error = result.message) }
+                }
+            }
+        }
+    }
+
+    fun unsubscribe(channel: Channel) {
+        viewModelScope.launch {
+            when (val result = api.leave(channel.id)) {
+                is ApiResult.Success -> {
+                    _uiState.update { current ->
+                        current.copy(
+                            subscribedChannelIds = current.subscribedChannelIds - channel.id,
+                            channels = current.channels.map {
+                                if (it.id == channel.id) it.copy(subscriberCount = (it.subscriberCount - 1).coerceAtLeast(0)) else it
+                            }
+                        )
+                    }
+                    mlEngine.updateUserEmbedding(listOf(ChannelInteraction(channel, InteractionType.MUTE)))
+                }
+                is ApiResult.Error -> {
+                    _uiState.update { it.copy(error = result.message) }
+                }
+            }
+        }
+    }
+
+    private fun triggerHapticFeedback() {
+        // Triggered via CompositionLocal in UI
+        HapticFeedbackController.triggerSuccess()
+    }
+
+    // ─── Granular Notifications ───
+    fun updateNotificationSettings(channelId: String, settings: NotificationSettings) {
+        viewModelScope.launch {
+            when (val result = api.updateNotificationSettings(channelId, settings)) {
+                is ApiResult.Success -> {
+                    _uiState.update { current ->
+                        current.copy(
+                            notificationSettings = current.notificationSettings + (channelId to settings)
+                        )
+                    }
+                }
+                is ApiResult.Error -> {
+                    _uiState.update { it.copy(error = result.message) }
+                }
+            }
+        }
+    }
+
+    fun getNotificationSettings(channelId: String): NotificationSettings {
+        return _uiState.value.notificationSettings[channelId] ?: NotificationSettings(channelId = channelId)
+    }
+
+    // ─── Channel Creation ───
+    fun createChannel(
+        name: String,
+        username: String?,
+        description: String?,
+        isPublic: Boolean,
+        isBroadcast: Boolean,
+        category: ChannelCategory,
+        tags: List<String>,
+        onSuccess: (Channel) -> Unit
+    ) {
+        if (name.trim().length < 2) {
+            _uiState.update { it.copy(error = "اسم القناة يجب أن يكون حرفين على الأقل") }
+            return
+        }
+        viewModelScope.launch {
+            val body = CreateChannelBody(
+                name = name.trim(),
+                username = username?.takeIf { it.isNotBlank() }?.trim()?.removePrefix("@"),
+                description = description?.takeIf { it.isNotBlank() }?.trim(),
+                isPublic = isPublic,
+                isBroadcast = isBroadcast,
+                category = category,
+                tags = tags
+            )
+            when (val result = api.create(body)) {
+                is ApiResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            showCreateDialog = false,
+                            channels = listOf(result.value) + it.channels,
+                            subscribedChannelIds = it.subscribedChannelIds + result.value.id
+                        )
+                    }
+                    onSuccess(result.value)
+                }
+                is ApiResult.Error -> {
+                    _uiState.update { it.copy(error = result.message) }
+                }
+            }
+        }
+    }
+
+    // ─── Helpers ───
+    private suspend fun refreshChannels() {
+        when (val result = api.list(search = null, limit = 50)) {
+            is ApiResult.Success -> _uiState.update { it.copy(channels = result.value) }
+            is ApiResult.Error -> _uiState.update { it.copy(error = result.message) }
+        }
+    }
+
+    private suspend fun loadSubscriptions() {
+        when (val result = api.getSubscriptions()) {
+            is ApiResult.Success -> _uiState.update { it.copy(subscribedChannelIds = result.value.toSet()) }
+            is ApiResult.Error -> {}
+        }
+    }
+
+    private fun getRecentSearches(): List<SearchSuggestion> {
+        val prefs = context.getSharedPreferences("channel_search_prefs", Context.MODE_PRIVATE)
+        val json = Json { ignoreUnknownKeys = true }
+        val jsonString = prefs.getString("recent_searches", "[]") ?: "[]"
+        return json.decodeFromString<List<SearchSuggestion>>(jsonString)
+    }
+
+    private fun saveRecentSearch(query: String) {
+        val prefs = context.getSharedPreferences("channel_search_prefs", Context.MODE_PRIVATE)
+        val json = Json { ignoreUnknownKeys = true }
+        val current = getRecentSearches()
+        val updated = (listOf(SearchSuggestion(text = query, type = SuggestionType.RECENT)) + current.filter { it.text != query })
+            .distinctBy { it.text }
+            .take(10)
+        prefs.edit().putString("recent_searches", json.encodeToString(updated)).apply()
+    }
+
+    fun clearError() = _uiState.update { it.copy(error = null) }
+    fun showCreateDialog() = _uiState.update { it.copy(showCreateDialog = true) }
+    fun hideCreateDialog() = _uiState.update { it.copy(showCreateDialog = false) }
+    fun openBoostDialog(channel: Channel) = _uiState.update { it.copy(selectedChannelForBoost = channel) }
+    fun closeBoostDialog() = _uiState.update { it.copy(selectedChannelForBoost = null) }
+
+    override fun onCleared() {
+        searchJob?.cancel()
+        discoveryJob?.cancel()
+        peekJob?.cancel()
+        mlEngine.shutdown()
+        super.onCleared()
+    }
+}
+
+// ─── Extended API ───
+interface ExtendedChannelsApi : ChannelsApi {
+    suspend fun getRecentMessages(channelId: String, limit: Int): ApiResult<List<ChannelMessage>>
+    suspend fun getChannelMedia(channelId: String, limit: Int): ApiResult<List<MessageMedia>>
+    suspend fun getSubscriptions(): ApiResult<List<String>>
+    suspend fun updateNotificationSettings(channelId: String, settings: NotificationSettings): ApiResult<String>
+}
+
+data class CreateChannelBody(
+    val name: String,
+    val username: String? = null,
+    val description: String? = null,
+    val isPublic: Boolean = true,
+    val isBroadcast: Boolean = true,
+    val category: ChannelCategory = ChannelCategory.GENERAL,
+    val tags: List<String> = emptyList()
+)
+
+// ─── UI State ───
+data class ChannelsUiState(
+    val isLoading: Boolean = false,
+    val channels: List<Channel> = emptyList(),
+    val subscribedChannelIds: Set<String> = emptySet(),
+    val error: String? = null,
+    val query: String = "",
+    val showCreateDialog: Boolean = false,
+    val selectedChannelForBoost: Channel? = null,
+    val activeTab: ChannelTab = ChannelTab.ALL,
+    val selectedCategory: ChannelCategory? = null,
+    val discoveryFeed: DiscoveryFeed = DiscoveryFeed(),
+    val searchResults: List<Channel> = emptyList(),
+    val searchSuggestions: List<SearchSuggestion> = emptyList(),
+    val isSearching: Boolean = false,
+    val isLoadingCategory: Boolean = false,
+    val peekData: ChannelPeekData? = null,
+    val showPeek: Boolean = false,
+    val subscribingChannelId: String? = null,
+    val lastSubscribedChannel: Channel? = null,
+    val notificationSettings: Map<String, NotificationSettings> = emptyMap()
+)
+
+enum class ChannelTab(val label: String, val icon: androidx.compose.material.icons.filled.Icon) {
+    ALL("جميع القنوات", androidx.compose.material.icons.filled.Public),
+    SUBSCRIBED("قنواتي", androidx.compose.material.icons.filled.Subscriptions),
+    DISCOVER("اكتشف", androidx.compose.material.icons.filled.Explore),
+    VERIFIED("موثق", androidx.compose.material.icons.filled.Verified),
+    TRENDING("رائج", androidx.compose.material.icons.filled.TrendingUp),
+    NEARBY("قريب مني", androidx.compose.material.icons.filled.LocationOn)
+}
+
+// ─── Haptic Feedback Controller ───
+object HapticFeedbackController {
+    private var hapticProvider: ((Int) -> Unit)? = null
+
+    fun setProvider(provider: (Int) -> Unit) {
+        hapticProvider = provider
+    }
+
+    fun triggerSuccess() = hapticProvider?.invoke(android.view.HapticFeedbackConstants.LONG_PRESS)
+    fun triggerLight() = hapticProvider?.invoke(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+    fun triggerError() = hapticProvider?.invoke(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+}

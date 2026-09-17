@@ -1,29 +1,55 @@
 import { spawn, ChildProcess } from 'child_process';
-import { Room, LiveStreamOptions, LiveStreamSession } from './types.js';
+import { Room, LiveStreamOptions, LiveStreamSession, RtmpOutput } from './types.js';
 
 export class LiveStreamManager {
   private streams: Map<string, LiveStreamSession> = new Map();
   private defaultRtmpUrl: string;
+  private ffmpegPath: string;
 
-  constructor(defaultRtmpUrl: string = '') {
+  constructor(defaultRtmpUrl: string = '', ffmpegPath: string = 'ffmpeg') {
     this.defaultRtmpUrl = defaultRtmpUrl;
+    // Unified on config.recording.ffmpegPath (default 'ffmpeg').
+    this.ffmpegPath = ffmpegPath;
   }
 
   async startLiveStream(room: Room, options: LiveStreamOptions): Promise<LiveStreamSession> {
     const streamId = `stream_${room.id}_${Date.now()}`;
-    const rtmpUrl = options.rtmpUrl || this.defaultRtmpUrl;
-
-    if (!rtmpUrl) {
-      throw new Error('RTMP URL is required');
+    
+    // Support multiple output targets (RTMP + SRT)
+    const outputs: Array<{url: string, args: string[]}> = [];
+    
+    // Primary RTMP output
+    if (options.rtmpUrl || this.defaultRtmpUrl) {
+      const rtmpUrl = options.rtmpUrl || this.defaultRtmpUrl;
+      const fullUrl = `${rtmpUrl}/${options.streamKey}`;
+      outputs.push({ url: fullUrl, args: this.buildRtmpArgs(options, fullUrl) });
+    }
+    
+    // Additional RTMP outputs (YouTube, Twitch, Custom)
+    if (options.rtmpOutputs && options.rtmpOutputs.length > 0) {
+      for (const output of options.rtmpOutputs) {
+        outputs.push({ url: output.url, args: this.buildRtmpArgs(options, output.url) });
+      }
+    }
+    
+    // SRT output
+    if (options.srtUrl) {
+      outputs.push({ url: options.srtUrl, args: this.buildSrtArgs(options, options.srtUrl) });
+    }
+    
+    if (outputs.length === 0) {
+      throw new Error('At least one output URL (RTMP or SRT) is required');
     }
 
-    const fullUrl = `${rtmpUrl}/${options.streamKey}`;
-    const ffmpegArgs = this.buildFfmpegArgs(options, fullUrl);
+    // For multiple outputs, we use tee muxer
+    const ffmpegArgs = outputs.length === 1 
+      ? outputs[0].args 
+      : this.buildTeeArgs(options, outputs);
 
-    console.log(`Starting live stream ${streamId} for room ${room.id} to ${rtmpUrl}`);
-    console.log(`FFmpeg command: ffmpeg ${ffmpegArgs.join(' ')}`);
+    console.log(`Starting live stream ${streamId} for room ${room.id} to ${outputs.length} output(s)`);
+    console.log(`FFmpeg command: ${this.ffmpegPath} ${this.redactForLog(ffmpegArgs, options)}`);
 
-    const process = spawn('ffmpeg', ffmpegArgs, {
+    const process = spawn(this.ffmpegPath, ffmpegArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: false,
     });
@@ -31,7 +57,7 @@ export class LiveStreamManager {
     const session: LiveStreamSession = {
       id: streamId,
       roomId: room.id,
-      options: { ...options, rtmpUrl: fullUrl },
+      options: { ...options, rtmpUrl: outputs[0].url },
       process,
       startedAt: Date.now(),
       status: 'starting',
@@ -39,6 +65,9 @@ export class LiveStreamManager {
 
     this.streams.set(streamId, session);
     room.liveStream = session;
+
+    let startReject: ((err: Error) => void) | undefined;
+    let startTimeout: NodeJS.Timeout | undefined;
 
     process.stdout?.on('data', (data) => {
       console.debug(`[LiveStream ${streamId}] stdout: ${data}`);
@@ -60,21 +89,32 @@ export class LiveStreamManager {
     process.on('error', (error) => {
       console.error(`Live stream ${streamId} error:`, error);
       session.status = 'error';
+      if (startTimeout) clearTimeout(startTimeout);
+      startTimeout = undefined;
+      startReject?.(error);
+      startReject = undefined;
     });
 
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      startReject = reject;
+      startTimeout = setTimeout(() => {
+        startReject = undefined;
+        startTimeout = undefined;
         reject(new Error('Live stream start timeout'));
       }, 15000);
 
-      process.stderr?.on('data', (data) => {
+      const onData = (data: Buffer) => {
         const output = data.toString();
         if (output.includes('Output #0') || output.includes('Press [q] to stop')) {
-          clearTimeout(timeout);
+          if (startTimeout) clearTimeout(startTimeout);
+          startTimeout = undefined;
+          startReject = undefined;
+          process.stderr?.off('data', onData);
           session.status = 'active';
           resolve();
         }
-      });
+      };
+      process.stderr?.on('data', onData);
     });
 
     return session;
@@ -90,13 +130,26 @@ export class LiveStreamManager {
     if (session.process && !session.process.killed) {
       session.process.stdin?.write('q');
       await new Promise<void>((resolve) => {
-        session.process.on('close', () => resolve());
-        setTimeout(() => {
-          if (!session.process.killed) {
-            session.process.kill('SIGKILL');
-          }
+        const proc: ChildProcess = session.process;
+        const onClose = () => {
+          if (termTimer) clearTimeout(termTimer);
+          if (killTimer) clearTimeout(killTimer);
+          proc.off('close', onClose);
           resolve();
+        };
+        proc.on('close', onClose);
+        const termTimer = setTimeout(() => {
+          if (!proc.killed) {
+            proc.kill('SIGTERM');
+          }
         }, 5000);
+        const killTimer = setTimeout(() => {
+          if (!proc.killed) {
+            proc.kill('SIGKILL');
+          }
+          proc.off('close', onClose);
+          resolve();
+        }, 10000);
       });
     }
 
@@ -118,9 +171,10 @@ export class LiveStreamManager {
     return Array.from(this.streams.values());
   }
 
-  private buildFfmpegArgs(options: LiveStreamOptions, rtmpUrl: string): string[] {
+  private buildRtmpArgs(options: LiveStreamOptions, rtmpUrl: string): string[] {
     const args: string[] = [
       '-y',
+      '-re',
       '-f', 'rawvideo',
       '-pix_fmt', 'yuv420p',
       '-s', `${options.width}x${options.height}`,
@@ -135,6 +189,8 @@ export class LiveStreamManager {
     args.push(
       '-c:v', 'libx264',
       '-b:v', `${options.videoBitrate}k`,
+      '-maxrate', `${options.videoBitrate}k`,
+      '-bufsize', `${options.videoBitrate * 2}k`,
       '-preset', 'veryfast',
       '-tune', 'zerolatency',
       '-g', String(options.framerate * 2),
@@ -145,7 +201,102 @@ export class LiveStreamManager {
       args.push('-c:a', 'aac', '-b:a', `${options.audioBitrate}k`, '-ar', '44100');
     }
 
-    args.push(rtmpUrl);
+    args.push(
+      '-reconnect', '1',
+      '-reconnect_streamed', '1',
+      '-reconnect_delay_max', '5',
+      rtmpUrl,
+    );
+
+    return args;
+  }
+
+  private buildSrtArgs(options: LiveStreamOptions, srtUrl: string): string[] {
+    const args: string[] = [
+      '-y',
+      '-re',
+      '-f', 'rawvideo',
+      '-pix_fmt', 'yuv420p',
+      '-s', `${options.width}x${options.height}`,
+      '-r', String(options.framerate),
+      '-i', '-',
+    ];
+
+    if (options.includeAudio) {
+      args.push('-f', 's16le', '-ar', '48000', '-ac', '2', '-i', '-');
+    }
+
+    args.push(
+      '-c:v', 'libx264',
+      '-b:v', `${options.videoBitrate}k`,
+      '-maxrate', `${options.videoBitrate}k`,
+      '-bufsize', `${options.videoBitrate * 2}k`,
+      '-preset', 'veryfast',
+      '-tune', 'zerolatency',
+      '-g', String(options.framerate * 2),
+      '-f', 'mpegts',
+    );
+
+    if (options.includeAudio) {
+      args.push('-c:a', 'aac', '-b:a', `${options.audioBitrate}k`, '-ar', '44100');
+    }
+
+    // SRT options for low latency
+    const srtOptions = `srt://${srtUrl}?mode=caller&latency=120&peerlatency=120&pbkeylen=0`;
+    args.push(srtOptions);
+
+    return args;
+  }
+
+  private buildTeeArgs(options: LiveStreamOptions, outputs: Array<{url: string, args: string[]}>): string[] {
+    const args: string[] = [
+      '-y',
+      '-re',
+      '-f', 'rawvideo',
+      '-pix_fmt', 'yuv420p',
+      '-s', `${options.width}x${options.height}`,
+      '-r', String(options.framerate),
+      '-i', '-',
+    ];
+
+    if (options.includeAudio) {
+      args.push('-f', 's16le', '-ar', '48000', '-ac', '2', '-i', '-');
+    }
+
+    // Build filter complex for tee muxer
+    let filterComplex = '';
+    const outputSelectors: string[] = [];
+    
+    outputs.forEach((output, index) => {
+      const selector = `[out${index}]`;
+      outputSelectors.push(selector);
+      
+      if (output.url.startsWith('srt://')) {
+        filterComplex += `${selector} -c:v libx264 -b:v ${options.videoBitrate}k -preset veryfast -tune zerolatency -g ${options.framerate * 2} -f mpegts `;
+        if (options.includeAudio) {
+          filterComplex += `-c:a aac -b:a ${options.audioBitrate}k -ar 44100 `;
+        }
+        filterComplex += `${output.url}|`;
+      } else {
+        filterComplex += `${selector} -c:v libx264 -b:v ${options.videoBitrate}k -preset veryfast -tune zerolatency -g ${options.framerate * 2} -f flv `;
+        if (options.includeAudio) {
+          filterComplex += `-c:a aac -b:a ${options.audioBitrate}k -ar 44100 `;
+        }
+        filterComplex += `${output.url}|`;
+      }
+    });
+    
+    // Remove trailing |
+    filterComplex = filterComplex.slice(0, -1);
+
+    args.push(
+      '-filter_complex', filterComplex,
+      '-map', '0:v',
+    );
+    
+    if (options.includeAudio) {
+      args.push('-map', '1:a');
+    }
 
     return args;
   }
@@ -153,6 +304,18 @@ export class LiveStreamManager {
   buildLayoutFilter(options: LiveStreamOptions): string {
     // Similar to recording layouts but optimized for streaming
     return this.buildGridLayout(9, options.width, options.height);
+  }
+
+  private redactForLog(args: string[], options: LiveStreamOptions): string {
+    const secrets = [
+      options.streamKey,
+      ...(options.rtmpOutputs ?? []).map((o) => o.streamKey).filter((k): k is string => Boolean(k)),
+    ].filter(Boolean);
+    let cmd = args.join(' ');
+    for (const secret of secrets) {
+      cmd = cmd.split(secret).join('[REDACTED]');
+    }
+    return cmd;
   }
 
   private buildGridLayout(count: number, width: number, height: number): string {

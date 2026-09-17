@@ -4,17 +4,18 @@ import { theme as antdTheme } from 'antd';
 /**
  * ═══ الثيم المركزي للوحة يونس السيادية (فرونت فقط) ═══
  *
- * كل ألوان Ant Design تُعرَّف هنا مرة واحدة، و`App.tsx` يستهلكها عبر
- * `buildYounesTheme(resolved)` — لا كائنات theme مبعثرة في الملفات.
- * القيم مطابقة لمتغيرات `src/styles.css` (`--yns-*`) حتى لا يخرج antd
- * عن الهوية الداكنة-الذهبية، ومطابقة لحارس التباين WCAG في
- * `scripts/check-contrast.mjs` (لا تُخفَّض أي قيمة دون حدّها).
+ * المصدر الوحيد لثيم Ant Design: `App.tsx` يستهلكه عبر
+ * `theme={buildYounesTheme(resolvedTheme)}` — لا كائنات theme مبعثرة
+ * (حُذف الثيم الـinline الذهبي #B78A2E من App.tsx لصالح هذا الملف).
  *
- * ملاحظة مالك (مقصودة لا سهوًا): في الوضع الداكن `colorSuccess`
- * ذهبي (#B78A2E) مطابق لـ `--yns-success` — لأن الأخضر الحقيقي على
- * الخلفية الداكنة كان راسبًا (2.16:1) فاعتُمد الذهبي عمدًا. إن أراد
- * المالك أخضر نجاح حقيقيًا في الداكن، القرار له والقيمة المقترحة
- * `#3DD68C` مع تحديث `--yns-success` والحارس معًا.
+ * اللون الواحد للعلامة: #14C79A (داكن) — وفي الفاتح درجته المتاحة
+ * #007A5E من نفس التدرج الزمردي (5.8:1 على #F7F8FA)، لأن #14C79A
+ * مع نص أبيض راسب (2.16:1) فلا يُستعمل كأساسي في الفاتح.
+ *
+ * الحياديات مطابقة لـ `src/styles.css` (`--yns-*`) ولـ `App.tsx`:
+ * الخلفية #0A0F14 والسطح #141C24 والحدود #2C3A4A والتحذير #E0A83C.
+ * حارس التباين `scripts/check-contrast.mjs` يقرأ `--yns-*` من styles.css
+ * (لا تُخفَّض أي قيمة دون حدّها).
  */
 
 export type YounesThemeMode = 'light' | 'dark' | 'system';
@@ -25,18 +26,18 @@ export const YNS_THEME_STORAGE_KEY = 'yns-theme';
 
 const FONT_STACK = "'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif";
 
-/** لوحة الداكن السيادية: زمرد للعمل وذهب للتمييز — مطابقة لـ :root في styles.css
- *  متوازنة 2026: أسطح مرفوعة قليلاً عن السواد التام لتمييز البطاقات دون إزعاج */
+/** لوحة الداكن السيادية: زمرد #14C79A للعمل — مطابقة لـ :root في styles.css
+ *  (--yns-dark/surface/border) ولكائن App.tsx الـinline سابقًا */
 const darkToken: ThemeConfig['token'] = {
   colorPrimary: '#14C79A',
   colorSuccess: '#14C79A',
-  colorWarning: '#E0B551',
+  colorWarning: '#E0A83C',
   colorError: '#FF5A5F',
   colorInfo: '#4FC3F7',
-  colorBgBase: '#0E1621',
-  colorBgContainer: '#182635',
-  colorBgLayout: '#0E1621',
-  colorBorder: '#33465C',
+  colorBgBase: '#0A0F14',
+  colorBgContainer: '#141C24',
+  colorBgLayout: '#0A0F14',
+  colorBorder: '#2C3A4A',
   colorText: '#F2F6F8',
   colorTextSecondary: '#9AAEBB',
   colorTextTertiary: '#7C90A0',
@@ -81,7 +82,7 @@ export function buildYounesTheme(resolved: YounesResolvedTheme): ThemeConfig {
         itemMarginInline: 10,
       },
       Layout: {
-        siderBg: '#0E1621',
+        siderBg: '#0A1014',
         headerBg: dark ? 'rgba(8, 21, 37, 0.85)' : 'rgba(255,255,255,0.85)',
         headerHeight: 64,
       },

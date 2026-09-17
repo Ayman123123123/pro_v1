@@ -1,10 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type FC } from 'react';
 import { Card, Row, Col, Statistic, Button, Modal, Input, Alert, Tag, Space, Table, message } from 'antd';
 import { SafetyOutlined, WarningOutlined, DeleteOutlined, LockOutlined } from '@ant-design/icons';
 import { activateKillSwitch, getAuditLog, getOperationsOverview, requestSecurityWipe } from '../../api';
 import { usePolling } from '../../hooks/usePolling';
 
-const SecurityTab: React.FC = () => {
+const SecurityTab: FC = () => {
   const [killSwitchModal, setKillSwitchModal] = useState(false);
   const [wipeModal, setWipeModal] = useState(false);
   const [targetUserId, setTargetUserId] = useState('');
@@ -134,14 +134,14 @@ const SecurityTab: React.FC = () => {
         okButtonProps={{ danger: true }} okText="تأكيد المسح الشامل">
         <Alert message="سيتم مسح كل الأجهزة فوراً!" type="error" showIcon />
         <Input.TextArea style={{ marginTop: 16 }} placeholder="سبب تفعيل Kill Switch..."
-          value={reason} onChange={e => setReason(e.target.value)} rows={3} />
+          value={reason} onChange={(e: any) => setReason(e.target.value)} rows={3} />
       </Modal>
 
       <Modal title="مسح عن بُعد — حساب واحد" open={wipeModal}
         onOk={handleWipe} onCancel={() => setWipeModal(false)}
         okButtonProps={{ danger: true }}>
         <Input placeholder="معرّف المستخدم (UUID أو RED ID)" value={targetUserId}
-          onChange={e => setTargetUserId(e.target.value)} />
+          onChange={(e: any) => setTargetUserId(e.target.value)} />
       </Modal>
     </div>
   );

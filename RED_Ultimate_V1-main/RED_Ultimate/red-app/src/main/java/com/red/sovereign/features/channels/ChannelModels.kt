@@ -1,7 +1,6 @@
 package com.red.sovereign.features.channels
 
 import kotlinx.serialization.Serializable
-import kotlinx.datetime.Instant
 
 @Serializable
 data class Channel(
@@ -279,22 +278,9 @@ data class NearbyChannel(
     val isOptedIn: Boolean = true,
 )
 
-@Serializable
-data class ChannelRecommendation(
-    val channel: Channel,
-    val score: Double,
-    val reason: RecommendationReason,
-)
-
-@Serializable
-enum class RecommendationReason {
-    SIMILAR_INTERESTS,
-    TRENDING_IN_AREA,
-    FRIENDS_SUBSCRIBED,
-    HIGH_ENGAGEMENT,
-    NEW_CONTENT,
-    CATEGORY_MATCH,
-}
+// NOTE: canonical ChannelRecommendation + RecommendationReason live in MLDiscoveryModel.kt
+// (on-device ML versions with confidence/features). The stubs that were here
+// duplicated those symbols and broke compilation — removed 2026-09-17.
 
 @Serializable
 data class ChannelSettings(

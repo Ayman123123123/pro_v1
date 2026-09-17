@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    YOUNES/RED Sovereign — Theme Styles — DARK override (values-night/)
+    يعوّض Theme.Younes الفاتح من values/styles.xml ليلًا فقط؛ كل أنماط
+    الودجت والنصوص مشتركة هناك وتتبدل ألوانها عبر @color/yns_* الليلية.
+    windowLightStatusBar=false (أيقونات فاتحة على شريط داكن).
+-->
+<resources>
+    <!-- ===== THEME BASE — DARK ===== -->
+    <style name="Theme.Younes" parent="android:style/Theme.Material.NoActionBar">
+        <!-- الألوان الأساسية -->
+        <item name="android:colorPrimary">@color/yns_primary</item>
+        <item name="android:colorPrimaryDark">@color/yns_primary_dark</item>
+        <item name="android:colorAccent">@color/yns_secondary</item>
+        <item name="android:colorForeground">@color/yns_on_background</item>
+        <item name="android:colorBackground">@color/yns_background</item>
+        <item name="android:colorError">@color/yns_error</item>
+
+        <!-- النوافذ -->
+        <item name="android:windowBackground">@color/yns_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@color/yns_status_bar</item>
+        <item name="android:navigationBarColor">@color/yns_navigation_bar</item>
+        <item name="android:windowNoTitle">true</item>
+
+        <!-- الخطوط -->
+        <item name="android:fontFamily">@font/plex_arabic</item>
+        <item name="android:textColorPrimary">@color/yns_text_primary</item>
+        <item name="android:textColorSecondary">@color/yns_text_secondary</item>
+        <item name="android:textColorTertiary">@color/yns_text_tertiary</item>
+        <item name="android:textColorHint">@color/yns_text_tertiary</item>
+
+        <!-- الأزرار -->
+        <item name="android:buttonStyle">@style/Widget.Younes.Button</item>
+
+        <!-- أزرار التبديل والإضافات المصغرة -->
+        <item name="android:checkboxStyle">@style/Widget.Younes.CheckBox</item>
+        <item name="android:radioButtonStyle">@style/Widget.Younes.RadioButton</item>
+        <item name="android:switchStyle">@style/Widget.Younes.Switch</item>
+
+        <!-- الإدخالات -->
+        <item name="android:editTextStyle">@style/Widget.Younes.EditText</item>
+
+        <item name="android:editTextColor">@color/yns_text_primary</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowIsTranslucent">false</item>
+
+        <!-- الظلال والارتفاع -->
+        <item name="android:elevation">0dp</item>
+        <item name="android:outlineSpotShadowColor">@android:color/transparent</item>
+    </style>
+</resources>

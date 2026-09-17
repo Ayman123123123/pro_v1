@@ -1,17 +1,16 @@
 import { useState } from 'react';
-import { Database, Filter, Plus, Edit, Trash2, MoreVertical, Eye, Download, RefreshCw } from 'lucide-react';
+import { Plus, Edit, MoreVertical, Eye, Download, RefreshCw } from 'lucide-react';
 import { useConfig, mutations } from '@/api/queries';
-import { cn } from '@/utils';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
-import { Select } from '@/components/ui/SearchInput';
+import { Select } from '@/components/ui/Select';
 import { DataTable } from '@/components/ui/DataTable';
 import { Pagination } from '@/components/ui/Pagination';
 import { Badge } from '@/components/ui/Badge';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
 import { Dialog } from '@/components/ui/Dialog';
-import { Form } from '@/components/ui/Form';
+import { Form, FormField } from '@/components/ui/Form';
 
 const TYPE_OPTIONS = [
   { value: '', label: 'All Types' },
@@ -24,7 +23,7 @@ const TYPE_OPTIONS = [
 export function ConfigPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(0);
-  const [size, setSize] = useState(25);
+  const [size] = useState(25);
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -38,7 +37,7 @@ export function ConfigPage() {
   const columns = [
     {
       key: 'key',
-      header: 'Key',
+      title: 'Key',
       cell: (config: any) => (
         <div>
           <p className="font-mono font-medium text-yn-text">{config.key}</p>
@@ -47,7 +46,7 @@ export function ConfigPage() {
     },
     {
       key: 'value',
-      header: 'Value',
+      title: 'Value',
       cell: (config: any) => (
         <span className="font-mono text-yn-text-secondary max-w-xs truncate block">
           {config.type === 'JSON' ? JSON.stringify(config.value) : config.value}
@@ -56,32 +55,32 @@ export function ConfigPage() {
     },
     {
       key: 'type',
-      header: 'Type',
+      title: 'Type',
       cell: (config: any) => <Badge variant="blue">{config.type}</Badge>,
     },
     {
       key: 'version',
-      header: 'Version',
+      title: 'Version',
       cell: (config: any) => <span className="text-yn-text-secondary font-mono">v{config.version}</span>,
     },
     {
       key: 'description',
-      header: 'Description',
+      title: 'Description',
       cell: (config: any) => <span className="text-yn-text-muted max-w-xs truncate block">{config.description || '—'}</span>,
     },
     {
       key: 'updatedAt',
-      header: 'Updated',
+      title: 'Updated',
       cell: (config: any) => <span className="text-yn-text-secondary">{new Date(config.updatedAt).toLocaleString()}</span>,
     },
     {
       key: 'updatedBy',
-      header: 'Updated By',
+      title: 'Updated By',
       cell: (config: any) => <span className="text-yn-text-secondary">{config.updatedBy}</span>,
     },
     {
       key: 'actions',
-      header: 'Actions',
+      title: 'Actions',
       cell: (config: any) => (
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
@@ -143,18 +142,15 @@ export function ConfigPage() {
         
         {data && (
           <Pagination
-            currentPage={data.page}
+            page={data.page}
             totalPages={data.totalPages}
-            totalItems={data.totalElements}
-            onPageChange={setPage}
-            onPageSizeChange={setSize}
-            pageSize={size}
+            onChange={setPage}
           />
         )}
       </div>
       
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title={editingConfig ? 'Edit Configuration' : 'Add Configuration'}>
-        <Form onSubmit={(data) => {
+        <Form onSubmit={(data: any) => {
           if (editingConfig) {
             updateMutation.mutate({ key: editingConfig.key, value: data.value, description: data.description });
           } else {
@@ -163,12 +159,14 @@ export function ConfigPage() {
           setDialogOpen(false);
           setEditingConfig(null);
         }} initialValues={editingConfig || {}}>
-          <Form.Field name="key" label="Key" placeholder="config.key" required />
-          <Form.Field name="value" label="Value" placeholder="value" required />
-          <Form.Field name="type" label="Type" type="select" options={TYPE_OPTIONS.filter(o => o.value)} required />
-          <Form.Field name="description" label="Description" type="textarea" placeholder="Description" />
+          <FormField name="key" label="Key" placeholder="config.key" required />
+          <FormField name="value" label="Value" placeholder="value" required />
+          <FormField name="type" label="Type" type="select" options={TYPE_OPTIONS.filter(o => o.value)} required />
+          <FormField name="description" label="Description" type="textarea" placeholder="Description" />
         </Form>
       </Dialog>
     </div>
   );
 }
+
+export default ConfigPage;

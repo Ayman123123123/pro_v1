@@ -5,6 +5,7 @@ import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 /**
  * 🔔 YOUNES Notification Service
@@ -20,11 +21,16 @@ class NotificationService(
     private val log = LoggerFactory.getLogger(javaClass)
 
     companion object {
-        private const val NOTIF_LIST_PREFIX = "notifications:"
-        private const val NOTIF_DATA_PREFIX = "notif:data:"
-        private const val UNREAD_PREFIX = "notifications:unread:"
-        private const val PREFS_PREFIX = "notifications:prefs:"
+        // P9-موحّد: كل الإشعارات تحت red:notify:* — نفس البادئة التي يستخدمها RedisManager
+        // (كانت notifications:/notif:data: مشتتة مع red:notify:queue/unread في نظامين متوازيين).
+        // مفاتيح legacy (notifications:*, notif:data:*) لا تُقرأ بعد التوحيد وتُحذف في cleanUserData.
+        private const val NOTIF_LIST_PREFIX = "red:notify:queue:"
+        private const val NOTIF_DATA_PREFIX = "red:notify:data:"
+        private const val UNREAD_PREFIX = "red:notify:unread:"
+        private const val PREFS_PREFIX = "red:notify:prefs:"
         private const val MAX_NOTIFICATIONS = 500L
+        // P9: كل كتابة تضبط EXPIRE صريح — لا مفاتيح خالدة.
+        private const val NOTIF_TTL_DAYS = 30L
     }
 
     /**
@@ -90,10 +96,12 @@ class NotificationService(
             put(dataKey, "isRead", "false")
             put(dataKey, "createdAt", now.toString())
         }
+        redis.expire(dataKey, NOTIF_TTL_DAYS, TimeUnit.DAYS) // P9: TTL صريح لكل هاش إشعار
 
         // إضافة للقائمة (الأحدث أولاً)
         val listKey = NOTIF_LIST_PREFIX + userId
         redis.opsForList().leftPush(listKey, id)
+        redis.expire(listKey, NOTIF_TTL_DAYS, TimeUnit.DAYS) // P9: TTL صريح للقائمة
 
         // تقليم القائمة
         val size = redis.opsForList().size(listKey) ?: 0
@@ -108,6 +116,7 @@ class NotificationService(
 
         // تحديث عداد غير المقروء
         redis.opsForValue().increment(UNREAD_PREFIX + userId)
+        redis.expire(UNREAD_PREFIX + userId, NOTIF_TTL_DAYS, TimeUnit.DAYS) // P9: TTL منزلق للعداد
 
         log.debug("Notification created for {}: {} - {}", userId, type, title)
 
@@ -153,7 +162,9 @@ class NotificationService(
         val data = redis.opsForHash<String, String>().entries(NOTIF_DATA_PREFIX + notificationId)
         if (data.isNotEmpty() && data["userId"] == userId && data["isRead"] != "true") {
             redis.opsForHash<String, String>().put(NOTIF_DATA_PREFIX + notificationId, "isRead", "true")
+            redis.expire(NOTIF_DATA_PREFIX + notificationId, NOTIF_TTL_DAYS, TimeUnit.DAYS) // P9: إبقاء TTL بعد الكتابة
             redis.opsForValue().decrement(UNREAD_PREFIX + userId)
+            redis.expire(UNREAD_PREFIX + userId, NOTIF_TTL_DAYS, TimeUnit.DAYS) // P9: إبقاء TTL للعداد
         }
     }
 
@@ -163,9 +174,10 @@ class NotificationService(
 
         ids.forEach { id ->
             redis.opsForHash<String, String>().put(NOTIF_DATA_PREFIX + id, "isRead", "true")
+            redis.expire(NOTIF_DATA_PREFIX + id, NOTIF_TTL_DAYS, TimeUnit.DAYS) // P9: إبقاء TTL بعد الكتابة
         }
 
-        redis.opsForValue().set(UNREAD_PREFIX + userId, "0")
+        redis.opsForValue().set(UNREAD_PREFIX + userId, "0", NOTIF_TTL_DAYS, TimeUnit.DAYS) // P9: TTL صريح
     }
 
     fun delete(userId: String, notificationId: String) {
@@ -212,6 +224,8 @@ class NotificationService(
         ops.put(key, "quietHoursEnabled", prefs.quietHoursEnabled.toString())
         prefs.quietHoursStart?.let { ops.put(key, "quietHoursStart", it) }
         prefs.quietHoursEnd?.let { ops.put(key, "quietHoursEnd", it) }
+        // P9: TTL منزلق — مستخدم نشط يحتفظ بتفضيلاته؛ خامل 30d يعود للافتراضي.
+        redis.expire(key, NOTIF_TTL_DAYS, TimeUnit.DAYS)
 
         return prefs
     }

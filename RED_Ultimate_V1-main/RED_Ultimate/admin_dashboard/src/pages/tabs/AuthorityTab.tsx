@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Card, Descriptions, Input, message, Modal, Space, Table, Tag, Typography } from 'antd';
 import { CheckOutlined, CloseOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { apiFetch } from '../../api';
@@ -56,12 +56,12 @@ export default function AuthorityTab() {
 
   return <Card title="سلطة اعتماد حسابات يونس" extra={<Button onClick={fetchPending}>تحديث</Button>}>
     <Table dataSource={users} columns={columns} rowKey="id" loading={loading} scroll={{x: 1050}}
-      expandable={{ expandedRowRender: u => <Descriptions bordered size="small" column={1}>
-        {u.devices.map(d => <Descriptions.Item key={d.id} label={`${d.deviceName} — بصمة مفتاح الهوية`}><Typography.Text copyable code>{d.identityFingerprint}</Typography.Text></Descriptions.Item>)}
+      expandable={{ expandedRowRender: (u: PendingUser) => <Descriptions bordered size="small" column={1}>
+        {u.devices.map((d: Device) => <Descriptions.Item key={d.id} label={`${d.deviceName} — بصمة مفتاح الهوية`}><Typography.Text copyable code>{d.identityFingerprint}</Typography.Text></Descriptions.Item>)}
       </Descriptions> }} />
     <Modal title={`رفض حساب ${rejecting?.redId || ''}`} open={Boolean(rejecting)} okText="تأكيد الرفض" cancelText="إلغاء" okButtonProps={{danger:true}}
       onCancel={() => setRejecting(null)} onOk={async () => { if (!rejecting) return; try { await action(rejecting, 'REJECTED', reason); setRejecting(null); } catch(e:any) { message.error(e.message); } }}>
-      <Input.TextArea value={reason} onChange={e => setReason(e.target.value)} rows={4} placeholder="سبب الرفض (اختياري ويظهر لصاحب الحساب)" />
+      <Input.TextArea value={reason} onChange={(e: any) => setReason(e.target.value)} rows={4} placeholder="سبب الرفض (اختياري ويظهر لصاحب الحساب)" />
     </Modal>
   </Card>;
 }

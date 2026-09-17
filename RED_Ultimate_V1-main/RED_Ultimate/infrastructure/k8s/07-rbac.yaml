@@ -17,7 +17,7 @@ metadata:
     component: backend
 rules:
   - apiGroups: [""]
-    resources: ["pods", "services", "configmaps", "secrets"]
+    resources: ["pods", "services", "configmaps"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets"]

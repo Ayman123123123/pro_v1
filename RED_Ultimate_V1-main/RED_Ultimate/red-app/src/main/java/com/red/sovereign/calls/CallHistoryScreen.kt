@@ -57,8 +57,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.ui.theme.AqyalGold
-import com.red.sovereign.ui.theme.SovereignColors
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -111,26 +111,26 @@ fun CallHistoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("سجل المكالمات", color = Color.White) },
+                title = { Text("سجل المكالمات", color = MaterialTheme.colorScheme.onSurface) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = SovereignColors.SurfaceDark,
-                    titleContentColor = Color.White
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.CallEnd, "رجوع", tint = Color.White)
+                        Icon(Icons.Default.CallEnd, "رجوع", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
                 actions = {
                     IconButton(onClick = { showFilterMenu = !showFilterMenu }) {
-                        Icon(Icons.Default.FilterList, "تصفية", tint = Color.White)
+                        Icon(Icons.Default.FilterList, "تصفية", tint = MaterialTheme.colorScheme.onSurface)
                     }
                     IconButton(onClick = {
                         viewModel.exportCsvFile(context)?.let { file ->
                             // Open share/save dialog
                         }
                     }) {
-                        Icon(Icons.Default.History, "تصدير", tint = Color.White)
+                        Icon(Icons.Default.History, "تصدير", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             )
@@ -157,32 +157,32 @@ fun CallHistoryScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(52.dp),
-                    placeholder = { Text("بحث بالاسم أو الرقم...", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, "بحث", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) },
+                    placeholder = { Text("بحث بالاسم أو الرقم...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, "بحث", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
                     trailingIcon = {
                         if (viewModel.searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.onSearchChange("") }) {
-                                Icon(Icons.Default.CallEnd, "مسح", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.CallEnd, "مسح", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             }
                         }
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = SovereignColors.SurfaceDarkVariant,
-                        unfocusedContainerColor = SovereignColors.SurfaceDarkVariant,
-                        focusedBorderColor = AqyalGold.copy(alpha = 0.6f),
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        cursorColor = AqyalGold
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedBorderColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f),
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        cursorColor = MaterialTheme.colorScheme.tertiary
                     )
                 )
                 IconButton(
                     onClick = { showFilterMenu = !showFilterMenu },
                     modifier = Modifier.size(48.dp)
                 ) {
-                    Icon(Icons.Default.FilterList, "تصفية", tint = AqyalGold)
+                    Icon(Icons.Default.FilterList, "تصفية", tint = MaterialTheme.colorScheme.tertiary)
                 }
             }
 
@@ -193,7 +193,7 @@ fun CallHistoryScreen(
             ) {
                 CallFilterType.values().forEach { filter ->
                     DropdownMenuItem(
-                        text = { Text(filter.label, color = if (viewModel.selectedFilter == filter) AqyalGold else Color.White) },
+                        text = { Text(filter.label, color = if (viewModel.selectedFilter == filter) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface) },
                         onClick = {
                             viewModel.onFilterChange(filter)
                             showFilterMenu = false
@@ -227,7 +227,7 @@ fun CallHistoryScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = AqyalGold)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
                 viewModel.error != null -> {
@@ -236,12 +236,12 @@ fun CallHistoryScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Icon(Icons.Default.Warning, "خطأ", tint = Color.Red, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.Warning, "خطأ", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(8.dp))
-                        Text(viewModel.error ?: "حدث خطأ", color = Color.Red)
+                        Text(viewModel.error ?: "حدث خطأ", color = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.height(8.dp))
                         IconButton(onClick = { viewModel.load() }) {
-                            Icon(Icons.Default.Call, "إعادة تحميل", tint = AqyalGold, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.Call, "إعادة تحميل", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                         }
                     }
                 }
@@ -251,19 +251,19 @@ fun CallHistoryScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Icon(Icons.Default.History, "لا يوجد سجل", tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(64.dp))
+                        Icon(Icons.Default.History, "لا يوجد سجل", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f), modifier = Modifier.size(64.dp))
                         Spacer(Modifier.height(8.dp))
                         Text(
                             if (viewModel.searchQuery.isNotBlank()) "لا نتائج لـ \"${viewModel.searchQuery}\""
                             else "لا توجد مكالمات",
-                            color = Color.White.copy(alpha = 0.5f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                         if (viewModel.searchQuery.isNotBlank() || viewModel.selectedFilter != CallFilterType.ALL) {
                             Spacer(Modifier.height(8.dp))
                             androidx.compose.material3.TextButton(onClick = {
                                 viewModel.onSearchChange("")
                                 viewModel.onFilterChange(CallFilterType.ALL)
-                            }) { Text("مسح البحث والفلتر", color = AqyalGold) }
+                            }) { Text("مسح البحث والفلتر", color = MaterialTheme.colorScheme.tertiary) }
                         }
                     }
                 }
@@ -288,14 +288,14 @@ fun CallHistoryScreen(
                             ) {
                                 Text(
                                     "عرض ${viewModel.pagedCalls.size} من ${viewModel.filteredCalls.size}",
-                                    color = Color.White.copy(alpha = 0.45f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                                     fontSize = 11.sp
                                 )
                                 if (viewModel.isLoadingMore) {
-                                    CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                    CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                                 } else if (viewModel.hasMore) {
                                     androidx.compose.material3.TextButton(onClick = { viewModel.loadMore() }) {
-                                        Text("تحميل المزيد", color = AqyalGold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text("تحميل المزيد", color = MaterialTheme.colorScheme.tertiary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 Spacer(Modifier.height(16.dp))
@@ -312,13 +312,13 @@ fun CallHistoryScreen(
 fun CallHistoryStatsCard(stats: CallStatsSummary) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceDarkVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
         ) {
-            Text("إحصائيات سريعة", color = AqyalGold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("إحصائيات سريعة", color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -333,7 +333,7 @@ fun CallHistoryStatsCard(stats: CallStatsSummary) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "أكثر جهة اتصال: ${stats.topPeer.first} (${stats.topPeer.second} مكالمة)",
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
                 )
             }
@@ -344,8 +344,8 @@ fun CallHistoryStatsCard(stats: CallStatsSummary) {
 @Composable
 fun StatItem(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, color = AqyalGold, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
+        Text(value, color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
     }
 }
 
@@ -365,10 +365,10 @@ fun CallHistoryItemCard(
     // UX يتفوق على واتساب: ENDED تُحسب ناجحة (كانت رمادية مجهولة)، وحالات
     // عربية صريحة بدل رموز خام MISSED/NO_ANSWER.
     val iconColor = when {
-        call.status.equals("MISSED", ignoreCase = true) || call.status.equals("NO_ANSWER", ignoreCase = true) -> Color(0xFFF44336)
-        call.status.equals("ANSWERED", ignoreCase = true) || call.status.equals("COMPLETED", ignoreCase = true) || call.status.equals("ENDED", ignoreCase = true) -> Color(0xFF14C79A)
-        call.status.equals("REJECTED", ignoreCase = true) || call.status.equals("DECLINED", ignoreCase = true) -> Color(0xFFFF9800)
-        else -> Color.White.copy(alpha = 0.7f)
+        call.status.equals("MISSED", ignoreCase = true) || call.status.equals("NO_ANSWER", ignoreCase = true) -> MaterialTheme.colorScheme.error
+        call.status.equals("ANSWERED", ignoreCase = true) || call.status.equals("COMPLETED", ignoreCase = true) || call.status.equals("ENDED", ignoreCase = true) -> MaterialTheme.colorScheme.primary
+        call.status.equals("REJECTED", ignoreCase = true) || call.status.equals("DECLINED", ignoreCase = true) -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val statusAr = when {
         call.status.equals("MISSED", ignoreCase = true) -> "فائتة"
@@ -393,7 +393,7 @@ fun CallHistoryItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceDark),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
@@ -425,20 +425,20 @@ fun CallHistoryItemCard(
                 Column {
                     Text(
                         call.peerLabel.ifBlank { call.peerId },
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         "${if (call.direction.equals("INCOMING", true)) "واردة" else "صادرة"} • $typeAr",
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp
                     )
                     val dur = call.computedDurationSeconds().formatCallDuration()
                     Text(
                         if (dur.isNotBlank()) "المدة: $dur" else statusAr,
-                        color = Color.White.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontSize = 10.sp
                     )
                 }
@@ -446,7 +446,7 @@ fun CallHistoryItemCard(
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     formatDate(call.startedAt),
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
                 )
                 Spacer(Modifier.height(2.dp))
@@ -471,7 +471,7 @@ fun CallHistoryItemCard(
                         Icon(
                             if (call.type.equals("VIDEO", true)) Icons.Default.VideoCall else Icons.Default.Call,
                             "إعادة الاتصال",
-                            tint = Color(0xFF14C79A),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -479,7 +479,7 @@ fun CallHistoryItemCard(
                         onClick = { onDelete() },
                         modifier = Modifier.size(28.dp)
                     ) {
-                        Icon(Icons.Default.Delete, "حذف", tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Delete, "حذف", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
                     }
                 }
             }

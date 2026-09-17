@@ -9,8 +9,15 @@ service SFUService {
   rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
   rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
   rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
+  rpc CreateTransport(CreateTransportRequest) returns (CreateTransportResponse);
+  rpc ConnectTransport(ConnectTransportRequest) returns (ConnectTransportResponse);
+  rpc RestartIce(RestartIceRequest) returns (RestartIceResponse);
   rpc CreateProducer(CreateProducerRequest) returns (CreateProducerResponse);
   rpc CreateConsumer(CreateConsumerRequest) returns (CreateConsumerResponse);
+  rpc Pause(PauseRequest) returns (PauseResponse);
+  rpc Resume(ResumeRequest) returns (ResumeResponse);
+  rpc SetLayers(SetLayersRequest) returns (SetLayersResponse);
+  rpc KeyFrame(KeyFrameRequest) returns (KeyFrameResponse);
   rpc GetRoomStats(GetRoomStatsRequest) returns (RoomStats);
   rpc StartRecording(StartRecordingRequest) returns (StartRecordingResponse);
   rpc StopRecording(StopRecordingRequest) returns (StopRecordingResponse);
@@ -18,6 +25,7 @@ service SFUService {
   rpc StopLiveStream(StopLiveStreamRequest) returns (StopLiveStreamResponse);
   rpc GetWorkerStats(GetWorkerStatsRequest) returns (WorkerStats);
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc Subscribe(SubscribeRequest) returns (stream SfuEvent);
 }
 
 message CreateRoomRequest {
@@ -28,7 +36,7 @@ message CreateRoomRequest {
 
 message CreateRoomResponse {
   string room_id = 1;
-  RouterRTPCapabilities rtp_capabilities = 2;
+  RTPCapabilities rtp_capabilities = 2;
   int64 created_at = 3;
 }
 
@@ -39,11 +47,15 @@ message JoinRoomRequest {
   bool can_produce = 4;
   bool can_consume = 5;
   map<string, string> metadata = 6;
+  // Auth ticket (JWT, preferred — see auth.ts verifyTicket).
+  string ticket = 7;
+  // Alias for ticket; accepts raw JWT or "Bearer <JWT>" (see auth.ts authenticate).
+  string token = 8;
 }
 
 message JoinRoomResponse {
   string peer_id = 1;
-  RouterRTPCapabilities rtp_capabilities = 2;
+  RTPCapabilities rtp_capabilities = 2;
   repeated ProducerInfo existing_producers = 3;
   RoomInfo room_info = 4;
 }
@@ -55,6 +67,106 @@ message LeaveRoomRequest {
 
 message LeaveRoomResponse {
   bool success = 1;
+}
+
+message CreateTransportRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  TransportDirection direction = 3;
+}
+
+message CreateTransportResponse {
+  string transport_id = 1;
+  IceParameters ice_parameters = 2;
+  repeated IceCandidate ice_candidates = 3;
+  DtlsParameters dtls_parameters = 4;
+  SctpParameters sctp_parameters = 5;
+}
+
+message ConnectTransportRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  string transport_id = 3;
+  DtlsParameters dtls_parameters = 4;
+}
+
+message ConnectTransportResponse {
+  bool success = 1;
+}
+
+message RestartIceRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  string transport_id = 3;
+}
+
+message RestartIceResponse {
+  IceParameters ice_parameters = 1;
+}
+
+message PauseRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  // Set producer_id to pause a producer, or consumer_id to pause a consumer.
+  string producer_id = 3;
+  string consumer_id = 4;
+}
+
+message PauseResponse {
+  bool success = 1;
+}
+
+message ResumeRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  // Set producer_id to resume a producer, or consumer_id to resume a consumer.
+  string producer_id = 3;
+  string consumer_id = 4;
+}
+
+message ResumeResponse {
+  bool success = 1;
+}
+
+message SetLayersRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  string consumer_id = 3;
+  int32 spatial_layer = 4;
+  int32 temporal_layer = 5;
+}
+
+message SetLayersResponse {
+  bool success = 1;
+}
+
+message KeyFrameRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  string consumer_id = 3;
+}
+
+message KeyFrameResponse {
+  bool success = 1;
+}
+
+message SubscribeRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  string ticket = 3;
+  string token = 4;
+  repeated SfuEventType event_types = 5;
+}
+
+message SfuEvent {
+  SfuEventType type = 1;
+  string room_id = 2;
+  string peer_id = 3;
+  string producer_id = 4;
+  string consumer_id = 5;
+  string transport_id = 6;
+  map<string, string> payload = 7;
+  int64 timestamp_ms = 8;
 }
 
 message CreateProducerRequest {
@@ -116,7 +228,7 @@ message PeerStats {
 
 message ProducerStats {
   string producer_id = 1;
-  string kind = 2;
+  Kind kind = 2;
   int64 bytes_sent = 3;
   int64 packets_sent = 4;
   int64 packets_lost = 5;
@@ -126,7 +238,7 @@ message ProducerStats {
 
 message ConsumerStats {
   string consumer_id = 1;
-  string kind = 2;
+  Kind kind = 2;
   int64 bytes_received = 3;
   int64 packets_received = 4;
   int64 packets_lost = 5;
@@ -202,11 +314,12 @@ message WorkerInfo {
 message HealthCheckRequest {}
 
 message HealthCheckResponse {
-  string status = 1;
+  HealthStatus status = 1;
   int32 workers = 2;
   int32 rooms = 3;
   int32 peers = 4;
   int64 uptime_seconds = 5;
+  string version = 6;
 }
 
 message RoomConfig {
@@ -227,14 +340,9 @@ message RoomInfo {
   bool live_stream_active = 6;
 }
 
-message RouterRTPCapabilities {
-  repeated CodecCapabilities codecs = 1;
-  repeated HeaderExtensionCapabilities header_extensions = 2;
-}
-
 message CodecCapabilities {
   string mime_type = 1;
-  string kind = 2;
+  Kind kind = 2;
   int32 clock_rate = 3;
   int32 channels = 4;
   map<string, string> parameters = 5;
@@ -252,7 +360,7 @@ message RTCPFeedback {
 }
 
 message ProducerOptions {
-  string kind = 1;
+  Kind kind = 1;
   RTPParameters rtp_parameters = 2;
   bool simulcast = 3;
   Encodings encodings = 4;
@@ -289,7 +397,7 @@ message RTPEncodingParameters {
   bool active = 5;
   int32 priority = 6;
   int32 network_priority = 7;
-  string codec_payload_type = 8;
+  uint32 codec_payload_type = 8;
   string scalability_mode = 9;
 }
 
@@ -313,7 +421,7 @@ message RTPCapabilities {
 message ProducerInfo {
   string producer_id = 1;
   string peer_id = 2;
-  string kind = 3;
+  Kind kind = 3;
   string display_name = 4;
 }
 
@@ -328,7 +436,7 @@ message PreferredLayers {
 
 message RecordingOptions {
   string output_path = 1;
-  string format = 2;
+  Container format = 2;
   RecordingLayout layout = 3;
   int32 width = 4;
   int32 height = 5;
@@ -337,12 +445,14 @@ message RecordingOptions {
   int32 audio_bitrate = 8;
   bool include_audio = 9;
   map<string, string> metadata = 10;
+  // Required when layout == RECORDING_LAYOUT_CUSTOM.
+  CustomLayout custom_layout = 11;
 }
 
 message LiveStreamOptions {
   string rtmp_url = 1;
   string stream_key = 2;
-  string format = 3;
+  Container format = 3;
   RecordingLayout layout = 4;
   int32 width = 5;
   int32 height = 6;
@@ -350,6 +460,103 @@ message LiveStreamOptions {
   int32 video_bitrate = 8;
   int32 audio_bitrate = 9;
   bool include_audio = 10;
+  // Required when layout == RECORDING_LAYOUT_CUSTOM.
+  CustomLayout custom_layout = 11;
+}
+
+message CustomRegion {
+  string producer_id = 1;
+  int32 x = 2;
+  int32 y = 3;
+  int32 width = 4;
+  int32 height = 5;
+  int32 z_index = 6;
+}
+
+message CustomLayout {
+  repeated CustomRegion regions = 1;
+  string background_color = 2;
+}
+
+message IceParameters {
+  string username_fragment = 1;
+  string password = 2;
+  bool ice_lite = 3;
+}
+
+message IceCandidate {
+  string foundation = 1;
+  uint32 priority = 2;
+  string ip = 3;
+  string address = 4;
+  string protocol = 5;
+  uint32 port = 6;
+  string type = 7;
+  string tcp_type = 8;
+}
+
+message DtlsFingerprint {
+  string algorithm = 1;
+  string value = 2;
+}
+
+message DtlsParameters {
+  string role = 1;
+  repeated DtlsFingerprint fingerprints = 2;
+}
+
+message SctpParameters {
+  uint32 port = 1;
+  uint32 os = 2;
+  uint32 mis = 3;
+  uint32 max_message_size = 4;
+}
+
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+  KIND_AUDIO = 1;
+  KIND_VIDEO = 2;
+}
+
+enum Container {
+  CONTAINER_UNSPECIFIED = 0;
+  CONTAINER_MP4 = 1;
+  CONTAINER_WEBM = 2;
+  CONTAINER_FLV = 3;
+}
+
+enum TransportDirection {
+  TRANSPORT_DIRECTION_UNSPECIFIED = 0;
+  TRANSPORT_DIRECTION_SEND = 1;
+  TRANSPORT_DIRECTION_RECV = 2;
+}
+
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  HEALTH_STATUS_UP = 1;
+  HEALTH_STATUS_STARTING = 2;
+  HEALTH_STATUS_DOWN = 3;
+}
+
+enum SfuEventType {
+  SFU_EVENT_TYPE_UNSPECIFIED = 0;
+  SFU_EVENT_TYPE_NEW_PRODUCER = 1;
+  SFU_EVENT_TYPE_PRODUCER_CLOSED = 2;
+  SFU_EVENT_TYPE_PRODUCER_PAUSED = 3;
+  SFU_EVENT_TYPE_PRODUCER_RESUMED = 4;
+  SFU_EVENT_TYPE_ACTIVE_SPEAKER = 5;
+  SFU_EVENT_TYPE_PEER_JOINED = 6;
+  SFU_EVENT_TYPE_PEER_LEFT = 7;
+  SFU_EVENT_TYPE_NETWORK_DEGRADED = 8;
+  SFU_EVENT_TYPE_CONSUMER_SCORE = 9;
+  SFU_EVENT_TYPE_CONSUMER_LAYERS_CHANGED = 10;
+  SFU_EVENT_TYPE_ROOM_CLOSED = 11;
+  SFU_EVENT_TYPE_RECORDING_STARTED = 12;
+  SFU_EVENT_TYPE_RECORDING_STOPPED = 13;
+  SFU_EVENT_TYPE_LIVE_STREAM_STARTED = 14;
+  SFU_EVENT_TYPE_LIVE_STREAM_STOPPED = 15;
+  SFU_EVENT_TYPE_ICE_RESTART_NEEDED = 16;
+  SFU_EVENT_TYPE_CONNECTION_STATE_CHANGE = 17;
 }
 
 enum RecordingLayout {

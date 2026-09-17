@@ -59,6 +59,19 @@ const GroupsManagement = lazy(() => import('./pages/GroupsManagement'));
 const PostsManagement = lazy(() => import('./pages/PostsManagement'));
 const CallHistory = lazy(() => import('./pages/CallHistory'));
 const BrowserSettings = lazy(() => import('./pages/BrowserSettings'));
+const SysConfig = lazy(() => import('./pages/system/ConfigPage').then(m => ({ default: m.ConfigPage })));
+const SysCache = lazy(() => import('./pages/system/CachePage').then(m => ({ default: m.CachePage })));
+const SysBackups = lazy(() => import('./pages/system/BackupsPage').then(m => ({ default: m.BackupsPage })));
+const SysAudit = lazy(() => import('./pages/system/AuditLogPage').then(m => ({ default: m.AuditLogPage })));
+const SysMigrations = lazy(() => import('./pages/system/MigrationsPage').then(m => ({ default: m.MigrationsPage })));
+const SecSSO = lazy(() => import('./pages/security/SSOPage').then(m => ({ default: m.SSOPage })));
+const SecMFA = lazy(() => import('./pages/security/MFAPage').then(m => ({ default: m.MFAPage })));
+const SecRoles = lazy(() => import('./pages/security/RolesPage').then(m => ({ default: m.RolesPage })));
+const SecSessions = lazy(() => import('./pages/security/SessionsPage').then(m => ({ default: m.SessionsPage })));
+const SecApiKeys = lazy(() => import('./pages/security/ApiKeysPage').then(m => ({ default: m.ApiKeysPage })));
+const SettingsPage = lazy(() => import('./pages/settings/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const AuthorityTab = lazy(() => import('./pages/tabs/AuthorityTab'));
+const SecurityTab = lazy(() => import('./pages/tabs/SecurityTab'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -66,15 +79,28 @@ type PageKey =
   | 'dashboard'
   | 'users'
   | 'approvals'
+  | 'authority'
   | 'content'
   | 'reports'
   | 'audit'
+  | 'sys-audit'
   | 'moderation'
   | 'messaging'
   | 'announcements'
   | 'featureflags'
   | 'backups'
+  | 'sys-backups'
+  | 'sys-config'
+  | 'sys-cache'
+  | 'sys-migrations'
   | 'security'
+  | 'security-ops'
+  | 'sec-sso'
+  | 'sec-mfa'
+  | 'sec-roles'
+  | 'sec-sessions'
+  | 'sec-apikeys'
+  | 'settings'
   | 'notifications'
   | 'logs'
   | 'media'
@@ -93,6 +119,7 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'data-overview', icon: <DatabaseOutlined />, label: 'جرد بيانات المنصة', group: 'main' },
   { key: 'users', icon: <TeamOutlined />, label: 'المستخدمون', group: 'main' },
   { key: 'approvals', icon: <SafetyCertificateOutlined />, label: 'الموافقات المعلقة', group: 'main' },
+  { key: 'authority', icon: <SafetyCertificateOutlined />, label: 'سلطة الاعتماد', group: 'main' },
   { key: 'content', icon: <BarChartOutlined />, label: 'المحتوى', group: 'main' },
   { key: 'reports', icon: <AlertOutlined />, label: 'مراقبة المحتوى', group: 'main' },
   { key: 'audit', icon: <AuditOutlined />, label: 'سجل التدقيق', group: 'main' },
@@ -104,7 +131,19 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'announcements', icon: <NotificationOutlined />, label: 'الإعلانات', group: 'system' },
   { key: 'featureflags', icon: <ExperimentOutlined />, label: 'أعلام الميزات', group: 'system' },
   { key: 'backups', icon: <CloudUploadOutlined />, label: 'النسخ الاحتياطية', group: 'system' },
+  { key: 'sys-backups', icon: <CloudUploadOutlined />, label: 'النسخ المتقدم', group: 'system' },
+  { key: 'sys-config', icon: <SettingOutlined />, label: 'إعدادات النظام', group: 'system' },
+  { key: 'sys-cache', icon: <DatabaseOutlined />, label: 'الكاش', group: 'system' },
+  { key: 'sys-audit', icon: <AuditOutlined />, label: 'التدقيق المفصّل', group: 'system' },
+  { key: 'sys-migrations', icon: <CloudServerOutlined />, label: 'الترحيلات', group: 'system' },
   { key: 'security', icon: <SafetyOutlined />, label: 'مركز الأمان', group: 'system' },
+  { key: 'security-ops', icon: <SafetyOutlined />, label: 'عمليات الأمان', group: 'system' },
+  { key: 'sec-sso', icon: <KeyOutlined />, label: 'الدخول الموحد SSO', group: 'system' },
+  { key: 'sec-mfa', icon: <SafetyCertificateOutlined />, label: 'المصادقة MFA', group: 'system' },
+  { key: 'sec-roles', icon: <TeamOutlined />, label: 'الأدوار', group: 'system' },
+  { key: 'sec-sessions', icon: <MonitorOutlined />, label: 'الجلسات', group: 'system' },
+  { key: 'sec-apikeys', icon: <KeyOutlined />, label: 'مفاتيح API', group: 'system' },
+  { key: 'settings', icon: <SettingOutlined />, label: 'الإعدادات', group: 'system' },
   { key: 'notifications', icon: <BellOutlined />, label: 'الإشعارات', group: 'system' },
   { key: 'logs', icon: <FileSearchOutlined />, label: 'سجل النظام الحي', group: 'system' },
   { key: 'media', icon: <VideoCameraOutlined />, label: 'مركز الوسائط', group: 'system' },
@@ -239,9 +278,11 @@ export default function App() {
       case 'data-overview': return <DataOverview />;
       case 'users': return <UserManagement />;
       case 'approvals': return <Approvals />;
+      case 'authority': return <AuthorityTab />;
       case 'content': return <ContentManagement />;
       case 'reports': return <Reports />;
       case 'audit': return <AuditLog />;
+      case 'sys-audit': return <SysAudit />;
       case 'moderation': return <ModerationCenter />;
       case 'messaging': return <MessagingCenter />;
       case 'groups': return <GroupsManagement />;
@@ -249,7 +290,18 @@ export default function App() {
       case 'announcements': return <Announcements />;
       case 'featureflags': return <FeatureFlags />;
       case 'backups': return <Backups />;
+      case 'sys-backups': return <SysBackups />;
+      case 'sys-config': return <SysConfig />;
+      case 'sys-cache': return <SysCache />;
+      case 'sys-migrations': return <SysMigrations />;
       case 'security': return <SecurityCenter />;
+      case 'security-ops': return <SecurityTab />;
+      case 'sec-sso': return <SecSSO />;
+      case 'sec-mfa': return <SecMFA />;
+      case 'sec-roles': return <SecRoles />;
+      case 'sec-sessions': return <SecSessions />;
+      case 'sec-apikeys': return <SecApiKeys />;
+      case 'settings': return <SettingsPage />;
       case 'notifications': return <NotificationsCenter />;
       case 'logs': return <SystemLogs />;
       case 'media': return <MediaCenter />;
@@ -326,7 +378,7 @@ export default function App() {
             mode="inline"
             selectedKeys={[currentPage]}
             items={groupedMenu}
-            onClick={({ key }) => setCurrentPage(key as PageKey)}
+            onClick={({ key }: any) => setCurrentPage(key as PageKey)}
             style={{ borderRight: 0, background: 'transparent' }}
             className="yns-menu"
           />

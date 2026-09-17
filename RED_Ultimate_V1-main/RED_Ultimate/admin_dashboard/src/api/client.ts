@@ -1,11 +1,44 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import { getAccessToken, clearAuth } from '@/stores';
+import { AUTH_EXPIRED_EVENT, getAccessToken, getRefreshToken, clearAuth, setAuthTokens } from '@/stores';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+/**
+ * العميل الموحد للوحة الإدارة (axios) — يشارك `src/api.ts` الحي العقد نفسه:
+ * - مخزن توكن واحد: وصول + مستخدم في sessionStorage، وتجديد في localStorage
+ *   (المفاتيح الفيزيائية نفسها في كلا العميلين، انظر `@/stores`)
+ * - حدث انتهاء واحد: `younes:auth-expired` (تستمع له App)
+ * - baseURL واحد نسبي `/api` يعمل مع dev proxy (vite → 127.0.0.1:8088)
+ *   ومع Nginx في الإنتاج (same-origin). يُسمح بتجاوزه عبر VITE_API_URL
+ *   (نسبي أو مطلق) لبيئات بلا بروكسي فقط.
+ */
+function resolveBaseURL(): string {
+  const raw = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/+$/, '');
+  return raw || '/api';
+}
+
+const API_BASE_URL = resolveBaseURL();
+const CSRF_COOKIE = 'red_admin_csrf';
+
+function csrfToken(): string | undefined {
+  try {
+    return document.cookie
+      .split('; ')
+      .find((item) => item.startsWith(`${CSRF_COOKIE}=`))
+      ?.split('=')
+      .slice(1)
+      .join('=');
+  } catch {
+    return undefined;
+  }
+}
 
 class ApiClient {
   private client: AxiosInstance;
+  /** حارس تزامن التجديد: وعد واحد مشترك يُصفَّر في finally (مطابق لحارس api.ts). */
   private refreshPromise: Promise<string> | null = null;
+
+  /** عقد التوحيد — مكشوف للفحص والاختبار. */
+  readonly baseURL = API_BASE_URL;
+  readonly authExpiredEvent = AUTH_EXPIRED_EVENT;
 
   constructor() {
     this.client = axios.create({
@@ -35,10 +68,10 @@ class ApiClient {
   private async handleError(error: AxiosError): Promise<never> {
     if (error.response?.status === 401) {
       const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-      
+
       if (!originalRequest._retry) {
         originalRequest._retry = true;
-        
+
         try {
           const newToken = await this.refreshToken();
           if (originalRequest.headers) {
@@ -46,14 +79,12 @@ class ApiClient {
           }
           return this.client.request(originalRequest);
         } catch {
+          // مسح واحد + حدث واحد؛ التوجيه لشاشة الدخول عبر مستمع App للحدث
+          // (بلا window.location.href القسري الذي كان يكسر SPA ويخالف العميل الحي)
           clearAuth();
-          window.dispatchEvent(new CustomEvent('auth:expired'));
-          window.location.href = '/login';
         }
       } else {
         clearAuth();
-        window.dispatchEvent(new CustomEvent('auth:expired'));
-        window.location.href = '/login';
       }
     }
     throw error;
@@ -65,12 +96,25 @@ class ApiClient {
     }
 
     this.refreshPromise = (async () => {
+      const refreshToken = getRefreshToken();
+      const csrf = csrfToken();
       const response = await axios.post(
         `${API_BASE_URL}/auth/refresh`,
-        {},
-        { withCredentials: true }
+        { refreshToken: refreshToken || '' },
+        {
+          headers: { ...(csrf ? { 'X-RED-CSRF': csrf } : {}) },
+          withCredentials: true,
+        }
       );
-      const { accessToken } = response.data;
+      const { accessToken, refreshToken: rotated } = (response.data ?? {}) as {
+        accessToken?: unknown;
+        refreshToken?: unknown;
+      };
+      if (typeof accessToken !== 'string' || !accessToken) {
+        throw new Error('EMPTY_REFRESH');
+      }
+      // حفظ التوكن الجديد في المخزن الوحيد قبل إعادة المحاولة
+      setAuthTokens(accessToken, typeof rotated === 'string' ? rotated : undefined);
       return accessToken;
     })();
 

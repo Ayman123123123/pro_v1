@@ -1,6 +1,9 @@
 package com.red.server.config
 
 import com.red.server.auth.security.JwtAuthenticationFilter
+import jakarta.servlet.FilterChain
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -16,6 +19,8 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
+import org.springframework.web.filter.OncePerRequestFilter
+import org.springframework.web.util.ContentCachingRequestWrapper
 
 /**
  * YOUNES Sovereign Security Configuration
@@ -80,8 +85,11 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.GET, "/api/identity/directory/**").authenticated()
                     // التفاصيل الكاملة لقواعد البيانات والمضيف للمسؤولين فقط؛
                     // المساران العامان أدناه يُبقيان الحالة وحدها.
+                    // الصحة الأساسية وحدها عامة لمسابير k8s؛ كل ما عداها (metrics/prometheus
+                    // وبقية actuator) للإدارة فقط حتى لا تتسرب إشارات تشغيلية داخلية.
                     .requestMatchers("/health/detailed").hasRole("ADMIN")
-                    .requestMatchers("/health", "/health/live", "/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
+                    .requestMatchers("/health", "/health/live", "/actuator/health", "/actuator/info").permitAll()
+                    .requestMatchers("/actuator/prometheus", "/actuator/**").hasRole("ADMIN")
                     .requestMatchers("/ws/**").permitAll()
                     // ── مشاركة المستخدم في المحتوى ──
                     //
@@ -157,6 +165,41 @@ class SecurityConfig(
         return "refreshToken=$token; Path=/api/auth; Max-Age=${maxAgeDays*24*3600}; HttpOnly; Secure; SameSite=Strict"
     }
 
+    /**
+     * Wraps small inspectable request bodies in a [ContentCachingRequestWrapper] so
+     * [com.red.server.security.SecurityEnhancer] can scan JSON/text bodies for XSS
+     * without consuming the stream (the wrapper replays cached bytes downstream).
+     * Multipart uploads and bodies larger than 32KB are never wrapped/cached.
+     */
+    @Bean
+    fun requestBodyCacheFilter(): OncePerRequestFilter = object : OncePerRequestFilter() {
+        override fun doFilterInternal(
+            request: HttpServletRequest,
+            response: HttpServletResponse,
+            chain: FilterChain
+        ) {
+            val contentType = request.contentType?.lowercase().orEmpty()
+            val length = request.contentLengthLong
+            val inspectable = contentType.contains("json") ||
+                contentType.contains("text") ||
+                contentType.contains("xml") ||
+                contentType.contains("urlencoded")
+            val small = length > 0 && length <= BODY_CACHE_LIMIT_BYTES
+            if (inspectable && small && request.method in BODY_METHODS) {
+                chain.doFilter(ContentCachingRequestWrapper(request, BODY_CACHE_LIMIT_BYTES), response)
+            } else {
+                chain.doFilter(request, response)
+            }
+        }
+
+        override fun shouldNotFilter(request: HttpServletRequest): Boolean {
+            val contentType = request.contentType?.lowercase().orEmpty()
+            if (contentType.contains("multipart")) return true
+            // No body to cache (GET/HEAD/OPTIONS or unknown length handled inside).
+            return request.method !in BODY_METHODS
+        }
+    }
+
     @Bean
     fun corsConfigurationSource(): CorsConfigurationSource {
         val configuration = CorsConfiguration().apply {
@@ -170,5 +213,10 @@ class SecurityConfig(
         return UrlBasedCorsConfigurationSource().also {
             it.registerCorsConfiguration("/**", configuration)
         }
+    }
+
+    companion object {
+        const val BODY_CACHE_LIMIT_BYTES = 32 * 1024
+        private val BODY_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
     }
 }

@@ -1,5 +1,6 @@
 package com.red.sovereign.calls
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.MaterialTheme
 import android.app.Activity
 import android.content.Context
@@ -60,6 +61,14 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.red.sovereign.ui.theme.SovereignColors
 import org.webrtc.RendererCommon
+
+// حالة التصغير — تُدار هنا داخل نطاق الـoverlay (ملف الخدمة خارج النطاق المسموح لمسه).
+private val conferenceMinimizeState = mutableStateOf(false)
+
+/** علم التصغير لجلسة المؤتمر/المساحة — يُبقي الجلسة حيّة ويعرض الشريط المصغّر الموحّد. */
+var ConferenceRuntime.isMinimized: Boolean
+    get() = conferenceMinimizeState.value
+    set(value) { conferenceMinimizeState.value = value }
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 
@@ -92,6 +101,19 @@ fun YounesConferenceOverlay() {
                 }
             }
         }
+        return
+    }
+
+    // الرجوع يصغّر بدل الإنهاء — الإنهاء لزر المغادرة فقط.
+    BackHandler { ConferenceRuntime.isMinimized = true }
+    // وضع مصغّر — شريط عائم موحّد مع بقاء الجلسة (WCAG: أزرار 48dp ونص عالي التباين).
+    if (ConferenceRuntime.isMinimized && (state is ConferenceUiState.Connecting || state is ConferenceUiState.Active)) {
+        val miniRoomId = when (state) {
+            is ConferenceUiState.Connecting -> state.roomId
+            is ConferenceUiState.Active -> state.roomId
+            else -> ""
+        }
+        MinimizedConferenceBar(roomId = miniRoomId, count = ConferenceRuntime.participants.size + 1)
         return
     }
 
@@ -411,7 +433,7 @@ fun YounesConferenceOverlay() {
                                             ) {
                                                 Text(listenerUser.userId.take(2).uppercase(), color = scheme.onSurfaceVariant, fontSize = 12.sp)
                                             }
-                                            Text(listenerUser.userId.take(8), color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                                            Text(listenerUser.userId.take(8), color = scheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -549,7 +571,7 @@ fun YounesConferenceOverlay() {
                                             if (isPresenting) {
                                                 Text(
                                                     "🖥 يشارك الشاشة",
-                                                    color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                                     color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                                                     modifier = Modifier.align(Alignment.TopStart)
                                                         .padding(6.dp)
                                                         .background(Color(0xFF00C98C).copy(alpha = 0.85f), RoundedCornerShape(8.dp))
@@ -591,7 +613,7 @@ fun YounesConferenceOverlay() {
                     listOf("👏", "💯", "🔥", "😂", "❤️").forEach { emoji ->
                         IconButton(
                             onClick = { ConferenceService.sendReaction(context, emoji) },
-                            modifier = Modifier.size(36.dp).background(scheme.surfaceVariant.copy(alpha = 0.7f), CircleShape)
+                            modifier = Modifier.size(48.dp).background(scheme.surfaceVariant.copy(alpha = 0.7f), CircleShape)
                         ) {
                             Text(emoji, fontSize = 16.sp)
                         }
@@ -806,6 +828,9 @@ fun YounesConferenceOverlay() {
     if (showLobbySheet) {
         AlertDialog(
             onDismissRequest = { showLobbySheet = false },
+            containerColor = scheme.surface,
+            titleContentColor = scheme.onSurface,
+            textContentColor = scheme.onSurfaceVariant,
             title = { Text("غرفة الانتظار ⏳", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -861,6 +886,9 @@ fun YounesConferenceOverlay() {
     if (showRaisedHandsSheet) {
         AlertDialog(
             onDismissRequest = { showRaisedHandsSheet = false },
+            containerColor = scheme.surface,
+            titleContentColor = scheme.onSurface,
+            textContentColor = scheme.onSurfaceVariant,
             title = { Text("الأيدي المرفوعة ✋", fontWeight = FontWeight.Bold) },
             text = {
                 val raised = participants.filter { it.raisedHand }
@@ -900,6 +928,9 @@ fun YounesConferenceOverlay() {
     if (showInCallChat) {
         AlertDialog(
             onDismissRequest = { showInCallChat = false },
+            containerColor = scheme.surface,
+            titleContentColor = scheme.onSurface,
+            textContentColor = scheme.onSurfaceVariant,
             title = { Text("دردشة الاجتماع 💬") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -933,6 +964,9 @@ fun YounesConferenceOverlay() {
     if (showRecordConsent) {
         AlertDialog(
             onDismissRequest = { showRecordConsent = false },
+            containerColor = scheme.surface,
+            titleContentColor = scheme.onSurface,
+            textContentColor = scheme.onSurfaceVariant,
             title = { Text("تسجيل المؤتمر", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
@@ -1038,6 +1072,55 @@ private fun ConferenceVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
         if (track != null && renderer != null) track.addSink(renderer!!)
         onDispose {
             if (track != null && renderer != null) track.removeSink(renderer!!)
+        }
+    }
+}
+
+// ── شريط مصغّر موحّد للمؤتمر/المساحة — WCAG AA: نص عالي التباين وأزرار 48dp ──
+@Composable
+private fun MinimizedConferenceBar(roomId: String, count: Int) {
+    val context = LocalContext.current
+    val scheme = MaterialTheme.colorScheme
+    androidx.compose.ui.window.Popup(
+        alignment = Alignment.BottomEnd,
+        offset = androidx.compose.ui.unit.IntOffset(x = 24, y = -160)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = scheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, scheme.primary.copy(alpha = 0.5f)),
+            shadowElevation = 8.dp,
+            tonalElevation = 8.dp,
+            modifier = Modifier.width(200.dp).clickable { ConferenceRuntime.isMinimized = false }
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(scheme.primary))
+                    Text("المؤتمر / المساحة", color = scheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Text(
+                    "${roomId.take(12)} · $count مشارك",
+                    color = scheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(10.dp)).background(scheme.primary)
+                            .clickable { ConferenceRuntime.isMinimized = false },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("عودة", color = scheme.onPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Box(
+                        Modifier.height(48.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFE54343))
+                            .clickable { ConferenceService.leave(context); ConferenceRuntime.isMinimized = false }
+                            .padding(horizontal = 18.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.CallEnd, contentDescription = "مغادرة", tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
         }
     }
 }

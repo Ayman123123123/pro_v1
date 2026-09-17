@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { History, Filter, Download, Search, ChevronLeft, ChevronRight, MoreVertical, Eye, AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react';
+import { Download, Search, Eye } from 'lucide-react';
 import { useAuditLog } from '@/api/queries';
-import { cn, formatRelativeTime, getStatusColor } from '@/utils';
+import { formatRelativeTime } from '@/utils';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -10,7 +10,6 @@ import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { DataTable } from '@/components/ui/DataTable';
 import { Pagination } from '@/components/ui/Pagination';
 import { Badge } from '@/components/ui/Badge';
-import { DropdownMenu } from '@/components/ui/DropdownMenu';
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All Categories' },
@@ -48,7 +47,7 @@ const mockAuditLogs = Array.from({ length: 50 }, (_, i) => ({
 export function AuditLogPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(0);
-  const [size, setSize] = useState(25);
+  const [size] = useState(25);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [severity, setSeverity] = useState('');
@@ -57,19 +56,20 @@ export function AuditLogPage() {
   
   const { data, isLoading } = useAuditLog({ page, size, category, severity, startDate, endDate });
   
-  // Use mock data for now
-  const logs = mockAuditLogs.slice(page * size, (page + 1) * size);
-  const totalPages = Math.ceil(mockAuditLogs.length / size);
+  // البيانات الحقيقية من الخادم أولاً، والوهمية احتياط فقط عند غيابها
+  const source = data?.content && data.content.length > 0 ? data.content : mockAuditLogs;
+  const logs = source.slice(page * size, (page + 1) * size);
+  const totalPages = Math.ceil(source.length / size);
   
   const columns = [
     {
       key: 'createdAt',
-      header: 'Timestamp',
+      title: 'Timestamp',
       cell: (log: any) => <span className="text-yn-text-secondary font-mono text-sm">{formatRelativeTime(log.createdAt)}</span>,
     },
     {
       key: 'adminUsername',
-      header: 'Admin',
+      title: 'Admin',
       cell: (log: any) => (
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-yn-green/15 flex items-center justify-center text-xs text-yn-green font-bold">
@@ -81,22 +81,22 @@ export function AuditLogPage() {
     },
     {
       key: 'action',
-      header: 'Action',
+      title: 'Action',
       cell: (log: any) => <Badge variant="blue">{log.action}</Badge>,
     },
     {
       key: 'category',
-      header: 'Category',
+      title: 'Category',
       cell: (log: any) => <Badge variant="gold">{log.category}</Badge>,
     },
     {
       key: 'severity',
-      header: 'Severity',
-      cell: (log: any) => <Badge variant={getSeverityVariant(log.severity)} dot>{log.severity}</Badge>,
+      title: 'Severity',
+      cell: (log: any) => <Badge variant={getSeverityVariant(log.severity)}>{log.severity}</Badge>,
     },
     {
       key: 'target',
-      header: 'Target',
+      title: 'Target',
       cell: (log: any) => (
         <div>
           <p className="font-mono text-yn-text-secondary text-sm">{log.targetType}</p>
@@ -106,12 +106,12 @@ export function AuditLogPage() {
     },
     {
       key: 'ipAddress',
-      header: 'IP Address',
+      title: 'IP Address',
       cell: (log: any) => <span className="text-yn-text-secondary font-mono text-sm">{log.ipAddress}</span>,
     },
     {
       key: 'details',
-      header: 'Details',
+      title: 'Details',
       cell: (log: any) => (
         <Button variant="ghost" size="sm" className="w-full justify-start">
           <Eye className="w-4 h-4 mr-2" />
@@ -150,8 +150,9 @@ export function AuditLogPage() {
           <Select value={category} onChange={setCategory} options={CATEGORY_OPTIONS} placeholder="Category" className="w-full sm:w-40" />
           <Select value={severity} onChange={setSeverity} options={SEVERITY_OPTIONS} placeholder="Severity" className="w-full sm:w-40" />
           <DateRangePicker
-            value={{ start: startDate ? new Date(startDate) : new Date(Date.now() - 30 * 86400000), end: endDate ? new Date(endDate) : new Date() }}
-            onChange={(range) => { setStartDate(range.start.toISOString()); setEndDate(range.end.toISOString()); }}
+            from={startDate}
+            to={endDate}
+            onChange={(from, to) => { setStartDate(from); setEndDate(to); }}
           />
         </div>
       </div>
@@ -160,12 +161,9 @@ export function AuditLogPage() {
         <DataTable columns={columns} data={logs} isLoading={isLoading} rowKey="id" emptyMessage="No audit log entries" />
         
         <Pagination
-          currentPage={page}
+          page={page}
           totalPages={totalPages}
-          totalItems={mockAuditLogs.length}
-          onPageChange={setPage}
-          onPageSizeChange={setSize}
-          pageSize={size}
+          onChange={setPage}
         />
       </div>
     </div>
@@ -181,3 +179,5 @@ function getSeverityVariant(severity: string): 'green' | 'gold' | 'blue' | 'dang
     default: return 'blue';
   }
 }
+
+export default AuditLogPage;

@@ -1,6 +1,7 @@
 package com.red.server.social
 
 import org.springframework.data.annotation.Id
+import org.springframework.data.mongodb.core.index.CompoundIndex
 import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
 import java.time.Instant
@@ -139,6 +140,7 @@ data class PollVote(@Id val id: String, @Indexed val postId: String, @Indexed va
 data class Repost(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, val createdAt: Instant = Instant.now())
 
 @Document("follows")
+@CompoundIndex(name = "followerId_1_followedId_1", def = "{'followerId': 1, 'followedId': 1}", unique = true)
 data class FollowDocument(
     @Id val id: String,
     @Indexed val followerId: String,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Server, Trash2, Search, RefreshCw, Download, Filter, X, Database, Zap, Trash, AlertTriangle } from 'lucide-react';
+import { Server, Trash2, RefreshCw, Database, Zap, Trash, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn, formatBytes } from '@/utils';
 import { Button } from '@/components/ui/Button';
@@ -10,9 +10,9 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Tabs } from '@/components/ui/Tabs';
 
 const TABS = [
-  { id: 'keys', label: 'Keys Browser', icon: Database },
-  { id: 'memory', label: 'Memory Analysis', icon: Zap },
-  { id: 'ttl', label: 'TTL Management', icon: AlertTriangle },
+  { value: 'keys', label: 'Keys Browser' },
+  { value: 'memory', label: 'Memory Analysis' },
+  { value: 'ttl', label: 'TTL Management' },
 ];
 
 const mockKeys = Array.from({ length: 50 }, (_, i) => ({
@@ -38,7 +38,7 @@ export function CachePage() {
   const [activeTab, setActiveTab] = useState('keys');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const [size, setSize] = useState(25);
+  const [size] = useState(25);
   const [flushDialogOpen, setFlushDialogOpen] = useState(false);
   const [flushType, setFlushType] = useState('db');
   
@@ -48,32 +48,32 @@ export function CachePage() {
   const keyColumns = [
     {
       key: 'key',
-      header: 'Key',
+      title: 'Key',
       cell: (k: any) => <span className="font-mono text-yn-text-secondary text-sm max-w-xs truncate block">{k.key}</span>,
     },
     {
       key: 'type',
-      header: 'Type',
+      title: 'Type',
       cell: (k: any) => <Badge variant="blue">{k.type}</Badge>,
     },
     {
       key: 'size',
-      header: 'Size',
+      title: 'Size',
       cell: (k: any) => <span className="text-yn-text-secondary">{k.size} bytes</span>,
     },
     {
       key: 'ttl',
-      header: 'TTL',
+      title: 'TTL',
       cell: (k: any) => <span className="text-yn-text-secondary">{k.ttl === -1 ? 'No expiry' : `${Math.floor(k.ttl / 3600)}h ${Math.floor((k.ttl % 3600) / 60)}m`}</span>,
     },
     {
       key: 'memory',
-      header: 'Memory',
+      title: 'Memory',
       cell: (k: any) => <span className="text-yn-text-secondary">{formatBytes(k.memory)}</span>,
     },
     {
       key: 'actions',
-      header: 'Actions',
+      title: 'Actions',
       cell: (k: any) => (
         <Button variant="ghost" size="sm" className="text-yn-error hover:text-yn-error">
           <Trash2 className="w-4 h-4" />
@@ -116,7 +116,7 @@ export function CachePage() {
       </div>
       
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} tabs={TABS} />
+      <Tabs value={activeTab} onChange={setActiveTab} tabs={TABS} />
       
       {activeTab === 'keys' && (
         <div className="yn-card yn-card-liquid yn-glass">
@@ -175,7 +175,8 @@ export function CachePage() {
         </div>
       )}
       
-      <Dialog open={flushDialogOpen} onClose={() => setFlushDialogOpen(false)} title="Flush Cache" description="This will permanently delete data from Redis. This action cannot be undone.">
+      <Dialog open={flushDialogOpen} onClose={() => setFlushDialogOpen(false)} title="Flush Cache">
+        <p className="text-sm text-yn-text-secondary mb-4">This will permanently delete data from Redis. This action cannot be undone.</p>
         <div className="space-y-4">
           <div>
             <label className="yn-label">Flush Type</label>
@@ -215,3 +216,5 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: s
     </div>
   );
 }
+
+export default CachePage;

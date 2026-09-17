@@ -96,17 +96,59 @@ class ChannelsViewModel(private val api: ChannelsApi) : ViewModel() {
     }
 
     private suspend fun loadChannels(query: String) {
-        when (val result = api.list(search = query.takeIf { it.isNotBlank() }, limit = 30)) {
-            is ApiResult.Success -> {
-                _state.update {
-                    it.copy(loading = false, channels = result.value, error = null)
+        val q = query.trim()
+        if (q.isEmpty()) {
+            // القائمة العامة — عضوية الخادم (isJoined) تُدمج مع المحلي
+            when (val result = api.list(search = null, limit = 30)) {
+                is ApiResult.Success -> {
+                    val serverSubscribed = result.value.filter { it.isJoined }.map { it.id }.toSet()
+                    _state.update {
+                        it.copy(
+                            loading = false, channels = result.value, error = null,
+                            subscribedChannelIds = it.subscribedChannelIds + serverSubscribed
+                        )
+                    }
+                }
+                is ApiResult.Error -> {
+                    _state.update {
+                        it.copy(loading = false, error = result.message)
+                    }
                 }
             }
-            is ApiResult.Error -> {
-                _state.update {
-                    it.copy(loading = false, error = result.message)
-                }
+            return
+        }
+        // بحث: المحلي أولًا والسحابي مكمّل عبر searchMerged (حد أدنى حرفين + تجاهل الفشل)
+        val snapshot = _state.value.channels
+        val localMatches = snapshot.filter {
+            it.name.contains(q, ignoreCase = true) ||
+                (it.username?.contains(q, ignoreCase = true) == true) ||
+                (it.description?.contains(q, ignoreCase = true) == true)
+        }
+        val merged = api.searchMerged(localMatches.map { it.toSearchItem() }, q, limit = 30)
+        if (merged.isEmpty()) {
+            _state.update { it.copy(loading = false, channels = emptyList(), error = null) }
+            return
+        }
+        val cachedById = snapshot.associateBy { it.id }
+        val resolved = ArrayList<Channel>(merged.size)
+        val missing = ArrayList<String>()
+        for (item in merged) {
+            val cached = cachedById[item.id]
+            if (cached != null) resolved.add(cached) else missing.add(item.id)
+        }
+        // الكائنات الكاملة للنتائج السحابية الجديدة تُجلب من الخادم (أعداد/عضوية حية)
+        for (id in missing) {
+            when (val d = api.details(id)) {
+                is ApiResult.Success -> resolved.add(d.value)
+                is ApiResult.Error -> Unit
             }
+        }
+        val serverSubscribed = resolved.filter { it.isJoined }.map { it.id }.toSet()
+        _state.update {
+            it.copy(
+                loading = false, channels = resolved, error = null,
+                subscribedChannelIds = it.subscribedChannelIds + serverSubscribed
+            )
         }
     }
 
@@ -117,7 +159,7 @@ class ChannelsViewModel(private val api: ChannelsApi) : ViewModel() {
                     current.copy(
                         subscribedChannelIds = current.subscribedChannelIds + channel.id,
                         channels = current.channels.map {
-                            if (it.id == channel.id) it.copy(subscriberCount = it.subscriberCount + 1) else it
+                            if (it.id == channel.id) it.copy(isJoined = true, subscriberCount = it.subscriberCount + 1) else it
                         }
                     )
                 }
@@ -135,7 +177,7 @@ class ChannelsViewModel(private val api: ChannelsApi) : ViewModel() {
                     current.copy(
                         subscribedChannelIds = current.subscribedChannelIds - channel.id,
                         channels = current.channels.map {
-                            if (it.id == channel.id) it.copy(subscriberCount = (it.subscriberCount - 1).coerceAtLeast(0)) else it
+                            if (it.id == channel.id) it.copy(isJoined = false, subscriberCount = (it.subscriberCount - 1).coerceAtLeast(0)) else it
                         }
                     )
                 }
@@ -182,7 +224,7 @@ class ChannelsViewModel(private val api: ChannelsApi) : ViewModel() {
                     _state.update {
                         it.copy(
                             showCreateDialog = false,
-                            channels = listOf(result.value) + it.channels,
+                            channels = listOf(result.value.copy(isJoined = true)) + it.channels,
                             subscribedChannelIds = it.subscribedChannelIds + result.value.id
                         )
                     }
@@ -332,7 +374,8 @@ fun ChannelsScreen(
             val displayedChannels = remember(state.channels, state.activeTab, state.subscribedChannelIds) {
                 when (state.activeTab) {
                     ChannelTab.ALL -> state.channels
-                    ChannelTab.SUBSCRIBED -> state.channels.filter { it.id in state.subscribedChannelIds }
+                    // عضوية الخادم (isJoined) أولًا، والمحلي احتياط
+                    ChannelTab.SUBSCRIBED -> state.channels.filter { it.isJoined || it.id in state.subscribedChannelIds }
                 }
             }
 
@@ -373,7 +416,7 @@ fun ChannelsScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(displayedChannels, key = { it.id }) { channel ->
-                            val isSubscribed = channel.id in state.subscribedChannelIds
+                            val isSubscribed = channel.isJoined || channel.id in state.subscribedChannelIds
                             ChannelCard(
                                 channel = channel,
                                 isSubscribed = isSubscribed,

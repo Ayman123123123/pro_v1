@@ -55,6 +55,15 @@ androidx-datastore = "1.1.3"
 androidx-constraintlayout-compose = "1.0.1"
 androidx-core-splashscreen = "1.0.1"
 
+# ML & AI (On-device)
+mlkit-translate = "17.0.1"
+# New: Compression, Search, Sync, ML
+brotli = "1.10.2"
+zstd = "1.5.6-4"
+lucene = "9.11.0"
+automerge = "2.0.0"
+rnnoise = "0.1.0"
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
 android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
@@ -222,6 +231,16 @@ vosk-android = { module = "com.alphacephei:vosk-android", version.ref = "vosk" }
 mp4parser-isoparser = { module = "org.mp4parser:isoparser", version.ref = "mp4parser" }
 mp4parser-streaming = { module = "org.mp4parser:streaming", version.ref = "mp4parser" }
 mp4parser-muxer = { module = "org.mp4parser:muxer", version.ref = "mp4parser" }
+
+# New: Compression, Search, Sync, ML
+mlkit-translate = { module = "com.google.mlkit:translate", version.ref = "mlkit-translate" }
+brotli = { module = "org.brotli:brotli", version.ref = "brotli" }
+zstd = { module = "com.github.luben:zstd-jni", version.ref = "zstd" }
+lucene-core = { module = "org.apache.lucene:lucene-core", version.ref = "lucene" }
+lucene-analyzers-common = { module = "org.apache.lucene:lucene-analyzers-common", version.ref = "lucene" }
+lucene-queryparser = { module = "org.apache.lucene:lucene-queryparser", version.ref = "lucene" }
+automerge = { module = "io.automerge:automerge", version.ref = "automerge" }
+rnnoise = { module = "com.github.rnnoise:rnnoise-android", version.ref = "rnnoise" }
 
 [bundles]
 media3 = ["androidx-media3-exoplayer", "androidx-media3-session", "androidx-media3-ui"]

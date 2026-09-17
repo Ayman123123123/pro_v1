@@ -121,7 +121,7 @@ export class RouterManager {
 
     this.setupAudioLevelObserver(room);
     this.rooms.set(roomId, room);
-    this.workerManager.updateWorkerStats(worker.pid, { roomCount: this.getWorkerRoomCount(worker.pid) + 1 });
+    this.workerManager.updateWorkerStats(worker.pid, { roomCount: this.getWorkerRoomCount(worker.pid) });
 
     console.log(`Room created: ${roomId} on worker ${worker.pid} (total rooms: ${this.rooms.size})`);
     return room;
@@ -185,7 +185,7 @@ export class RouterManager {
     room.peers.set(peer.id, peer);
     const worker = this.workerManager.getWorkerByPid(room.router.workerPid);
     if (worker) {
-      this.workerManager.updateWorkerStats(worker.pid, { peerCount: this.getWorkerPeerCount(worker.pid) + 1 });
+      this.workerManager.updateWorkerStats(worker.pid, { peerCount: this.getWorkerPeerCount(worker.pid) });
     }
 
     console.log(`Peer ${peer.id} joined room ${roomId} (peers: ${room.peers.size})`);
@@ -199,7 +199,7 @@ export class RouterManager {
 
     const worker = this.workerManager.getWorkerByPid(room.router.workerPid);
     if (worker) {
-      this.workerManager.updateWorkerStats(worker.pid, { peerCount: Math.max(0, this.getWorkerPeerCount(worker.pid) - 1) });
+      this.workerManager.updateWorkerStats(worker.pid, { peerCount: this.getWorkerPeerCount(worker.pid) });
     }
 
     this.broadcastToRoom(room, peerId, { type: 'peerLeft', peerId });
@@ -230,10 +230,30 @@ export class RouterManager {
 
     if (room.cleanupTimer) {
       clearTimeout(room.cleanupTimer);
+      room.cleanupTimer = null;
     }
+
+    // Notify peers BEFORE tearing down transports/router.
+    this.broadcastToRoom(room, null, { type: 'roomClosed', roomId });
 
     for (const peer of room.peers.values()) {
       this.cleanupPeerMedia(peer);
+    }
+    room.peers.clear();
+
+    for (const pipeTransport of room.pipeTransports.values()) {
+      try {
+        pipeTransport.close();
+      } catch {
+        // Already closed — ignore.
+      }
+    }
+    room.pipeTransports.clear();
+
+    try {
+      room.audioLevelObserver.close();
+    } catch {
+      // Already closed — ignore.
     }
 
     room.router.close();
@@ -241,11 +261,24 @@ export class RouterManager {
 
     const worker = this.workerManager.getWorkerByPid(room.router.workerPid);
     if (worker) {
-      this.workerManager.updateWorkerStats(worker.pid, { roomCount: Math.max(0, this.getWorkerRoomCount(worker.pid) - 1) });
+      this.workerManager.updateWorkerStats(worker.pid, { roomCount: this.getWorkerRoomCount(worker.pid) });
     }
 
-    this.broadcastToRoom(room, null, { type: 'roomClosed', roomId });
     console.log(`Room ${roomId} closed`);
+  }
+
+  /** Close every room hosted on a dead worker (called on WorkerManager 'workerDied'). */
+  async closeRoomsOnWorker(workerPid: number): Promise<void> {
+    const roomIds = Array.from(this.rooms.values())
+      .filter((room) => {
+        try {
+          return room.router.workerPid === workerPid;
+        } catch {
+          return false;
+        }
+      })
+      .map((room) => room.id);
+    await Promise.all(roomIds.map((id) => this.closeRoom(id)));
   }
 
   private cleanupPeerMedia(peer: any): void {
@@ -309,10 +342,7 @@ export class RouterManager {
     const room = this.rooms.get(roomId);
     if (!room) throw new Error(`Room ${roomId} not found`);
 
-    const worker = this.workerManager.getWorkerByPid(room.router.workerPid);
-    if (!worker) throw new Error('Worker not found for room');
-
-    const pipeTransport = await worker.createPipeTransport({
+    const pipeTransport = await room.router.createPipeTransport({
       listenInfo: { protocol: 'udp', ip: '127.0.0.1' },
       enableSctp: false,
       enableRtx: true,
@@ -332,7 +362,44 @@ export class RouterManager {
     const transport2 = room2.pipeTransports.get(transportId2);
     if (!transport1 || !transport2) throw new Error('Pipe transport not found');
 
+    // Bidirectional wiring (the old code only connected one direction).
     await transport1.connect({ ip: '127.0.0.1', port: transport2.tuple.localPort });
+    await transport2.connect({ ip: '127.0.0.1', port: transport1.tuple.localPort });
+  }
+
+  /**
+   * Preferred inter-router piping (mediasoup 3.24): let mediasoup manage the
+   * underlying PipeTransports instead of hand-wiring a one-way pair.
+   */
+  async pipeProducerToRouter(sourceRoomId: string, targetRoomId: string, producerId: string): Promise<any> {
+    const source = this.rooms.get(sourceRoomId);
+    const target = this.rooms.get(targetRoomId);
+    if (!source || !target) throw new Error('Room not found');
+
+    const { pipeProducer } = await source.router.pipeToRouter({
+      producerId,
+      targetRouter: target.router,
+    });
+    return pipeProducer;
+  }
+
+  /** Pipe every producer of one room into another router. */
+  async pipeRoomToRouter(sourceRoomId: string, targetRoomId: string): Promise<any[]> {
+    const source = this.rooms.get(sourceRoomId);
+    if (!source) throw new Error('Room not found');
+
+    const producerIds = new Set<string>();
+    for (const peer of source.peers.values()) {
+      for (const producerId of peer.producers.keys()) {
+        producerIds.add(producerId);
+      }
+    }
+
+    const piped: any[] = [];
+    for (const producerId of producerIds) {
+      piped.push(await this.pipeProducerToRouter(sourceRoomId, targetRoomId, producerId));
+    }
+    return piped;
   }
 
   getRoomStats(roomId: string): any {

@@ -233,15 +233,20 @@ dependencies {
     implementation(libs.androidx.security.crypto)
 
     // Tink single-source (CI-proven): tink-android AAR *bundles* core classes at every
-
     // version (1.8.0 AND 1.23.0 both duplicate tink-core), so the graph must carry exactly
-
     // one of them. The android AAR is the superset (core + AndroidKeystore), pinned modern.
-
     implementation("com.google.crypto.tink:tink-android:1.23.0")
 
+    // ───── New: Compression, Search, Sync, ML ─────
+    // Unpublished/phantom coordinates removed (no source references them):
+    //   org.brotli:brotli:1.10.2, org.apache.lucene:lucene-analyzers-common:9.11.0,
+    //   io.automerge:automerge:2.0.0, com.github.rnnoise:rnnoise-android:0.1.0
+    implementation(libs.zstd)
+    implementation(libs.lucene.core)
+    implementation(libs.lucene.queryparser)
+
+    // ───── ML Kit Translation (On-device, 100+ languages) ─────
+    implementation(libs.mlkit.translate)
 
     testImplementation("junit:junit:4.13.2")
 }
-
-

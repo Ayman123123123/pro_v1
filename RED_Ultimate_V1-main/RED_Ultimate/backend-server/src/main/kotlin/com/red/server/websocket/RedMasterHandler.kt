@@ -40,6 +40,8 @@ class RedMasterHandler(
 ) : BinaryWebSocketHandler() {
     private val log = LoggerFactory.getLogger(RedMasterHandler::class.java)
     private val sessions = ConcurrentHashMap<String, ConcurrentHashMap<String, WebSocketSession>>()
+    // خنق كتابة الحضور: آخر ZADD لكل redId — يُسقَط ما دون العتبة بلا أي عملية Redis.
+    private val presenceLastTouch = ConcurrentHashMap<String, Long>()
     // Per-connection fixed-window guard: bounds CPU/DB work a single socket can demand
     // before a distributed gateway-level limit is applied.
     private val frameLimiter = WebSocketRateLimiter(maxMessages = 120, windowMillis = 60_000)
@@ -57,7 +59,7 @@ class RedMasterHandler(
             session.close(CloseStatus.POLICY_VIOLATION)
             return
         }
-        // تحديث حضور لحظي عند كل إطار — يبقي red:presence:index حياً ويحدّث last_seen
+        // حضور مخنوق (≤ كتابة/20s لكل مستخدم) — يبقي red:presence:index حياً دون ZADD لكل إطار.
         touchPresence(session)
         // Never let a malformed frame crash the handler thread — close the socket as BAD_DATA.
         val envelope = runCatching { RedProtos.RedRED.parseFrom(frame.payload) }.getOrElse {
@@ -68,12 +70,17 @@ class RedMasterHandler(
         handleEnvelopeSafely(session, envelope)
     }
 
-    /** تحديث حضور خفيف عند كل إطار: Redis فقط (ZSet + Set).
-     * أُزيلت كتابة DB من هنا — كانت UPDATE لكل إطار (حتى 120/دقيقة/مستخدم)
-     * تستنزف حوض Hikari. last_seen يُحدَّث عند الاتصال/الانقطاع فقط. */
+    /** تحديث حضور مخنوق: كتابة Redis واحدة كل 20s لكل مستخدم بدل ZADD+SADD لكل إطار
+     * (كان حتى 120 كتابة/دقيقة/مستخدم عند حد الـ frameLimiter). نافذة التطهير 5m
+     * أوسع بكثير من دورة الخنق فلا يُسقَط أي حيّ خطأً. الـ ZSET بلا TTL — يُطهَّر
+     * حسب Score في cleanupStalePresence لا بـ EXPIRE. */
     private fun touchPresence(session: WebSocketSession) {
         val redId = session.attributes["userId"] as? String ?: return
-        val now = System.currentTimeMillis().toDouble()
+        val nowMs = System.currentTimeMillis()
+        val last = presenceLastTouch[redId] ?: 0L
+        if (nowMs - last < PRESENCE_TOUCH_THROTTLE_MS) return
+        presenceLastTouch[redId] = nowMs
+        val now = nowMs.toDouble()
         runCatching { redis.opsForZSet().add("red:presence:index", redId, now) }
         // أيضاً تحديث حالة ONLINE في UserStatusService للوحة والخصوصية
         runCatching { redis.opsForSet().add("red:online", redId) }
@@ -248,6 +255,7 @@ class RedMasterHandler(
             return
         }
         val now = System.currentTimeMillis().toDouble()
+        presenceLastTouch[redId] = System.currentTimeMillis()
         redis.opsForZSet().add("red:presence:index", redId, now)
         redis.opsForSet().add("red:online", redId)
         // تحديث last_seen فوري في قاعدة البيانات (مرة واحدة — كانت مكررة بسطر ثانٍ زائد)
@@ -270,6 +278,7 @@ class RedMasterHandler(
         } ?: false
         // إن لم يعد له أي جلسة حية — اعتبره offline فعلياً وحذّث last_seen
         if (removed || sessions[redId].isNullOrEmpty()) {
+            presenceLastTouch.remove(redId)
             runCatching { redis.opsForZSet().remove("red:presence:index", redId) }
             runCatching { redis.opsForSet().remove("red:online", redId) }
             runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
@@ -417,6 +426,9 @@ class RedMasterHandler(
         session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
 
     private companion object {
+        /** خنق كتابة الحضور: كتابة Redis واحدة لكل مستخدم كل 20s (ضمن نطاق 10-30s).
+         * نافذة التطهير 5m ≫ دورة الخنق فلا إسقاط خطأ للأحياء. */
+        private const val PRESENCE_TOUCH_THROTTLE_MS = 20_000L
         /** AUTO-FIX (message reliability): max pending messages re-sent per device per tick. */
         private const val PENDING_REDELIVER_LIMIT = 50
         /** AUTO-FIX: never race the live push - only re-send messages older than this. */

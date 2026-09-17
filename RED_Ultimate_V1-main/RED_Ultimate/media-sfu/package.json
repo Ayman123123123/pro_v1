@@ -2,15 +2,50 @@
   "name": "red-media-sfu",
   "version": "2.0.0",
   "private": true,
-  "description": "Authenticated multi-producer RED WebRTC SFU",
-  "main": "server.js",
+  "description": "Advanced Media SFU with mediasoup v3.15+",
+  "main": "dist/server.js",
   "engines": { "node": ">=24" },
-  "dependencies": {
-    "mediasoup": "3.24.0",
-    "ws": "8.18.3"
-  },
   "scripts": {
-    "start": "node server.js",
-    "check": "node --check server.js"
-  }
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "proto": "mkdir -p src/generated && grpc_tools_node_protoc --js_out=import_style=commonjs,binary:src/generated --grpc_out=grpc_js:src/generated --proto_path=src/proto src/proto/sfu.proto"
+  },
+  "dependencies": {
+    "mediasoup": "^3.15.0",
+    "fastify": "^5.0.0",
+    "@fastify/websocket": "^11.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "@fastify/cors": "^10.0.0",
+    "@grpc/grpc-js": "^1.11.0",
+    "@grpc/proto-loader": "^0.7.13",
+    "ws": "^8.18.3",
+    "prom-client": "^15.1.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-node": "^0.52.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.46.0",
+    "@opentelemetry/exporter-prometheus": "^0.52.0",
+    "@opentelemetry/resources": "^1.26.0",
+    "@opentelemetry/semantic-conventions": "^1.26.0",
+    "zod": "^3.23.0",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0",
+    "uuid": "^10.0.0",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.12",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "grpc-tools": "^1.12.4",
+    "@grpc/grpc-js": "^1.11.0",
+    "eslint": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
 }

@@ -17,8 +17,17 @@ class MasterStatsService(
     private val redis: StringRedisTemplate,
     private val activeCalls: ActiveCallRegistry
 ) {
+    /**
+     * عقد حضور red:presence:index: الـ ZSET بلا TTL (لا EXPIRE لأعضاء ZSET) — يُطهَّر
+     * حسب Score بنافذة PRESENCE_STALE_MS. كتابات heartbeat مخنوقة كل ~20s (≤30s)
+     * فالنافذة أوسع بكثير ولا يُسقَط حيّ خطأً. التطهير هنا عند القراءة يكمل
+     * cleanupStalePresence الدوري في RedMasterHandler.
+     * ملاحظة sliding-EXPIRE للهاشات: red:metrics:realtime هاش عالمي واحد يُكتَب باستمرار
+     * فـ EXPIRE المنزلق 48h مقصود؛ أما red:call:pending فانتهاء كل عرض من expiresAt
+     * داخل القيمة (انظر RedisManager.storePendingCallOffer) والـ EXPIRE شبكة أمان فقط.
+     */
     fun getLiveMetrics(): Map<String, Any> {
-        val cutoff = System.currentTimeMillis() - 5 * 60_000
+        val cutoff = System.currentTimeMillis() - PRESENCE_STALE_MS
         redis.opsForZSet().removeRangeByScore("red:presence:index", 0.0, cutoff.toDouble())
         val runtime = Runtime.getRuntime()
         val used = runtime.totalMemory() - runtime.freeMemory()
@@ -59,5 +68,10 @@ class MasterStatsService(
             "source" to "realtime",
             "timestamp" to System.currentTimeMillis()
         )
+    }
+
+    companion object {
+        /** نافذة اعتقاد الحيّ للحضور — ≫ دورة heartbeat المخنوقة (~20s). */
+        private const val PRESENCE_STALE_MS = 5 * 60_000L
     }
 }

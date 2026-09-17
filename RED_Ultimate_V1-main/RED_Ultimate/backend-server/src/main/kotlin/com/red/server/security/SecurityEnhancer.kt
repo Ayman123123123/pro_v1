@@ -3,11 +3,14 @@ package com.red.server.security
 import com.red.server.database.RedisManager
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import jakarta.servlet.http.HttpServletRequestWrapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.HandlerInterceptor
+import org.springframework.web.util.ContentCachingRequestWrapper
+import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
@@ -21,6 +24,8 @@ import java.util.UUID
 class SecurityEnhancer(
     @Value("\${red.trust-x-forwarded-for:false}")
     private val trustXForwardedFor: Boolean = false,
+    @Value("\${red.security.allowed-origins:http://localhost,http://127.0.0.1}")
+    private val configuredAllowedOrigins: String = "http://localhost,http://127.0.0.1",
     private val redisManager: RedisManager
 ) : HandlerInterceptor {
     private val log = LoggerFactory.getLogger(SecurityEnhancer::class.java)
@@ -45,6 +50,22 @@ class SecurityEnhancer(
                 return false
             }
         }
+        // Defense-in-depth for the admin HttpOnly cookie flow (red_admin_refresh):
+        // SameSite=Strict + double-submit CSRF are primary; a mismatched Origin/Referer
+        // is a fallback signal only when the cookie is actually present. Missing
+        // Origin+Referer is allowed so non-browser callers without those headers keep working.
+        if (!checkAdminCookieOrigin(request)) {
+            log.warn(
+                "Admin cookie Origin/Referer BLOCKED: ip={} uri={} origin={} referer={} time={}",
+                getClientIp(request), request.requestURI, request.getHeader("Origin"), request.getHeader("Referer"), Instant.now()
+            )
+            response.status = HttpStatus.FORBIDDEN.value()
+            response.contentType = "application/json"
+            response.writer.write(
+                """{"error":"ORIGIN_BLOCKED","message":"Request blocked due to origin mismatch."}"""
+            )
+            return false
+        }
         return true
     }
 
@@ -67,17 +88,95 @@ class SecurityEnhancer(
     private fun validateRequest(request: HttpServletRequest): Boolean {
         val query = request.queryString.orEmpty().lowercase()
         val uri = request.requestURI.lowercase()
-        val combined = "$query $uri"
         val suspicious = listOf("<script", "javascript:", "data:", "blob:", "onerror=", "onload=", "eval(", "expression(")
-        val matched = suspicious.firstOrNull(combined::contains)
-        if (matched != null) {
+        fun block(source: String, pattern: String): Boolean {
             log.warn(
-                "XSS attempt BLOCKED: ip={} uri={} pattern={} time={}",
-                getClientIp(request), request.requestURI, matched, Instant.now()
+                "XSS attempt BLOCKED: ip={} uri={} source={} pattern={} time={}",
+                getClientIp(request), request.requestURI, source, pattern, Instant.now()
             )
             return false
         }
+        fun containsSuspicious(text: String): String? =
+            suspicious.firstOrNull(text::contains)
+        // URI + query (as before).
+        containsSuspicious("$query $uri")?.let { return block("uri-query", it) }
+        // Form/urlencoded bodies surface via parameterMap without consuming the stream.
+        runCatching {
+            request.parameterMap.values.flatMap { it.asList() }.forEach { value ->
+                containsSuspicious(value.lowercase())?.let { return block("param", it) }
+            }
+        }
+        // JSON/text bodies: only when SecurityConfig wrapped the request in a
+        // ContentCachingRequestWrapper (small bodies ≤32KB, never multipart), so
+        // reading the cache replays downstream instead of consuming the stream.
+        containsSuspicious(readCachedBody(request))?.let { return block("body", it) }
         return true
+    }
+
+    private fun readCachedBody(request: HttpServletRequest): String {
+        val wrapper = findCachingWrapper(request) ?: return ""
+        val contentType = request.contentType?.lowercase().orEmpty()
+        if (contentType.contains("multipart")) return ""
+        val inspectable = contentType.contains("json") ||
+            contentType.contains("text") ||
+            contentType.contains("xml") ||
+            contentType.contains("urlencoded")
+        if (!inspectable) return ""
+        val length = request.contentLengthLong
+        if (length <= 0 || length > MAX_BODY_INSPECT_BYTES) return ""
+        // Populate the cache; downstream @RequestBody still works because the
+        // wrapper replays cached bytes on subsequent getInputStream() calls.
+        runCatching { wrapper.inputStream.readAllBytes() }
+        val bytes = runCatching { wrapper.contentAsByteArray }.getOrNull() ?: return ""
+        if (bytes.isEmpty()) return ""
+        val capped = bytes.copyOf(minOf(bytes.size, MAX_BODY_INSPECT_BYTES))
+        return String(capped, StandardCharsets.UTF_8).lowercase()
+    }
+
+    private fun findCachingWrapper(request: HttpServletRequest): ContentCachingRequestWrapper? {
+        var current: HttpServletRequest = request
+        var hops = 0
+        while (current is HttpServletRequestWrapper && hops++ < 8) {
+            if (current is ContentCachingRequestWrapper) return current
+            current = current.request as? HttpServletRequest ?: return null
+        }
+        return null
+    }
+
+    private fun checkAdminCookieOrigin(request: HttpServletRequest): Boolean {
+        val hasAdminCookie = request.cookies?.any { it.name == ADMIN_REFRESH_COOKIE && it.value.isNotBlank() } == true
+        if (!hasAdminCookie) return true
+        val allowed = allowedOrigins()
+        if (allowed.isEmpty()) return true
+        request.getHeader("Origin")?.trim()?.takeIf { it.isNotEmpty() }?.let { origin ->
+            return allowed.any { originMatches(it, origin) }
+        }
+        request.getHeader("Referer")?.trim()?.takeIf { it.isNotEmpty() }?.let { referer ->
+            return allowed.any { refererMatches(it, referer) }
+        }
+        // No Origin and no Referer (curl, mobile, same-origin navigation): allow.
+        return true
+    }
+
+    private fun allowedOrigins(): List<String> =
+        configuredAllowedOrigins.split(',').map { it.trim().trimEnd('/').lowercase() }.filter { it.isNotEmpty() }
+
+    private fun originMatches(pattern: String, origin: String): Boolean {
+        val o = origin.trim().trimEnd('/').lowercase()
+        if (!pattern.contains('*')) return o == pattern
+        return Regex("^" + Regex.escape(pattern).replace("\\*", ".*") + "$").matches(o)
+    }
+
+    private fun refererMatches(pattern: String, referer: String): Boolean {
+        val refererOrigin = extractOrigin(referer) ?: return false
+        return originMatches(pattern, refererOrigin)
+    }
+
+    private fun extractOrigin(referer: String): String? {
+        val lower = referer.trim().lowercase()
+        val schemeEnd = lower.indexOf("://").takeIf { it >= 0 } ?: return null
+        val pathStart = lower.indexOf('/', schemeEnd + 3)
+        return if (pathStart >= 0) lower.substring(0, pathStart) else lower
     }
 
     /**
@@ -138,5 +237,9 @@ class SecurityEnhancer(
         const val MAX_FAILED_ATTEMPTS = 5
         const val WINDOW_SECONDS = 60L
         const val LOCKOUT_DURATION_SECONDS = 300L
+        /** Must stay in sync with SecurityConfig.BODY_CACHE_LIMIT_BYTES (wrapper cache cap). */
+        const val MAX_BODY_INSPECT_BYTES = 32 * 1024
+        /** Same name as AuthController.ADMIN_REFRESH_COOKIE (private there); kept literal to avoid coupling. */
+        private const val ADMIN_REFRESH_COOKIE = "red_admin_refresh"
     }
 }

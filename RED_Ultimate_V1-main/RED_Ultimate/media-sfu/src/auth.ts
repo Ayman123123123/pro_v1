@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
-import { AuthClaims, Config } from './types.js';
+import type { Config } from './config.js';
+import type { AuthClaims } from './types.js';
 
 export class AuthManager {
   private config: Config;
@@ -9,7 +10,19 @@ export class AuthManager {
   }
 
   private base64UrlDecode(value: string): Buffer {
-    return Buffer.from(value.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    try {
+      return Buffer.from(value.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    } catch {
+      throw new Error('Unauthorized');
+    }
+  }
+
+  private decodeClaims(segment: string): AuthClaims {
+    try {
+      return JSON.parse(this.base64UrlDecode(segment).toString('utf8')) as AuthClaims;
+    } catch {
+      throw new Error('Unauthorized');
+    }
   }
 
   authenticate(token: string): AuthClaims {
@@ -23,21 +36,45 @@ export class AuthManager {
     const secret = this.config.sfuTicketSecret || this.config.jwtSecret;
     const key = createHash('sha256').update(secret, 'utf8').digest();
     const expected = createHmac('sha256', key).update(`${parts[0]}.${parts[1]}`).digest();
-    const supplied = this.base64UrlDecode(parts[2]);
+    let supplied: Buffer;
+    try {
+      supplied = this.base64UrlDecode(parts[2]);
+    } catch {
+      throw new Error('Unauthorized');
+    }
 
     if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
       throw new Error('Unauthorized');
     }
 
-    const claims = JSON.parse(this.base64UrlDecode(parts[1]).toString('utf8')) as AuthClaims;
+    const claims = this.decodeClaims(parts[1]);
 
     if (!claims.sub || !claims.redId || !claims.exp) {
       throw new Error('Invalid token claims');
     }
 
+    const now = Date.now();
     const clockSkewMs = 120_000;
-    if (claims.exp * 1000 <= Date.now() - clockSkewMs) {
+    if (claims.exp * 1000 <= now - clockSkewMs) {
       throw new Error('Expired or invalid token');
+    }
+
+    if (typeof claims.iat === 'number' && claims.iat * 1000 > now + clockSkewMs) {
+      throw new Error('Invalid token claims');
+    }
+
+    const expectedIssuer = (this.config as { jwtIssuer?: string }).jwtIssuer;
+    if (expectedIssuer && claims.iss !== expectedIssuer) {
+      throw new Error('Invalid token claims');
+    }
+
+    const expectedAudience = (this.config as { jwtAudience?: string }).jwtAudience;
+    if (expectedAudience) {
+      const aud = claims.aud;
+      const ok = Array.isArray(aud) ? aud.includes(expectedAudience) : aud === expectedAudience;
+      if (!ok) {
+        throw new Error('Invalid token claims');
+      }
     }
 
     return claims;
@@ -46,13 +83,8 @@ export class AuthManager {
   validateRoomAccess(claims: AuthClaims, roomId: string): boolean {
     if (!claims.sfuGroupId) return false;
 
-    const allowedRooms = [
-      String(claims.sfuGroupId),
-      `GROUP_CALL_${claims.sfuGroupId}`,
-      claims.sfuRoomId,
-    ].filter(Boolean);
-
-    return allowedRooms.includes(roomId);
+    const group = String(claims.sfuGroupId);
+    return roomId === group || roomId === `GROUP_CALL_${group}`;
   }
 
   canProduce(claims: AuthClaims): boolean {
@@ -65,8 +97,11 @@ export class AuthManager {
 
   generateTicket(claims: Partial<AuthClaims>, ttlSeconds: number = 600): string {
     const header = { alg: 'HS256', typ: 'JWT' };
+    const cfg = this.config as { jwtIssuer?: string; jwtAudience?: string };
     const payload = {
       ...claims,
+      ...(cfg.jwtIssuer && !(claims as AuthClaims).iss ? { iss: cfg.jwtIssuer } : {}),
+      ...(cfg.jwtAudience && !(claims as AuthClaims).aud ? { aud: cfg.jwtAudience } : {}),
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + ttlSeconds,
     };

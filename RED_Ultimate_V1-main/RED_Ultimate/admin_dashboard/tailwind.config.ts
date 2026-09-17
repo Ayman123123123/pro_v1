@@ -96,9 +96,9 @@ const config: Config = {
         toast: '500',
       },
       backgroundImage: {
-        'gradient-primary': 'linear-gradient(135deg, var(--yn-green) 0%, var(--yn-blue) 100%)',
-        'gradient-gold': 'linear-gradient(135deg, var(--yn-gold) 0%, var(--yn-green) 100%)',
-        'gradient-surface': 'linear-gradient(180deg, var(--yn-surface) 0%, var(--yn-navy) 100%)',
+        'gradient-primary': 'linear-gradient(135deg, var(--yns-green) 0%, var(--yns-blue) 100%)',
+        'gradient-gold': 'linear-gradient(135deg, var(--yns-gold) 0%, var(--yns-green) 100%)',
+        'gradient-surface': 'linear-gradient(180deg, var(--yns-surface) 0%, var(--yns-navy) 100%)',
         'gradient-header': 'linear-gradient(180deg, rgba(26, 36, 44, 0.6) 0%, transparent 100%)',
         'geometric-pattern': 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%2300B37E\' fill-opacity=\'0.05\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
       },

@@ -1,7 +1,11 @@
-import { useQuery, useMutation, useQueryClient, QueryKey } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './client';
+import { usePolling } from '@/hooks/usePolling';
 import type {
   User,
+  Device,
+  SecurityEvent,
+  ActivityLogEntry,
   PageResponse,
   DashboardMetrics,
   SystemHealthComponent,
@@ -17,301 +21,399 @@ import type {
   ApiKey,
   Session,
   Notification,
-  RealtimeMetrics,
+  RealtimeMetrics as CanonicalRealtimeMetrics,
 } from '@/types';
 
-const queryKeys = {
+/**
+ * طبقة الاستعلامات الخفيفة — بلا `@tanstack/react-query`
+ * (كانت ميتة: لا QueryClientProvider في التطبيق، فكانت الخطافات تنفجر
+ * وقت التشغيل؛ وpackage.json ممنوع المساس به).
+ * العقد الخارجي مطابق لسابقه: كل خطاف استعلام يُرجع
+ * `{ data, error, isLoading, isError, isSuccess, refetch }`
+ * وكل طفرة تُرجع `{ mutate, mutateAsync, isPending, isLoading, isError, error, reset }`.
+ * لا setInterval خام هنا (حارس الواجهة) — الاستطلاع عبر usePolling.
+ */
+
+// ━━━━━━━━━━━━ RealtimeMetrics موحّدة ━━━━━━━━━━━━
+// الشكل المسطّح من `@/types` (users/messages/calls/... أرقام) مضافًا إليه
+// حقل `health` الاختياري من شكل `src/api.ts` الحي
+// (`{ users, health: Record<string, SystemHealth>, timestamp }`).
+// تقاطع الشكلين في نوع واحد: أي حمولة من أي عميل تُقبل وتُقرأ بأمان.
+// (التوحيد النهائي في `src/types/index.ts` خارج النطاق — لم يُمسّ.)
+export interface RealtimeMetrics extends CanonicalRealtimeMetrics {
+  health?: Record<string, SystemHealthComponent>;
+}
+
+// ━━━━━━━━━━━━ مفاتيح الاستعلام (للتوافق — بلا QueryKey) ━━━━━━━━━━━━
+export const queryKeys = {
   dashboard: {
-    metrics: ['dashboard', 'metrics'] as QueryKey,
-    health: ['dashboard', 'health'] as QueryKey,
-    alerts: ['dashboard', 'alerts'] as QueryKey,
-    realtime: ['dashboard', 'realtime'] as QueryKey,
+    metrics: ['dashboard', 'metrics'] as const,
+    health: ['dashboard', 'health'] as const,
+    alerts: ['dashboard', 'alerts'] as const,
+    realtime: ['dashboard', 'realtime'] as const,
   },
   users: {
-    list: (params: Record<string, unknown>) => ['users', 'list', params] as QueryKey,
-    detail: (id: string) => ['users', 'detail', id] as QueryKey,
-    sessions: (id: string) => ['users', 'sessions', id] as QueryKey,
-    devices: (id: string) => ['users', 'devices', id] as QueryKey,
-    activity: (id: string) => ['users', 'activity', id] as QueryKey,
-    security: (id: string) => ['users', 'security', id] as QueryKey,
+    list: (params: Record<string, unknown>) => ['users', 'list', params] as const,
+    detail: (id: string) => ['users', 'detail', id] as const,
+    sessions: (id: string) => ['users', 'sessions', id] as const,
+    devices: (id: string) => ['users', 'devices', id] as const,
+    activity: (id: string) => ['users', 'activity', id] as const,
+    security: (id: string) => ['users', 'security', id] as const,
   },
   content: {
-    moderationQueue: (params: Record<string, unknown>) => ['content', 'moderation', params] as QueryKey,
-    channels: (params: Record<string, unknown>) => ['content', 'channels', params] as QueryKey,
-    channelDetail: (id: string) => ['content', 'channel', id] as QueryKey,
-    reportedContent: (id: string) => ['content', 'reported', id] as QueryKey,
+    moderationQueue: (params: Record<string, unknown>) => ['content', 'moderation', params] as const,
+    channels: (params: Record<string, unknown>) => ['content', 'channels', params] as const,
+    channelDetail: (id: string) => ['content', 'channel', id] as const,
+    reportedContent: (id: string) => ['content', 'reported', id] as const,
   },
   system: {
-    featureFlags: ['system', 'featureFlags'] as QueryKey,
-    config: (params: Record<string, unknown>) => ['system', 'config', params] as QueryKey,
-    auditLog: (params: Record<string, unknown>) => ['system', 'auditLog', params] as QueryKey,
-    backups: ['system', 'backups'] as QueryKey,
-    migrations: ['system', 'migrations'] as QueryKey,
-    cache: ['system', 'cache'] as QueryKey,
+    featureFlags: ['system', 'featureFlags'] as const,
+    config: (params: Record<string, unknown>) => ['system', 'config', params] as const,
+    auditLog: (params: Record<string, unknown>) => ['system', 'auditLog', params] as const,
+    backups: ['system', 'backups'] as const,
+    migrations: ['system', 'migrations'] as const,
+    cache: ['system', 'cache'] as const,
   },
   security: {
-    roles: ['security', 'roles'] as QueryKey,
-    apiKeys: ['security', 'apiKeys'] as QueryKey,
-    sessions: ['security', 'sessions'] as QueryKey,
+    roles: ['security', 'roles'] as const,
+    apiKeys: ['security', 'apiKeys'] as const,
+    sessions: ['security', 'sessions'] as const,
   },
   analytics: {
-    reports: (params: Record<string, unknown>) => ['analytics', 'reports', params] as QueryKey,
-    customReport: (id: string) => ['analytics', 'customReport', id] as QueryKey,
+    reports: (params: Record<string, unknown>) => ['analytics', 'reports', params] as const,
+    customReport: (id: string) => ['analytics', 'customReport', id] as const,
   },
 } as const;
 
+// ━━━━━━━━━━━━ البنية الخفيفة ━━━━━━━━━━━━
+export interface QueryResult<T> {
+  data: T | undefined;
+  error: unknown;
+  isLoading: boolean;
+  isError: boolean;
+  isSuccess: boolean;
+  refetch: () => Promise<void>;
+}
+
+interface QueryOptions {
+  /** معادل `enabled` في react-query — لا جلب إطلاقًا عند false. */
+  enabled?: boolean;
+  /** معادل `refetchInterval` — بالمللي ثانية، null يعني بلا استطلاع. */
+  intervalMs?: number | null;
+  /** معادل `placeholderData: previous => previous` — إبقاء القديم أثناء التحديث. */
+  keepPrevious?: boolean;
+}
+
+export function useApiQuery<T>(
+  fetcher: () => Promise<T>,
+  deps: unknown[],
+  options: QueryOptions = {}
+): QueryResult<T> {
+  const { enabled = true, intervalMs = null, keepPrevious = true } = options;
+  const [data, setData] = useState<T | undefined>(undefined);
+  const [error, setError] = useState<unknown>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(enabled);
+  const mounted = useRef(true);
+  const requestId = useRef(0);
+  const fetcherRef = useRef(fetcher);
+  const key = JSON.stringify(deps ?? []);
+
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  });
+
+  const refetch = useCallback(async () => {
+    if (!enabled) return;
+    const id = ++requestId.current;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await fetcherRef.current();
+      if (mounted.current && requestId.current === id) setData(result);
+    } catch (e) {
+      if (mounted.current && requestId.current === id) {
+        if (!keepPrevious) setData(undefined);
+        setError(e);
+      }
+    } finally {
+      if (mounted.current && requestId.current === id) setIsLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, key, keepPrevious]);
+
+  useEffect(() => {
+    mounted.current = true;
+    if (enabled) void refetch();
+    else setIsLoading(false);
+    return () => {
+      mounted.current = false;
+    };
+  }, [refetch, enabled]);
+
+  // استطلاع مُدار (يتوقف عند إخفاء التبويب/انقطاع الشبكة) بدل refetchInterval
+  usePolling(
+    () => {
+      void refetch();
+    },
+    enabled ? intervalMs : null,
+    { immediate: false }
+  );
+
+  return {
+    data,
+    error,
+    isLoading,
+    isError: error !== null,
+    isSuccess: error === null && data !== undefined,
+    refetch,
+  };
+}
+
+export interface MutationResult<TArgs, TRes> {
+  mutate: (args: TArgs) => void;
+  mutateAsync: (args: TArgs) => Promise<TRes>;
+  isPending: boolean;
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  reset: () => void;
+}
+
+export function useApiMutation<TArgs = void, TRes = unknown>(
+  fn: (args: TArgs) => Promise<TRes>
+): MutationResult<TArgs, TRes> {
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const fnRef = useRef(fn);
+
+  useEffect(() => {
+    fnRef.current = fn;
+  });
+
+  const mutateAsync = useCallback(async (args: TArgs): Promise<TRes> => {
+    setIsPending(true);
+    setError(null);
+    try {
+      return await fnRef.current(args);
+    } catch (e) {
+      setError(e);
+      throw e;
+    } finally {
+      setIsPending(false);
+    }
+  }, []);
+
+  const mutate = useCallback(
+    (args: TArgs) => {
+      // بلا كاش مركزي يُبطل — الصفحات تُحدّث عبر refetch/الاستطلاع الدوري
+      void mutateAsync(args).catch(() => {});
+    },
+    [mutateAsync]
+  );
+
+  const reset = useCallback(() => {
+    setError(null);
+    setIsPending(false);
+  }, []);
+
+  return { mutate, mutateAsync, isPending, isLoading: isPending, isError: error !== null, error, reset };
+}
+
+// ━━━━━━━━━━━━ الاستعلامات (الأسماء والمسارات كما كانت) ━━━━━━━━━━━━
 export function useDashboardMetrics() {
-  return useQuery({
-    queryKey: queryKeys.dashboard.metrics,
-    queryFn: () => api.get<DashboardMetrics>('/dashboard/metrics'),
-    refetchInterval: 30000,
-    staleTime: 10000,
+  return useApiQuery<DashboardMetrics>(() => api.get<DashboardMetrics>('/dashboard/metrics'), [], {
+    intervalMs: 30000,
   });
 }
 
 export function useSystemHealth() {
-  return useQuery({
-    queryKey: queryKeys.dashboard.health,
-    queryFn: () => api.get<SystemHealthComponent[]>('/dashboard/health'),
-    refetchInterval: 60000,
-    staleTime: 30000,
-  });
+  return useApiQuery<SystemHealthComponent[]>(
+    () => api.get<SystemHealthComponent[]>('/dashboard/health'),
+    [],
+    { intervalMs: 60000 }
+  );
 }
 
 export function useAlerts(params?: { severity?: string; acknowledged?: boolean }) {
-  return useQuery({
-    queryKey: [...queryKeys.dashboard.alerts, params],
-    queryFn: () => api.get<Alert[]>('/dashboard/alerts', params),
-    refetchInterval: 15000,
-    staleTime: 5000,
+  const p = params ?? {};
+  return useApiQuery<Alert[]>(() => api.get<Alert[]>('/dashboard/alerts', p), [p], {
+    intervalMs: 15000,
   });
 }
 
 export function useRealtimeMetrics() {
-  return useQuery({
-    queryKey: queryKeys.dashboard.realtime,
-    queryFn: () => api.get<RealtimeMetrics>('/dashboard/realtime'),
-    refetchInterval: 5000,
-    staleTime: 2000,
+  return useApiQuery<RealtimeMetrics>(() => api.get<RealtimeMetrics>('/dashboard/realtime'), [], {
+    intervalMs: 5000,
   });
 }
 
-export function useUsers(params: {
-  page?: number;
-  size?: number;
-  status?: string;
-  role?: string;
-  search?: string;
-  sortBy?: string;
-  sortDir?: 'asc' | 'desc';
-} = {}) {
-  return useQuery({
-    queryKey: queryKeys.users.list(params),
-    queryFn: () => api.get<PageResponse<User>>('/users', params),
-    placeholderData: (previousData) => previousData,
-  });
+export function useUsers(
+  params: {
+    page?: number;
+    size?: number;
+    status?: string;
+    role?: string;
+    search?: string;
+    sortBy?: string;
+    sortDir?: 'asc' | 'desc';
+  } = {}
+) {
+  return useApiQuery<PageResponse<User>>(() => api.get<PageResponse<User>>('/users', params), [params]);
 }
 
 export function useUserDetail(userId: string) {
-  return useQuery({
-    queryKey: queryKeys.users.detail(userId),
-    queryFn: () => api.get<User>(`/users/${userId}`),
+  return useApiQuery<User>(() => api.get<User>(`/users/${userId}`), [userId], {
     enabled: !!userId,
   });
 }
 
 export function useUserSessions(userId: string) {
-  return useQuery({
-    queryKey: queryKeys.users.sessions(userId),
-    queryFn: () => api.get<Session[]>(`/users/${userId}/sessions`),
+  return useApiQuery<Session[]>(() => api.get<Session[]>(`/users/${userId}/sessions`), [userId], {
     enabled: !!userId,
   });
 }
 
 export function useUserDevices(userId: string) {
-  return useQuery({
-    queryKey: queryKeys.users.devices(userId),
-    queryFn: () => api.get<Device[]>(`/users/${userId}/devices`),
+  return useApiQuery<Device[]>(() => api.get<Device[]>(`/users/${userId}/devices`), [userId], {
     enabled: !!userId,
   });
 }
 
 export function useUserActivity(userId: string) {
-  return useQuery({
-    queryKey: queryKeys.users.activity(userId),
-    queryFn: () => api.get<ActivityLogEntry[]>(`/users/${userId}/activity`),
-    enabled: !!userId,
-  });
+  return useApiQuery<ActivityLogEntry[]>(
+    () => api.get<ActivityLogEntry[]>(`/users/${userId}/activity`),
+    [userId],
+    { enabled: !!userId }
+  );
 }
 
 export function useUserSecurityEvents(userId: string) {
-  return useQuery({
-    queryKey: queryKeys.users.security(userId),
-    queryFn: () => api.get<SecurityEvent[]>(`/users/${userId}/security-events`),
-    enabled: !!userId,
-  });
+  return useApiQuery<SecurityEvent[]>(
+    () => api.get<SecurityEvent[]>(`/users/${userId}/security-events`),
+    [userId],
+    { enabled: !!userId }
+  );
 }
 
-export function useModerationQueue(params: {
-  page?: number;
-  size?: number;
-  status?: string;
-  category?: string;
-  priority?: string;
-} = {}) {
-  return useQuery({
-    queryKey: queryKeys.content.moderationQueue(params),
-    queryFn: () => api.get<PageResponse<ReportedContent>>('/content/moderation', params),
-    refetchInterval: 10000,
-  });
+export function useModerationQueue(
+  params: {
+    page?: number;
+    size?: number;
+    status?: string;
+    category?: string;
+    priority?: string;
+  } = {}
+) {
+  return useApiQuery<PageResponse<ReportedContent>>(
+    () => api.get<PageResponse<ReportedContent>>('/content/moderation', params),
+    [params],
+    { intervalMs: 10000 }
+  );
 }
 
 export function useReportedContent(contentId: string) {
-  return useQuery({
-    queryKey: queryKeys.content.reportedContent(contentId),
-    queryFn: () => api.get<ReportedContent>(`/content/reported/${contentId}`),
-    enabled: !!contentId,
-  });
+  return useApiQuery<ReportedContent>(
+    () => api.get<ReportedContent>(`/content/reported/${contentId}`),
+    [contentId],
+    { enabled: !!contentId }
+  );
 }
 
-export function useChannels(params: {
-  page?: number;
-  size?: number;
-  type?: string;
-  search?: string;
-} = {}) {
-  return useQuery({
-    queryKey: queryKeys.content.channels(params),
-    queryFn: () => api.get<PageResponse<Channel>>('/content/channels', params),
-  });
+export function useChannels(
+  params: {
+    page?: number;
+    size?: number;
+    type?: string;
+    search?: string;
+  } = {}
+) {
+  return useApiQuery<PageResponse<Channel>>(
+    () => api.get<PageResponse<Channel>>('/content/channels', params),
+    [params]
+  );
 }
 
 export function useChannelDetail(channelId: string) {
-  return useQuery({
-    queryKey: queryKeys.content.channelDetail(channelId),
-    queryFn: () => api.get<Channel>(`/content/channels/${channelId}`),
+  return useApiQuery<Channel>(() => api.get<Channel>(`/content/channels/${channelId}`), [channelId], {
     enabled: !!channelId,
   });
 }
 
 export function useFeatureFlags() {
-  return useQuery({
-    queryKey: queryKeys.system.featureFlags,
-    queryFn: () => api.get<FeatureFlag[]>('/system/feature-flags'),
-    staleTime: 60000,
-  });
+  return useApiQuery<FeatureFlag[]>(() => api.get<FeatureFlag[]>('/system/feature-flags'), []);
 }
 
 export function useConfig(params: { page?: number; size?: number; search?: string } = {}) {
-  return useQuery({
-    queryKey: queryKeys.system.config(params),
-    queryFn: () => api.get<PageResponse<ConfigEntry>>('/system/config', params),
-  });
+  return useApiQuery<PageResponse<ConfigEntry>>(
+    () => api.get<PageResponse<ConfigEntry>>('/system/config', params),
+    [params]
+  );
 }
 
-export function useAuditLog(params: {
-  page?: number;
-  size?: number;
-  adminId?: string;
-  action?: string;
-  category?: string;
-  severity?: string;
-  startDate?: string;
-  endDate?: string;
-} = {}) {
-  return useQuery({
-    queryKey: queryKeys.system.auditLog(params),
-    queryFn: () => api.get<PageResponse<AuditLogEntry>>('/system/audit', params),
-  });
+export function useAuditLog(
+  params: {
+    page?: number;
+    size?: number;
+    adminId?: string;
+    action?: string;
+    category?: string;
+    severity?: string;
+    startDate?: string;
+    endDate?: string;
+  } = {}
+) {
+  return useApiQuery<PageResponse<AuditLogEntry>>(
+    () => api.get<PageResponse<AuditLogEntry>>('/system/audit', params),
+    [params]
+  );
 }
 
 export function useBackups() {
-  return useQuery({
-    queryKey: queryKeys.system.backups,
-    queryFn: () => api.get<Backup[]>('/system/backups'),
-  });
+  return useApiQuery<Backup[]>(() => api.get<Backup[]>('/system/backups'), []);
 }
 
 export function useRoles() {
-  return useQuery({
-    queryKey: queryKeys.security.roles,
-    queryFn: () => api.get<Role[]>('/security/roles'),
-    staleTime: 60000,
-  });
+  return useApiQuery<Role[]>(() => api.get<Role[]>('/security/roles'), []);
 }
 
 export function useApiKeys() {
-  return useQuery({
-    queryKey: queryKeys.security.apiKeys,
-    queryFn: () => api.get<ApiKey[]>('/security/api-keys'),
-  });
+  return useApiQuery<ApiKey[]>(() => api.get<ApiKey[]>('/security/api-keys'), []);
 }
 
 export function useAllSessions() {
-  return useQuery({
-    queryKey: queryKeys.security.sessions,
-    queryFn: () => api.get<Session[]>('/security/sessions'),
-    refetchInterval: 30000,
+  return useApiQuery<Session[]>(() => api.get<Session[]>('/security/sessions'), [], {
+    intervalMs: 30000,
   });
 }
 
 export function useNotifications(params?: { unreadOnly?: boolean }) {
-  return useQuery({
-    queryKey: ['notifications', params],
-    queryFn: () => api.get<Notification[]>('/notifications', params),
-    refetchInterval: 30000,
+  const p = params ?? {};
+  return useApiQuery<Notification[]>(() => api.get<Notification[]>('/notifications', p), [p], {
+    intervalMs: 30000,
   });
 }
 
+// ━━━━━━━━━━━━ الطفرات (الأسماء والتواقيع كما كانت) ━━━━━━━━━━━━
 export const mutations = {
-  useApproveUser: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (userId: string) => api.post(`/users/${userId}/approve`),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['users'] });
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.metrics });
-      },
-    });
-  },
+  useApproveUser: () =>
+    useApiMutation((userId: string) => api.post(`/users/${userId}/approve`)),
 
-  useBanUser: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: ({ userId, reason, durationDays }: { userId: string; reason: string; durationDays?: number }) =>
-        api.post(`/users/${userId}/ban`, { reason, durationDays }),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['users'] });
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.metrics });
-      },
-    });
-  },
+  useBanUser: () =>
+    useApiMutation(
+      ({ userId, reason, durationDays }: { userId: string; reason: string; durationDays?: number }) =>
+        api.post(`/users/${userId}/ban`, { reason, durationDays })
+    ),
 
-  useUnbanUser: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (userId: string) => api.post(`/users/${userId}/unban`),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['users'] });
-      },
-    });
-  },
+  useUnbanUser: () => useApiMutation((userId: string) => api.post(`/users/${userId}/unban`)),
 
-  useBulkAction: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: ({ action, userIds }: { action: string; userIds: string[] }) =>
-        api.post('/users/bulk', { action, userIds }),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['users'] });
-      },
-    });
-  },
+  useBulkAction: () =>
+    useApiMutation(({ action, userIds }: { action: string; userIds: string[] }) =>
+      api.post('/users/bulk', { action, userIds })
+    ),
 
-  useModerateContent: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: ({
+  useModerateContent: () =>
+    useApiMutation(
+      ({
         contentId,
         action,
         notes,
@@ -319,209 +421,92 @@ export const mutations = {
         contentId: string;
         action: 'APPROVE' | 'REJECT' | 'DELETE' | 'WARN' | 'SHADOW_BAN' | 'ESCALATE';
         notes?: string;
-      }) => api.post(`/content/reported/${contentId}/moderate`, { action, notes }),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['content', 'moderation'] });
-      },
-    });
-  },
+      }) => api.post(`/content/reported/${contentId}/moderate`, { action, notes })
+    ),
 
-  useUpdateFeatureFlag: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: ({ key, data }: { key: string; data: Partial<FeatureFlag> }) =>
-        api.put(`/system/feature-flags/${key}`, data),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.system.featureFlags });
-      },
-    });
-  },
+  useUpdateFeatureFlag: () =>
+    useApiMutation(({ key, data }: { key: string; data: Partial<FeatureFlag> }) =>
+      api.put(`/system/feature-flags/${key}`, data)
+    ),
 
-  useCreateFeatureFlag: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (data: Omit<FeatureFlag, 'createdAt' | 'updatedAt' | 'createdBy'>) =>
-        api.post('/system/feature-flags', data),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.system.featureFlags });
-      },
-    });
-  },
+  useCreateFeatureFlag: () =>
+    useApiMutation((data: Omit<FeatureFlag, 'createdAt' | 'updatedAt' | 'createdBy'>) =>
+      api.post('/system/feature-flags', data)
+    ),
 
-  useDeleteFeatureFlag: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (key: string) => api.delete(`/system/feature-flags/${key}`),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.system.featureFlags });
-      },
-    });
-  },
+  useDeleteFeatureFlag: () =>
+    useApiMutation((key: string) => api.delete(`/system/feature-flags/${key}`)),
 
-  useUpdateConfig: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: ({ key, value, description }: { key: string; value: string; description?: string }) =>
-        api.put(`/system/config/${key}`, { value, description }),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['system', 'config'] });
-      },
-    });
-  },
+  useUpdateConfig: () =>
+    useApiMutation(
+      ({ key, value, description }: { key: string; value: string; description?: string }) =>
+        api.put(`/system/config/${key}`, { value, description })
+    ),
 
-  useCreateBackup: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (data: { type: Backup['type']; notes?: string }) =>
-        api.post('/system/backups', data),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.system.backups });
-      },
-    });
-  },
+  useCreateBackup: () =>
+    useApiMutation((data: { type: Backup['type']; notes?: string }) =>
+      api.post('/system/backups', data)
+    ),
 
-  useRestoreBackup: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: ({ backupId, confirmCode }: { backupId: string; confirmCode: string }) =>
-        api.post(`/system/backups/${backupId}/restore`, { confirmCode }),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.system.backups });
-      },
-    });
-  },
+  useRestoreBackup: () =>
+    useApiMutation(({ backupId, confirmCode }: { backupId: string; confirmCode: string }) =>
+      api.post(`/system/backups/${backupId}/restore`, { confirmCode })
+    ),
 
-  useDeleteBackup: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (backupId: string) => api.delete(`/system/backups/${backupId}`),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.system.backups });
-      },
-    });
-  },
+  useDeleteBackup: () =>
+    useApiMutation((backupId: string) => api.delete(`/system/backups/${backupId}`)),
 
-  useCreateRole: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (data: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>) =>
-        api.post('/security/roles', data),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.security.roles });
-      },
-    });
-  },
+  useCreateRole: () =>
+    useApiMutation((data: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>) =>
+      api.post('/security/roles', data)
+    ),
 
-  useUpdateRole: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: ({ id, data }: { id: string; data: Partial<Role> }) =>
-        api.put(`/security/roles/${id}`, data),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.security.roles });
-      },
-    });
-  },
+  useUpdateRole: () =>
+    useApiMutation(({ id, data }: { id: string; data: Partial<Role> }) =>
+      api.put(`/security/roles/${id}`, data)
+    ),
 
-  useDeleteRole: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (id: string) => api.delete(`/security/roles/${id}`),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.security.roles });
-      },
-    });
-  },
+  useDeleteRole: () => useApiMutation((id: string) => api.delete(`/security/roles/${id}`)),
 
-  useCreateApiKey: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (data: { name: string; scopes: string[]; expiresAt?: string }) =>
-        api.post('/security/api-keys', data),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.security.apiKeys });
-      },
-    });
-  },
+  useCreateApiKey: () =>
+    useApiMutation((data: { name: string; scopes: string[]; expiresAt?: string }) =>
+      api.post('/security/api-keys', data)
+    ),
 
-  useRevokeApiKey: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (id: string) => api.delete(`/security/api-keys/${id}`),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.security.apiKeys });
-      },
-    });
-  },
+  useRevokeApiKey: () =>
+    useApiMutation((id: string) => api.delete(`/security/api-keys/${id}`)),
 
-  useRevokeSession: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: ({ sessionId, reason }: { sessionId: string; reason: string }) =>
-        api.post(`/security/sessions/${sessionId}/revoke`, { reason }),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.security.sessions });
-      },
-    });
-  },
+  useRevokeSession: () =>
+    useApiMutation(({ sessionId, reason }: { sessionId: string; reason: string }) =>
+      api.post(`/security/sessions/${sessionId}/revoke`, { reason })
+    ),
 
-  useRevokeAllSessions: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (userId: string) => api.post(`/security/sessions/revoke-all/${userId}`),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.security.sessions });
-      },
-    });
-  },
+  useRevokeAllSessions: () =>
+    useApiMutation((userId: string) => api.post(`/security/sessions/revoke-all/${userId}`)),
 
-  useMarkNotificationRead: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: (id: string) => api.put(`/notifications/${id}/read`),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      },
-    });
-  },
+  useMarkNotificationRead: () =>
+    useApiMutation((id: string) => api.put(`/notifications/${id}/read`)),
 
-  useMarkAllNotificationsRead: () => {
-    const queryClient = useQueryClient();
-    return useMutation({
-      mutationFn: () => api.put('/notifications/read-all'),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      },
-    });
-  },
+  useMarkAllNotificationsRead: () => useApiMutation(() => api.put('/notifications/read-all')),
 
-  useExportData: () => {
-    return useMutation({
-      mutationFn: ({ type, format, params }: { type: string; format: 'csv' | 'excel' | 'pdf'; params: Record<string, unknown> }) =>
-        api.post('/export', { type, format, params }, { responseType: 'blob' }),
-    });
-  },
+  useExportData: () =>
+    useApiMutation(
+      ({
+        type,
+        format,
+        params,
+      }: {
+        type: string;
+        format: 'csv' | 'excel' | 'pdf';
+        params: Record<string, unknown>;
+      }) => api.post('/export', { type, format, params }, { responseType: 'blob' })
+    ),
 };
 
-interface Device {
-  id: string;
-  name: string;
-  platform: string;
-  appVersion: string;
-  osVersion: string;
-  lastActive: string;
-  isTrusted: boolean;
-  pushToken?: string;
-}
+// NOTE: حُذفت الواجهتان المحليتان `Device` و`SecurityEvent` من هذا الملف —
+// تُستوردان الآن من `@/types` (المصدر الوحيد). بقيت نسخة `Device` في
+// `src/pages/tabs/AuthorityTab.tsx:6` خارج النطاق — يجب حذفها هناك
+// واستيراد `Device` من `@/types` بدلها (سطر واحد، لم يُمسّ التزامًا بالنطاق).
 
-interface SecurityEvent {
-  id: string;
-  type: string;
-  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  description: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  resolved: boolean;
-}
-
-export { queryKeys };
+// للحفاظ على التوافق مع أي مستورد لنوع Permission من هنا سابقًا:
+export type { Permission };

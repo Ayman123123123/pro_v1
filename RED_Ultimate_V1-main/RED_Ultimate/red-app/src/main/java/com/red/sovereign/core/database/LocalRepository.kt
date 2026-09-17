@@ -6,7 +6,25 @@ import kotlinx.coroutines.flow.Flow
 
 class LocalRepository(context: Context) {
     private val appCtx = context.applicationContext
-    private val dao = RedDatabase.getInstance(context).redDao()
+    private val db = RedDatabase.getInstance(context)
+    private val dao = db.redDao()
+    private val outboxDao by lazy { db.outboxDao() }
+    private val mediaUploadDao by lazy { db.mediaUploadDao() }
+    private val channelDao by lazy { db.channelDao() }
+    private val communityDao by lazy { db.communityDao() }
+    private val communityMemberDao by lazy { db.communityMemberDao() }
+    private val channelMemberDao by lazy { db.channelMemberDao() }
+    private val liveStreamDao by lazy { db.liveStreamDao() }
+    private val liveStreamViewerDao by lazy { db.liveStreamViewerDao() }
+    private val liveStreamRecordingDao by lazy { db.liveStreamRecordingDao() }
+    private val liveStreamChatDao by lazy { db.liveStreamChatDao() }
+    private val liveStreamReactionDao by lazy { db.liveStreamReactionDao() }
+    private val liveStreamGiftDao by lazy { db.liveStreamGiftDao() }
+    private val mediaFileDao by lazy { db.mediaFileDao() }
+    private val deviceDao by lazy { db.deviceDao() }
+    private val userProfileDao by lazy { db.userProfileDao() }
+    private val appSettingDao by lazy { db.appSettingDao() }
+    private val liveStreamDraftDao by lazy { db.liveStreamDraftDao() }
 
     // --- Messages ---
     suspend fun saveMessage(message: MessageEntity) = dao.insertMessage(message)
@@ -56,23 +74,43 @@ class LocalRepository(context: Context) {
     suspend fun updateLocalHistoryText(id: String, plaintext: ByteArray) = dao.updateLocalHistoryText(id, plaintext)
 
     suspend fun saveIncomingMessage(message: com.red.sovereign.proto.RedProtos.ChatMessage, outgoing: Boolean = false) {
-        val entity = MessageEntity(
-            id = message.id,
-            conversationId = message.conversationId,
-            senderId = message.senderId,
-            receiverId = message.receiverId,
-            payload = message.payload.toByteArray(),
-            type = message.type,
-            senderDeviceId = message.senderDeviceId,
-            receiverDeviceId = message.receiverDeviceId,
-            ciphertextType = message.ciphertextType,
-            sequence = message.sequenceNumber,
-            status = if (outgoing) "SENT" else "DELIVERED",
-            createdAt = message.timestamp,
-            outgoing = outgoing
-        )
-        dao.insertMessage(entity)
+        dao.insertMessage(message.toMessageEntity(outgoing))
     }
+
+    /**
+     * مسار ذري (معاملة Room واحدة عبر [RedDao.insertMessageAndTouchConversation]):
+     * إدراج الرسالة + إنشاء/تحديث صف المحادثة معًا — لا رسالة بلا ظهور
+     * في القائمة، ولا عداد غير مقروء مكسور عند القتل بين العمليتين.
+     * (المساران المنفصلان أعلاه/أدناه يبقيان للتوافق مع RedConnectionService.)
+     */
+    suspend fun saveIncomingMessageAndTouchConversation(
+        message: com.red.sovereign.proto.RedProtos.ChatMessage,
+        peerId: String,
+        preview: String,
+        timestamp: Long = message.timestamp,
+        outgoing: Boolean = false,
+        isIncoming: Boolean = !outgoing
+    ) {
+        dao.insertMessageAndTouchConversation(
+            message.toMessageEntity(outgoing), peerId, preview, timestamp, isIncoming
+        )
+    }
+
+    private fun com.red.sovereign.proto.RedProtos.ChatMessage.toMessageEntity(outgoing: Boolean) = MessageEntity(
+        id = id,
+        conversationId = conversationId,
+        senderId = senderId,
+        receiverId = receiverId,
+        payload = payload.toByteArray(),
+        type = type,
+        senderDeviceId = senderDeviceId,
+        receiverDeviceId = receiverDeviceId,
+        ciphertextType = ciphertextType,
+        sequence = sequenceNumber,
+        status = if (outgoing) MessageStatus.SENT.name else MessageStatus.DELIVERED.name,
+        createdAt = timestamp,
+        outgoing = outgoing
+    )
 
     // --- Conversations ---
     suspend fun saveConversation(conv: ConversationEntity) = dao.insertConversation(conv)
@@ -81,25 +119,19 @@ class LocalRepository(context: Context) {
      * يُنشئ/يُحدّث صف المحادثة عند إرسال أو استقبال رسالة، بحيث تظهر
      * المحادثة في قائمة الدردشات مع آخر رسالة والطابع الزمني وعدد غير المقروء.
      * يحافظ على pinned/archived/muted عند وجود المحادثة مسبقاً.
+     * ذري عبر [RedDao.touchConversation] (قراءة-تعديل-كتابة في معاملة واحدة).
      */
     suspend fun onMessageStored(conversationId: String, peerId: String, preview: String, timestamp: Long, isIncoming: Boolean) {
-        val existing = dao.getConversation(conversationId)
-        if (existing != null) {
-            dao.updateConversationLast(conversationId, preview, timestamp, if (isIncoming) 1 else 0)
-        } else {
-            dao.insertConversation(
-                ConversationEntity(
-                    id = conversationId, peerId = peerId,
-                    lastMessageText = preview, lastMessageTimestamp = timestamp,
-                    unreadCount = if (isIncoming) 1 else 0
-                )
-            )
-        }
+        dao.touchConversation(conversationId, peerId, preview, timestamp, isIncoming)
     }
     fun getActiveConversations(): Flow<List<ConversationEntity>> = dao.getActiveConversations()
     fun getArchivedConversations(): Flow<List<ConversationEntity>> = dao.getArchivedConversations()
     fun getAllConversations(): Flow<List<ConversationEntity>> = dao.getAllConversations()
     suspend fun getConversation(id: String) = dao.getConversation(id)
+    /** جلب محادثة عبر معرف الطرف — استعلام مباشر بدل فلترة كل المحادثات. */
+    suspend fun getConversationByPeerId(peerId: String) = dao.getConversationByPeerId(peerId)
+    /** مجموع غير المقروء (غير المؤرشف) لشارة التطبيق — تجميع SQL. */
+    suspend fun totalUnreadCount(): Int = runCatching { dao.totalUnreadCount() }.getOrDefault(0)
     suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, pinned)
     suspend fun setArchived(id: String, archived: Boolean) = dao.setArchived(id, archived)
     suspend fun setMutedUntil(id: String, until: Long) = dao.setMutedUntil(id, until)
@@ -108,14 +140,21 @@ class LocalRepository(context: Context) {
 
     // --- Contacts ---
     suspend fun saveContacts(contacts: List<ContactEntity>) = dao.insertContacts(contacts)
-    suspend fun replaceContacts(contacts: List<ContactEntity>) {
-        dao.clearContacts()
-        if (contacts.isNotEmpty()) dao.insertContacts(contacts)
-    }
+    /** استبدال ذري (مسح + إدراج في معاملة واحدة) — عطل بينهما كان يُفرغ الجدول. */
+    suspend fun replaceContacts(contacts: List<ContactEntity>) = dao.replaceContactsAtomic(contacts)
     fun getFriends(): Flow<List<ContactEntity>> = dao.getFriends()
+    suspend fun getContactById(redId: String) = dao.getContactById(redId)
+    suspend fun searchContacts(query: String, limit: Int = CONTACT_SEARCH_DEFAULT_LIMIT): List<ContactEntity> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        return dao.searchContacts(likeContainsPattern(trimmed), limit.coerceIn(1, CONTACT_SEARCH_DEFAULT_LIMIT * 2))
+    }
+    suspend fun setBlocked(redId: String, blocked: Boolean) = dao.setBlocked(redId, blocked)
 
     // --- Groups ---
     suspend fun saveGroups(groups: List<GroupEntity>) = dao.insertGroups(groups)
+    /** مجموعة واحدة بالمعرف — بدل فلترة getGroups() كاملة في الذاكرة. */
+    suspend fun getGroupById(id: String) = dao.getGroupById(id)
     fun getGroups(): Flow<List<GroupEntity>> = dao.getGroups()
     // Paging للمجموعات: صفحة LIMIT/OFFSET — للاستهلاك التدريجي عند نمو القوائم.
     suspend fun getGroupsPage(limit: Int, offset: Int): List<GroupEntity> = dao.getGroupsPage(limit, offset)
@@ -128,6 +167,8 @@ class LocalRepository(context: Context) {
     // Paging لسجل المكالمات: صفحة LIMIT/OFFSET — يغذيها CallHistoryViewModel.loadMore().
     suspend fun getCallLogsPage(limit: Int, offset: Int): List<CallLogEntity> = dao.getCallLogsPage(limit, offset)
     suspend fun countCallLogs(): Int = runCatching { dao.countCallLogs() }.getOrDefault(0)
+    /** عدد المكالمات الفائتة لشارة/فلتر الفائت — COUNT(*) بدل تحميل السجل. */
+    suspend fun countMissedCalls(): Int = runCatching { dao.countMissedCalls() }.getOrDefault(0)
     suspend fun deleteCallLog(id: String) = dao.deleteCallLog(id)
     suspend fun deleteCallLogs(ids: List<String>) = dao.deleteCallLogs(ids)
     suspend fun clearCallLogs() = dao.clearCallLogs()
@@ -146,21 +187,14 @@ class LocalRepository(context: Context) {
     // --- Search ---
     /**
      * بحث احتياطي داخل محادثة. المسار المفضَّل هو [FtsSearchManager]
-     * لأنه مفهرس ويطبّع الحركات؛ هذا مسحٌ كامل للجدول.
-     *
-     * `%` و`_` محرفا بدل في `LIKE`، فلو مرّا كما هما لطابق بحثُ
-     * المستخدم عن «%» **كلَّ** رسائل المحادثة بدل أن يجد لا شيء
-     * (مقيس). لذا يُهرَّبان مع `\` نفسها — والترتيب مقصود: تهريب
-     * الشرطة المائلة **أولًا** وإلا ضوعف تهريبُ ما بعدها.
+     * لأنه مفهرس ويطبّع الحركات؛ هذا مسحٌ مقيَّد بالمحادثة (فهرس
+     * conversationId) مع `LIMIT` داخل SQL.
+     * التهريب موحَّد في [likeContainsPattern] — لا تهريب مبعثر هنا.
      */
-    suspend fun search(convId: String, query: String): List<LocalHistoryEntity> {
+    suspend fun search(convId: String, query: String, limit: Int = MESSAGE_SEARCH_DEFAULT_LIMIT): List<LocalHistoryEntity> {
         val trimmed = query.trim()
         if (trimmed.isBlank()) return emptyList()
-        val escaped = trimmed
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
-        return dao.searchMessages(convId, "%$escaped%")
+        return dao.searchMessages(convId, likeContainsPattern(trimmed), limit.coerceIn(1, MESSAGE_SEARCH_MAX_LIMIT))
     }
 
     // --- Delete ---
@@ -245,12 +279,13 @@ class LocalRepository(context: Context) {
         }
     }
 
-    /** يحذف كل بيانات محادثة: السجل المحلي + الرسائل + تفاعلاتها + صف المحادثة. */
+    /** يحذف كل بيانات محادثة: السجل المحلي + الرسائل + تفاعلاتها + الصادر + الرفوعات + صف المحادثة. */
     suspend fun deleteConversation(convId: String) {
-        dao.deleteLocalHistoryByConversation(convId)
-        dao.deleteMessagesByConversation(convId)
-        dao.deleteReactionsByConversation(convId)
-        dao.deleteConversationRow(convId)
+        // النواة الأربع ذرية في معاملة Room واحدة؛ الصادر/الرفوعات تنظيف
+        // best-effort (ذرّيتها الكاملة عبر DAO تتطلب withTransaction على مستوى القاعدة).
+        dao.deleteConversationFull(convId)
+        runCatching { outboxDao.deleteByConversation(convId) }
+        runCatching { mediaUploadDao.deleteByConversation(convId) }
     }
 
     // --- Global Search ---
@@ -264,13 +299,9 @@ class LocalRepository(context: Context) {
     suspend fun searchAll(query: String): List<LocalHistoryEntity> {
         val trimmed = query.trim()
         if (trimmed.length < 2) return emptyList()
-        val escaped = trimmed
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
-        // ملاحظة: searchAllMessages بلا ESCAPE صريح — `%` و`_` مهرَّبة هنا
-        // احترازًا، والتطبيع العربي الكامل عبر FtsSearchManager عند توفره.
-        return dao.searchAllMessages("%$escaped%").take(100)
+        // التهريب موحّد في likeContainsPattern (Entities.kt) — لا نسخ مبعثرة هنا.
+        // LIMIT داخل SQL (MESSAGE_SEARCH_MAX_LIMIT) بدل take() بعد جلب الكل.
+        return dao.searchAllMessages(likeContainsPattern(trimmed), MESSAGE_SEARCH_MAX_LIMIT)
     }
 
     /**
@@ -308,4 +339,174 @@ class LocalRepository(context: Context) {
         }
         return deleted
     }
+
+    // ============ CHANNELS ============
+    suspend fun saveChannel(channel: ChannelEntity) = channelDao.upsert(channel)
+    suspend fun saveChannels(channels: List<ChannelEntity>) = channelDao.upsertAll(channels)
+    suspend fun getChannel(id: String) = channelDao.getById(id)
+    fun getChannelsByCommunity(communityId: String): Flow<List<ChannelEntity>> = channelDao.getByCommunity(communityId)
+    suspend fun getChannelsByCommunityPage(communityId: String, limit: Int, offset: Int) = channelDao.getByCommunityPage(communityId, limit, offset)
+    suspend fun countChannelsByCommunity(communityId: String) = channelDao.countByCommunity(communityId)
+    fun getChannelsByOwner(ownerId: String): Flow<List<ChannelEntity>> = channelDao.getByOwner(ownerId)
+    suspend fun incrementChannelMemberCount(id: String, delta: Int) = channelDao.incrementMemberCount(id, delta)
+    suspend fun updateChannelLastMessage(id: String, ts: Long) = channelDao.updateLastMessage(id, ts)
+    suspend fun archiveChannel(id: String, ts: Long) = channelDao.archive(id, ts)
+    suspend fun unarchiveChannel(id: String, ts: Long) = channelDao.unarchive(id, ts)
+    suspend fun softDeleteChannel(id: String, ts: Long) = channelDao.softDelete(id, ts)
+    suspend fun hardDeleteChannel(id: String) = channelDao.hardDelete(id)
+
+    // ============ COMMUNITIES ============
+    suspend fun saveCommunity(community: CommunityEntity) = communityDao.upsert(community)
+    suspend fun saveCommunities(communities: List<CommunityEntity>) = communityDao.upsertAll(communities)
+    suspend fun getCommunity(id: String) = communityDao.getById(id)
+    fun getCommunitiesByOwner(ownerId: String): Flow<List<CommunityEntity>> = communityDao.getByOwner(ownerId)
+    suspend fun getPublicCommunities(limit: Int, offset: Int) = communityDao.getPublicCommunities(limit, offset)
+    suspend fun countPublicCommunities() = communityDao.countPublicCommunities()
+    suspend fun incrementCommunityMemberCount(id: String, delta: Int) = communityDao.incrementMemberCount(id, delta)
+    suspend fun incrementCommunityChannelCount(id: String, delta: Int) = communityDao.incrementChannelCount(id, delta)
+    suspend fun softDeleteCommunity(id: String, ts: Long) = communityDao.softDelete(id, ts)
+    suspend fun hardDeleteCommunity(id: String) = communityDao.hardDelete(id)
+
+    // ============ COMMUNITY MEMBERS ============
+    suspend fun saveCommunityMember(member: CommunityMemberEntity) = communityMemberDao.upsert(member)
+    suspend fun saveCommunityMembers(members: List<CommunityMemberEntity>) = communityMemberDao.upsertAll(members)
+    suspend fun getCommunityMember(communityId: String, userId: String) = communityMemberDao.get(communityId, userId)
+    fun getCommunityMembers(communityId: String): Flow<List<CommunityMemberEntity>> = communityMemberDao.getByCommunity(communityId)
+    suspend fun getCommunityModerators(communityId: String) = communityMemberDao.getModerators(communityId)
+    fun getUserCommunities(userId: String): Flow<List<CommunityMemberEntity>> = communityMemberDao.getByUser(userId)
+    suspend fun countCommunityMembers(communityId: String) = communityMemberDao.countByCommunity(communityId)
+    suspend fun removeCommunityMember(communityId: String, userId: String) = communityMemberDao.remove(communityId, userId)
+    suspend fun removeAllCommunityMembers(communityId: String) = communityMemberDao.removeAll(communityId)
+    suspend fun updateCommunityMemberRole(communityId: String, userId: String, role: String) = communityMemberDao.updateRole(communityId, userId, role)
+    suspend fun setCommunityMemberMuted(communityId: String, userId: String, muted: Boolean, until: Long) = communityMemberDao.setMuted(communityId, userId, muted, until)
+
+    // ============ CHANNEL MEMBERS ============
+    suspend fun saveChannelMember(member: ChannelMemberEntity) = channelMemberDao.upsert(member)
+    suspend fun saveChannelMembers(members: List<ChannelMemberEntity>) = channelMemberDao.upsertAll(members)
+    suspend fun getChannelMember(channelId: String, userId: String) = channelMemberDao.get(channelId, userId)
+    fun getChannelMembers(channelId: String): Flow<List<ChannelMemberEntity>> = channelMemberDao.getByChannel(channelId)
+    suspend fun getChannelModerators(channelId: String) = channelMemberDao.getModerators(channelId)
+    fun getUserChannels(userId: String): Flow<List<ChannelMemberEntity>> = channelMemberDao.getByUser(userId)
+    suspend fun countChannelMembers(channelId: String) = channelMemberDao.countByChannel(channelId)
+    suspend fun removeChannelMember(channelId: String, userId: String) = channelMemberDao.remove(channelId, userId)
+    suspend fun removeAllChannelMembers(channelId: String) = channelMemberDao.removeAll(channelId)
+    suspend fun updateChannelMemberRole(channelId: String, userId: String, role: String) = channelMemberDao.updateRole(channelId, userId, role)
+    suspend fun setChannelMemberMuted(channelId: String, userId: String, muted: Boolean, until: Long) = channelMemberDao.setMuted(channelId, userId, muted, until)
+    suspend fun updateChannelMemberLastRead(channelId: String, userId: String, msgId: String) = channelMemberDao.updateLastRead(channelId, userId, msgId)
+
+    // ============ LIVE STREAMS ============
+    suspend fun saveLiveStream(stream: LiveStreamEntity) = liveStreamDao.upsert(stream)
+    suspend fun saveLiveStreams(streams: List<LiveStreamEntity>) = liveStreamDao.upsertAll(streams)
+    suspend fun getLiveStream(id: String) = liveStreamDao.getById(id)
+    fun getLiveStreamsByChannel(channelId: String): Flow<List<LiveStreamEntity>> = liveStreamDao.getByChannel(channelId)
+    suspend fun getActiveLiveStreamByChannel(channelId: String) = liveStreamDao.getActiveByChannel(channelId)
+    suspend fun getLiveStreamsByHost(hostId: String, limit: Int, offset: Int) = liveStreamDao.getByHost(hostId, limit, offset)
+    suspend fun getLiveStreamsByCommunity(communityId: String, limit: Int, offset: Int) = liveStreamDao.getByCommunity(communityId, limit, offset)
+    suspend fun getActiveLiveStreams(limit: Int) = liveStreamDao.getActiveStreams(limit)
+    suspend fun getUpcomingLiveStreams(now: Long, limit: Int) = liveStreamDao.getUpcomingStreams(now, limit)
+    suspend fun countLiveStreamsByChannel(channelId: String) = liveStreamDao.countByChannel(channelId)
+    suspend fun updateLiveStreamStatus(id: String, status: String, startedAt: Long, ts: Long) = liveStreamDao.updateStatus(id, status, startedAt, ts)
+    suspend fun endLiveStream(id: String, endedAt: Long, duration: Long, peak: Int, unique: Long, watchTime: Long, recStatus: String, recUrl: String?, ts: Long) = liveStreamDao.endStream(id, endedAt, duration, peak, unique, watchTime, recStatus, recUrl, ts)
+    suspend fun updateLiveStreamPeakViewers(id: String, peak: Int, ts: Long) = liveStreamDao.updatePeakViewers(id, peak, ts)
+    suspend fun softDeleteLiveStream(id: String, ts: Long) = liveStreamDao.softDelete(id, ts)
+    suspend fun hardDeleteLiveStream(id: String) = liveStreamDao.hardDelete(id)
+
+    // ============ LIVE STREAM VIEWERS ============
+    suspend fun saveLiveStreamViewer(viewer: LiveStreamViewerEntity) = liveStreamViewerDao.upsert(viewer)
+    suspend fun saveLiveStreamViewers(viewers: List<LiveStreamViewerEntity>) = liveStreamViewerDao.upsertAll(viewers)
+    suspend fun getLiveStreamViewer(streamId: String, userId: String) = liveStreamViewerDao.get(streamId, userId)
+    fun getActiveLiveStreamViewers(streamId: String): Flow<List<LiveStreamViewerEntity>> = liveStreamViewerDao.getActiveViewers(streamId)
+    suspend fun countActiveLiveStreamViewers(streamId: String) = liveStreamViewerDao.countActiveViewers(streamId)
+    suspend fun getLiveStreamViewers(streamId: String, limit: Int, offset: Int) = liveStreamViewerDao.getByStream(streamId, limit, offset)
+    suspend fun getUserLiveStreamViewers(userId: String, limit: Int, offset: Int) = liveStreamViewerDao.getByUser(userId, limit, offset)
+    suspend fun leaveLiveStream(streamId: String, userId: String, leftAt: Long, duration: Long) = liveStreamViewerDao.leave(streamId, userId, leftAt, duration)
+    suspend fun incrementLiveStreamWatchTime(streamId: String, userId: String, delta: Long) = liveStreamViewerDao.incrementWatchTime(streamId, userId, delta)
+    suspend fun clearLiveStreamViewers(streamId: String) = liveStreamViewerDao.clearByStream(streamId)
+
+    // ============ LIVE STREAM RECORDINGS ============
+    suspend fun saveLiveStreamRecording(recording: LiveStreamRecordingEntity) = liveStreamRecordingDao.upsert(recording)
+    suspend fun getLiveStreamRecording(id: String) = liveStreamRecordingDao.getById(id)
+    suspend fun getLiveStreamRecordingsByStream(streamId: String) = liveStreamRecordingDao.getByStream(streamId)
+    suspend fun getLiveStreamRecordingsByHost(hostId: String, limit: Int, offset: Int) = liveStreamRecordingDao.getByHost(hostId, limit, offset)
+    suspend fun getLiveStreamRecordingsByStatus(status: String, limit: Int) = liveStreamRecordingDao.getByStatus(status, limit)
+    suspend fun updateRecordingProcessingStatus(id: String, status: String, started: Long, ts: Long) = liveStreamRecordingDao.updateProcessingStatus(id, status, started, ts)
+    suspend fun markRecordingReady(id: String, hls: String, thumb: String?, size: Long, completed: Long, ts: Long) = liveStreamRecordingDao.markReady(id, hls, thumb, size, completed, ts)
+    suspend fun markRecordingFailed(id: String, error: String, ts: Long) = liveStreamRecordingDao.markFailed(id, error, ts)
+
+    // ============ LIVE STREAM CHAT ============
+    suspend fun saveLiveStreamChatMessage(message: LiveStreamChatEntity) = liveStreamChatDao.insert(message)
+    suspend fun saveLiveStreamChatMessages(messages: List<LiveStreamChatEntity>) = liveStreamChatDao.insertAll(messages)
+    suspend fun getLiveStreamChatMessages(streamId: String, limit: Int, offset: Int) = liveStreamChatDao.getByStream(streamId, limit, offset)
+    suspend fun getLiveStreamChatMessagesByType(streamId: String, type: String, limit: Int) = liveStreamChatDao.getByStreamAndType(streamId, type, limit)
+    suspend fun countLiveStreamChatMessages(streamId: String) = liveStreamChatDao.countByStream(streamId)
+    suspend fun softDeleteLiveStreamChatMessage(id: String, ts: Long, by: String) = liveStreamChatDao.softDelete(id, ts, by)
+    suspend fun cleanupOldLiveStreamChatMessages(streamId: String, cutoff: Long) = liveStreamChatDao.cleanupOldMessages(streamId, cutoff)
+
+    // ============ LIVE STREAM REACTIONS ============
+    suspend fun saveLiveStreamReaction(reaction: LiveStreamReactionEntity) = liveStreamReactionDao.upsert(reaction)
+    fun getLiveStreamReactions(streamId: String): Flow<List<LiveStreamReactionEntity>> = liveStreamReactionDao.getByStream(streamId)
+    suspend fun getLiveStreamUserReactions(streamId: String, userId: String) = liveStreamReactionDao.getByUser(streamId, userId)
+    suspend fun getLiveStreamReactionSummary(streamId: String) = liveStreamReactionDao.getReactionSummary(streamId)
+    suspend fun incrementLiveStreamReaction(streamId: String, userId: String, emoji: String, ts: Long) = liveStreamReactionDao.increment(streamId, userId, emoji, ts)
+    suspend fun removeLiveStreamReaction(streamId: String, userId: String, emoji: String) = liveStreamReactionDao.remove(streamId, userId, emoji)
+
+    // ============ LIVE STREAM GIFTS ============
+    suspend fun saveLiveStreamGift(gift: LiveStreamGiftEntity) = liveStreamGiftDao.insert(gift)
+    suspend fun getLiveStreamGifts(streamId: String, limit: Int, offset: Int) = liveStreamGiftDao.getByStream(streamId, limit, offset)
+    suspend fun getUserLiveStreamGifts(senderId: String, limit: Int, offset: Int) = liveStreamGiftDao.getBySender(senderId, limit, offset)
+    suspend fun getLiveStreamTotalGiftsAmount(streamId: String) = liveStreamGiftDao.getTotalAmount(streamId)
+    suspend fun getLiveStreamTopGifters(streamId: String, limit: Int) = liveStreamGiftDao.getTopGifters(streamId, limit)
+
+    // ============ MEDIA FILES ============
+    suspend fun saveMediaFile(file: MediaFileEntity) = mediaFileDao.upsert(file)
+    suspend fun saveMediaFiles(files: List<MediaFileEntity>) = mediaFileDao.upsertAll(files)
+    suspend fun getMediaFile(id: String) = mediaFileDao.getById(id)
+    fun getMediaFilesByConversation(conversationId: String): Flow<List<MediaFileEntity>> = mediaFileDao.getByConversation(conversationId)
+    suspend fun getMediaFilesByConversationAndType(conversationId: String, type: String) = mediaFileDao.getByConversationAndType(conversationId, type)
+    suspend fun getMediaFilesByOwner(ownerId: String, limit: Int, offset: Int) = mediaFileDao.getByOwner(ownerId, limit, offset)
+    suspend fun getMediaFileByMessageId(messageId: String) = mediaFileDao.getByMessageId(messageId)
+    suspend fun getMediaFilesByStatus(status: String, limit: Int) = mediaFileDao.getByStatus(status, limit)
+    suspend fun updateMediaFileStatus(id: String, status: String, url: String?, ts: Long) = mediaFileDao.updateStatus(id, status, url, ts)
+    suspend fun softDeleteMediaFile(id: String, ts: Long) = mediaFileDao.softDelete(id, ts)
+    suspend fun hardDeleteMediaFile(id: String) = mediaFileDao.hardDelete(id)
+
+    // ============ DEVICES ============
+    suspend fun saveDevice(device: DeviceEntity) = deviceDao.upsert(device)
+    suspend fun saveDevices(devices: List<DeviceEntity>) = deviceDao.upsertAll(devices)
+    suspend fun getDevice(id: String) = deviceDao.getById(id)
+    fun getDevicesByUser(userId: String): Flow<List<DeviceEntity>> = deviceDao.getByUser(userId)
+    suspend fun getDeviceByToken(token: String) = deviceDao.getByToken(token)
+    suspend fun getActiveDevicesByUser(userId: String) = deviceDao.getActiveByUser(userId)
+    suspend fun updateDeviceLastActive(id: String, ts: Long) = deviceDao.updateLastActive(id, ts)
+    suspend fun updateDeviceTokens(id: String, token: String?, voip: String?, push: Boolean, voipEnabled: Boolean, ts: Long) = deviceDao.updateTokens(id, token, voip, push, voipEnabled, ts)
+    suspend fun setDeviceTrusted(id: String, trusted: Boolean, ts: Long) = deviceDao.setTrusted(id, trusted, ts)
+    suspend fun deactivateDevice(id: String, ts: Long) = deviceDao.deactivate(id, ts)
+    suspend fun deleteDevice(id: String) = deviceDao.delete(id)
+    suspend fun cleanupOldDevices(userId: String, cutoff: Long) = deviceDao.cleanupOldDevices(userId, cutoff)
+
+    // ============ USER PROFILES ============
+    suspend fun saveUserProfile(profile: UserProfileEntity) = userProfileDao.upsert(profile)
+    suspend fun saveUserProfiles(profiles: List<UserProfileEntity>) = userProfileDao.upsertAll(profiles)
+    suspend fun getUserProfile(id: String) = userProfileDao.getById(id)
+    suspend fun getUserProfileByUsername(username: String) = userProfileDao.getByUsername(username)
+    suspend fun searchUserProfiles(query: String, limit: Int) = userProfileDao.search(query, limit)
+    suspend fun getOnlineUsers(limit: Int) = userProfileDao.getOnlineUsers(limit)
+    suspend fun updateUserProfileStatus(id: String, status: String, ts: Long) = userProfileDao.updateStatus(id, status, ts)
+    suspend fun updateUserProfileCustomStatus(id: String, status: String?, emoji: String?, expires: Long, ts: Long) = userProfileDao.updateCustomStatus(id, status, emoji, expires, ts)
+    suspend fun updateUserProfileAvatar(id: String, url: String, ts: Long) = userProfileDao.updateAvatar(id, url, ts)
+    suspend fun deleteUserProfile(id: String) = userProfileDao.delete(id)
+
+    // ============ APP SETTINGS ============
+    suspend fun setAppSetting(key: String, value: String) = appSettingDao.set(AppSettingEntity(key, value, System.currentTimeMillis()))
+    suspend fun getAppSetting(key: String) = appSettingDao.getString(key)
+    suspend fun getAppSettingEntity(key: String) = appSettingDao.get(key)
+    fun getAllAppSettings(): Flow<List<AppSettingEntity>> = appSettingDao.getAll()
+    suspend fun deleteAppSetting(key: String) = appSettingDao.delete(key)
+
+    // ============ LIVE STREAM DRAFTS ============
+    suspend fun saveLiveStreamDraft(draft: LiveStreamDraftEntity) = liveStreamDraftDao.upsert(draft)
+    suspend fun getLiveStreamDraft(channelId: String) = liveStreamDraftDao.getByChannel(channelId)
+    suspend fun getLiveStreamDraftsByHost(hostId: String) = liveStreamDraftDao.getByHost(hostId)
+    suspend fun deleteLiveStreamDraftByChannel(channelId: String) = liveStreamDraftDao.deleteByChannel(channelId)
+    suspend fun deleteLiveStreamDraftsByHost(hostId: String) = liveStreamDraftDao.deleteByHost(hostId)
 }

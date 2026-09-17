@@ -83,7 +83,20 @@ fun LanPeersScreen(
     }
 
     DisposableEffect(manager) {
-        onDispose { manager.shutdown() }
+        onDispose {
+            // فصل اكتشاف NSD عن المكالمة: إغلاق الشاشة أثناء مكالمة نشطة
+            // يوقف النشر/الاكتشاف فقط ويُبقي الإشارة (BYE/ICE) والمكالمة حية.
+            // إنهاء المكالمة يتم صراحة بزر "إنهاء" فقط.
+            val s = manager.state.value
+            if (s == LanCallManager.LanCallState.CALLING ||
+                s == LanCallManager.LanCallState.RINGING ||
+                s == LanCallManager.LanCallState.IN_CALL
+            ) {
+                manager.stopDiscovery()
+            } else {
+                manager.shutdown()
+            }
+        }
     }
 
     Column(

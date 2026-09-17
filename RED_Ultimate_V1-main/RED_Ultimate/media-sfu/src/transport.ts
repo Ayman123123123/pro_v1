@@ -1,4 +1,5 @@
-import { Router, WebRtcTransport, PipeTransport, IceParameters, DtlsParameters, IceCandidate } from 'mediasoup';
+import { EventEmitter } from 'events';
+import { Router, WebRtcTransport, PipeTransport, IceParameters, DtlsParameters, IceCandidate, SctpParameters } from 'mediasoup';
 import { Config } from './config.js';
 
 export interface TransportOptions {
@@ -6,13 +7,14 @@ export interface TransportOptions {
   iceParameters: IceParameters;
   iceCandidates: IceCandidate[];
   dtlsParameters: DtlsParameters;
-  sctpParameters: any;
+  sctpParameters: SctpParameters | undefined;
 }
 
-export class TransportManager {
+export class TransportManager extends EventEmitter {
   private config: Config;
 
   constructor(config: Config) {
+    super();
     this.config = config;
   }
 
@@ -36,8 +38,12 @@ export class TransportManager {
       if (state === 'failed') {
         console.warn(`DTLS state failed on transport ${transport.id}`);
       }
-      if (state === 'closed') {
-        transport.close();
+      if (state === 'closed' && !transport.closed) {
+        try {
+          transport.close();
+        } catch {
+          // Already closed — ignore.
+        }
       }
     });
 
@@ -81,10 +87,22 @@ export class TransportManager {
 
   async restartIce(transport: WebRtcTransport): Promise<IceParameters> {
     const iceParameters = await transport.restartIce();
+    // Consumers must forward this to the client as an 'iceRestartNeeded' event.
+    this.emit('iceRestartNeeded', { transportId: transport.id, iceParameters });
     return iceParameters;
   }
 
   closeTransport(transport: WebRtcTransport | PipeTransport): void {
-    transport.close();
+    try {
+      transport.removeAllListeners();
+    } catch {
+      // Ignore listener-removal failures.
+    }
+    if (transport.closed) return;
+    try {
+      transport.close();
+    } catch {
+      // Already closed — ignore.
+    }
   }
 }

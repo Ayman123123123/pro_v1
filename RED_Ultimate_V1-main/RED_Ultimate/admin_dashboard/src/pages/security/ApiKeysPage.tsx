@@ -1,16 +1,16 @@
 import { useState } from 'react';
-import { Key, Plus, Trash2, Copy, Eye, EyeOff, Download, MoreVertical, Shield, Calendar, AlertTriangle, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Key, Plus, Trash2, Copy, Eye, MoreVertical, AlertTriangle, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
 import { useApiKeys, mutations } from '@/api/queries';
 import { cn, formatRelativeTime } from '@/utils';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
+import { Select } from '@/components/ui/Select';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
 import { Dialog } from '@/components/ui/Dialog';
-import { Form } from '@/components/ui/Form';
-import { Card } from '@/components/ui/Card';
+import { Form, FormField } from '@/components/ui/Form';
 
 const mockApiKeys = Array.from({ length: 20 }, (_, i) => ({
   id: `key-${i}`,
@@ -49,12 +49,13 @@ export function ApiKeysPage() {
   const createMutation = mutations.useCreateApiKey();
   const revokeMutation = mutations.useRevokeApiKey();
   
-  const displayKeys = mockApiKeys;
+  // البيانات الحقيقية من الخادم أولاً، والوهمية احتياط فقط عند غيابها
+  const displayKeys = Array.isArray(keys) && keys.length > 0 ? keys : mockApiKeys;
   
   const columns = [
     {
       key: 'name',
-      header: 'Name',
+      title: 'Name',
       cell: (key: any) => (
         <div>
           <p className="font-medium text-yn-text">{key.name}</p>
@@ -64,7 +65,7 @@ export function ApiKeysPage() {
     },
     {
       key: 'scopes',
-      header: 'Scopes',
+      title: 'Scopes',
       cell: (key: any) => (
         <div className="flex flex-wrap gap-1">
           {key.scopes.slice(0, 3).map((scope: string) => (
@@ -78,16 +79,16 @@ export function ApiKeysPage() {
     },
     {
       key: 'status',
-      header: 'Status',
+      title: 'Status',
       cell: (key: any) => (
-        <Badge variant={key.isActive ? 'green' : 'danger'} dot>
+        <Badge variant={key.isActive ? 'green' : 'danger'}>
           {key.isActive ? 'Active' : 'Revoked'}
         </Badge>
       ),
     },
     {
       key: 'expiresAt',
-      header: 'Expires',
+      title: 'Expires',
       cell: (key: any) => key.expiresAt ? (
         <span className={cn('text-yn-text-secondary', new Date(key.expiresAt) < new Date() && 'text-yn-error')}>
           {formatRelativeTime(key.expiresAt)}
@@ -96,22 +97,22 @@ export function ApiKeysPage() {
     },
     {
       key: 'lastUsedAt',
-      header: 'Last Used',
+      title: 'Last Used',
       cell: (key: any) => key.lastUsedAt ? <span className="text-yn-text-secondary">{formatRelativeTime(key.lastUsedAt)}</span> : <span className="text-yn-text-muted">Never</span>,
     },
     {
       key: 'usageCount',
-      header: 'Usage',
+      title: 'Usage',
       cell: (key: any) => <span className="text-yn-text-secondary font-mono">{key.usageCount.toLocaleString()}</span>,
     },
     {
       key: 'createdAt',
-      header: 'Created',
+      title: 'Created',
       cell: (key: any) => <span className="text-yn-text-secondary">{formatRelativeTime(key.createdAt)}</span>,
     },
     {
       key: 'actions',
-      header: 'Actions',
+      title: 'Actions',
       cell: (key: any) => (
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
@@ -134,8 +135,7 @@ export function ApiKeysPage() {
               <RotateCcw className="w-4 h-4 mr-2" />
               Rotate Key
             </DropdownMenu.Item>
-            <DropdownMenu.Separator />
-            <DropdownMenu.Item className={key.isActive ? 'text-yn-error' : 'text-yn-green'} onClick={() => revokeMutation.mutate(key.id)}>
+            <DropdownMenu.Item onClick={() => revokeMutation.mutate(key.id)}>
               {key.isActive ? (
                 <>
                   <XCircle className="w-4 h-4 mr-2" />
@@ -148,8 +148,7 @@ export function ApiKeysPage() {
                 </>
               )}
             </DropdownMenu.Item>
-            <DropdownMenu.Separator />
-            <DropdownMenu.Item className="text-yn-error">
+            <DropdownMenu.Item>
               <Trash2 className="w-4 h-4 mr-2" />
               Delete
             </DropdownMenu.Item>
@@ -197,17 +196,18 @@ export function ApiKeysPage() {
       </div>
       
       <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingKey(null); }} title={editingKey ? 'Edit API Key' : 'Create API Key'} size="lg">
-        <Form onSubmit={(data) => { createMutation.mutate(data); setDialogOpen(false); setEditingKey(null); }}>
-          <Form.Field name="name" label="Key Name" placeholder="Production API Key" required />
-          <Form.Field name="scopes" label="Scopes" type="textarea" placeholder="Enter scopes (one per line): users:read, content:read..." required />
-          <Form.Field name="expiresAt" label="Expiration Date" type="date" />
+        <Form onSubmit={(data: any) => { createMutation.mutate(data); setDialogOpen(false); setEditingKey(null); }}>
+          <FormField name="name" label="Key Name" placeholder="Production API Key" required />
+          <FormField name="scopes" label="Scopes" type="textarea" placeholder="Enter scopes (one per line): users:read, content:read..." required />
+          <FormField name="expiresAt" label="Expiration Date" type="text" />
           <div className="pt-4 border-t border-yn-border">
             <p className="text-sm text-yn-text-secondary mb-3">The full API key will only be shown once after creation. Make sure to copy and store it securely.</p>
           </div>
         </Form>
       </Dialog>
       
-      <Dialog open={showKeyDialogOpen} onClose={() => { setShowKeyDialogOpen(false); setShowingKey(null); }} title="API Key" description="This is the only time the full key will be displayed. Copy it now and store it securely.">
+      <Dialog open={showKeyDialogOpen} onClose={() => { setShowKeyDialogOpen(false); setShowingKey(null); }} title="API Key">
+        <p className="text-sm text-yn-text-secondary mb-4">This is the only time the full key will be displayed. Copy it now and store it securely.</p>
         {showingKey && (
           <div className="space-y-4">
             <div className="p-4 bg-yn-navy rounded-lg border border-yn-border font-mono text-sm break-all">
@@ -240,3 +240,5 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: n
     </div>
   );
 }
+
+export default ApiKeysPage;

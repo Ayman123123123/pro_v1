@@ -8,6 +8,7 @@ export class WorkerManager extends EventEmitter {
   private config: Config;
   private nextWorkerIndex = 0;
   private workerStats: Map<number, WorkerInfo> = new Map();
+  private statsTimer: NodeJS.Timeout | null = null;
 
   constructor(config: Config) {
     super();
@@ -15,9 +16,9 @@ export class WorkerManager extends EventEmitter {
   }
 
   async initialize(): Promise<void> {
-    for (let i = 0; i < this.config.workerCount; i++) {
-      await this.createWorker();
-    }
+    await Promise.all(
+      Array.from({ length: this.config.workerCount }, () => this.createWorker()),
+    );
     this.startStatsCollection();
   }
 
@@ -29,6 +30,8 @@ export class WorkerManager extends EventEmitter {
       logTags: this.config.logLevel === 'debug' ? ['dtls', 'rtp', 'sctp'] : [],
       dtlsCertificateFile: process.env.DTLS_CERT_FILE,
       dtlsPrivateKeyFile: process.env.DTLS_KEY_FILE,
+      // mediasoup 3.24: opt out of io_uring (fails on older kernels/containers).
+      disableLiburing: true,
     };
 
     const worker = await createWorker(settings);
@@ -66,6 +69,14 @@ export class WorkerManager extends EventEmitter {
     }
 
     this.workerStats.delete(worker.pid);
+    // Notify owners (e.g. RouterManager) so routers on the dead worker are closed.
+    this.emit('workerDied', { pid: worker.pid });
+
+    try {
+      worker.close();
+    } catch {
+      // Already dead — ignore.
+    }
 
     try {
       await this.createWorker();
@@ -108,7 +119,8 @@ export class WorkerManager extends EventEmitter {
   }
 
   private startStatsCollection(): void {
-    setInterval(async () => {
+    if (this.statsTimer) return;
+    this.statsTimer = setInterval(async () => {
       for (const worker of this.workers) {
         try {
           const usage = await worker.getResourceUsage();
@@ -122,10 +134,17 @@ export class WorkerManager extends EventEmitter {
       }
       this.emit('statsUpdated', this.getWorkerStats());
     }, 10000);
+    if (typeof this.statsTimer.unref === 'function') {
+      this.statsTimer.unref();
+    }
   }
 
   async closeAll(): Promise<void> {
     console.log('Closing all workers...');
+    if (this.statsTimer) {
+      clearInterval(this.statsTimer);
+      this.statsTimer = null;
+    }
     await Promise.all(this.workers.map(w => w.close()));
     this.workers = [];
     this.workerStats.clear();

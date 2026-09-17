@@ -9,7 +9,7 @@ spring-dependency-management = "1.1.7"
 
 # Java / Kotlin
 java = "21"
-kotlin = "2.3.21"
+kotlin = "2.0.21"
 kotlin-jvm-target = "21"
 
 # Database
@@ -29,6 +29,9 @@ micrometer-prometheus = "1.13.0"
 micrometer-tracing = "1.13.0"
 opentelemetry-sdk = "1.42.0"
 opentelemetry-exporter-otlp = "1.42.0"
+
+# OpenAPI 3.1 Documentation
+springdoc-openapi = "2.6.0"
 
 # Testing
 junit-jupiter = "5.11.4"

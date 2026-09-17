@@ -1,28 +1,21 @@
-﻿# Offline builds: the frontend line requires Docker Hub, which is blocked here. Removed.
-# RUNTIME_BASE override allows local runtime images when Docker Hub is unreachable:
-#   docker build --build-arg RUNTIME_BASE=red-backend:local ...
-ARG RUNTIME_BASE=eclipse-temurin:21-jre-jammy
-# Offline builds: this frontend line requires Docker Hub, which is blocked/unreachable here. Removed for local builds.
-# Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
-#  YOUNES Sovereign Backend Ã¢â‚¬â€ reproducible multi-stage BuildKit build
-#  Stage 1: Gradle 8.14 + JDK 21 (non-root, persistent dependency cache)
-#  Stage 2: Eclipse Temurin JRE 21 Ã¢â‚¬â€ no apt/ffmpeg (Windows Docker dies
-#  for 30Ã¢â‚¬â€œ90 minutes pulling 176 ffmpeg packages at tens of kB/s).
-#  Video thumbnails already fall back to a Java placeholder.
-# Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+﻿# RED Sovereign Backend — production multi-stage BuildKit build
+# Stage 1: Gradle 9.7 + JDK 21 (non-root, persistent dependency cache via BuildKit)
+# Stage 2: Eclipse Temurin JRE 21 Alpine — ZGC, minimal attack surface
 
-# Use the same Gradle line as the backend wrapper so Kotlin and the shared
-# protocol resolve consistently in CI and local Docker builds.
+ARG RUNTIME_BASE=eclipse-temurin:21-jre-alpine
+
+# Use BuildKit for cache mounts; fallback works without BuildKit
+# syntax=docker/dockerfile:1.7
+
 FROM gradle:9.7.0-jdk21 AS builder
 
 USER root
 WORKDIR /build
 RUN chown gradle:gradle /build
 
-
-# Copy backend-server as the Gradle root (it has its own settings.gradle.kts).
-# settings.gradle.kts resolves :shared-proto as ../shared-proto relative to the
-# settings dir â€” so it must land at /shared-proto (NOT /build/shared-proto).
+# Copy gradle wrapper and settings first for better cache
+COPY --chown=gradle:gradle gradle/ gradle/
+COPY --chown=gradle:gradle gradlew gradlew.bat settings.gradle.kts build.gradle.kts ./
 COPY --chown=gradle:gradle shared-proto/ ../shared-proto/
 COPY --chown=gradle:gradle backend-server/ .
 
@@ -30,32 +23,33 @@ USER gradle
 WORKDIR /build
 
 ENV GRADLE_OPTS="-Dorg.gradle.dependency.verification=lenient"
-# Keep this command compatible with the legacy Docker builder available on the
-# local Windows host. BuildKit cache mounts are an optimization only; removing
-# the mount does not change the produced Spring Boot artifact.
-RUN gradle :bootJar --no-daemon -x test --stacktrace
+
+# Build with BuildKit cache mount for gradle dependencies
+RUN --mount=type=cache,target=/home/gradle/.gradle,cache_id=gradle-cache,uid=1000,gid=1000 \
+    gradle :backend-server:bootJar --no-daemon -x test --stacktrace
 
 FROM ${RUNTIME_BASE} AS runtime
 
 WORKDIR /app
 
-# curl + tzdata already ship in eclipse-temurin:21-jre-jammy.
-# Installing ffmpeg here pulled 112 MB / 176 packages and stalled local
-# Windows builds for the better part of an hour. Do not put it back.
-RUN if ! getent group redserver >/dev/null 2>&1; then groupadd --system --gid 10001 redserver; fi \
-    && if ! id redserver >/dev/null 2>&1; then useradd --system --uid 10001 --gid redserver --home-dir /app --shell /usr/sbin/nologin redserver; fi \
+# Install curl for healthcheck, tzdata for timezone
+RUN apk add --no-cache curl tzdata \
+    && addgroup -g 10001 -S redserver \
+    && adduser -u 10001 -S -G redserver -h /app -s /sbin/nologin redserver \
     && mkdir -p /app/logs \
     && chown -R redserver:redserver /app
 
-COPY --from=builder --chown=redserver:redserver /build/build/libs/red-backend.jar /app/app.jar
+COPY --from=builder --chown=redserver:redserver /build/backend-server/build/libs/red-backend.jar /app/app.jar
+COPY --chown=redserver:redserver entrypoint.sh /app/entrypoint.sh
 
-ENV JAVA_TOOL_OPTIONS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport"
+# ZGC for low latency, container-aware, exit on OOM
+ENV JAVA_TOOL_OPTIONS="-Xms512m -Xmx1g -XX:+UseZGC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/urandom"
 
 USER redserver
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=180s \
-  CMD curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null || exit 1
+  CMD curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health/liveness >/dev/null || exit 1
 
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 

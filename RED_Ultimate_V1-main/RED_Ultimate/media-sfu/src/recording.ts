@@ -1,4 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
+import { mkdirSync, statfsSync } from 'fs';
+import { dirname } from 'path';
 import { Room, RecordingOptions, RecordingSession } from './types.js';
 import { MediaManager } from './media.js';
 
@@ -18,6 +20,22 @@ export class RecordingManager {
     const recordingId = `rec_${room.id}_${Date.now()}`;
     const outputPath = options.outputPath || `${this.outputDir}/${recordingId}.${options.format}`;
 
+    mkdirSync(dirname(outputPath), { recursive: true });
+    mkdirSync(this.outputDir, { recursive: true });
+    try {
+      if (typeof statfsSync === 'function') {
+        const stat = statfsSync(dirname(outputPath));
+        const freeBytes = Number(stat.bfree) * Number(stat.bsize);
+        if (freeBytes < 100 * 1024 * 1024) {
+          throw new Error('Insufficient disk space for recording');
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Insufficient disk space for recording') {
+        throw error;
+      }
+    }
+
     const ffmpegArgs = this.buildFfmpegArgs(room, options, outputPath);
 
     console.log(`Starting recording ${recordingId} for room ${room.id}`);
@@ -27,6 +45,8 @@ export class RecordingManager {
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: false,
     });
+    let startReject: ((err: Error) => void) | undefined;
+    let startTimeout: NodeJS.Timeout | undefined;
 
     const session: RecordingSession = {
       id: recordingId,
@@ -60,21 +80,32 @@ export class RecordingManager {
     process.on('error', (error) => {
       console.error(`Recording ${recordingId} error:`, error);
       session.status = 'error';
+      if (startTimeout) clearTimeout(startTimeout);
+      startTimeout = undefined;
+      startReject?.(error);
+      startReject = undefined;
     });
 
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      startReject = reject;
+      startTimeout = setTimeout(() => {
+        startReject = undefined;
+        startTimeout = undefined;
         reject(new Error('Recording start timeout'));
       }, 10000);
 
-      process.stderr?.on('data', (data) => {
+      const onData = (data: Buffer) => {
         const output = data.toString();
         if (output.includes('Output #0') || output.includes('Press [q] to stop')) {
-          clearTimeout(timeout);
+          if (startTimeout) clearTimeout(startTimeout);
+          startTimeout = undefined;
+          startReject = undefined;
+          process.stderr?.off('data', onData);
           session.status = 'active';
           resolve();
         }
-      });
+      };
+      process.stderr?.on('data', onData);
     });
 
     return session;
@@ -90,13 +121,26 @@ export class RecordingManager {
     if (session.process && !session.process.killed) {
       session.process.stdin?.write('q');
       await new Promise<void>((resolve) => {
-        session.process.on('close', () => resolve());
-        setTimeout(() => {
-          if (!session.process.killed) {
-            session.process.kill('SIGKILL');
-          }
+        const proc: ChildProcess = session.process;
+        const onClose = () => {
+          if (termTimer) clearTimeout(termTimer);
+          if (killTimer) clearTimeout(killTimer);
+          proc.off('close', onClose);
           resolve();
+        };
+        proc.on('close', onClose);
+        const termTimer = setTimeout(() => {
+          if (!proc.killed) {
+            proc.kill('SIGTERM');
+          }
         }, 5000);
+        const killTimer = setTimeout(() => {
+          if (!proc.killed) {
+            proc.kill('SIGKILL');
+          }
+          proc.off('close', onClose);
+          resolve();
+        }, 10000);
       });
     }
 
@@ -132,6 +176,12 @@ export class RecordingManager {
       args.push('-f', 's16le', '-ar', '48000', '-ac', '2', '-i', '-');
     }
 
+    const layoutFilter = this.buildLayoutFilter(room, options);
+    args.push('-filter_complex', layoutFilter, '-map', '[out]');
+    if (options.includeAudio) {
+      args.push('-map', '1:a');
+    }
+
     args.push(
       '-c:v', options.format === 'webm' ? 'libvpx-vp9' : 'libx264',
       '-b:v', `${options.videoBitrate}k`,
@@ -143,6 +193,11 @@ export class RecordingManager {
     if (options.includeAudio) {
       args.push('-c:a', 'libopus', '-b:a', `${options.audioBitrate}k`);
     }
+
+    if (options.format === 'mp4') {
+      args.push('-movflags', '+faststart');
+    }
+    args.push('-shortest');
 
     args.push(
       '-f', options.format,
@@ -172,7 +227,7 @@ export class RecordingManager {
 
   private buildGridLayout(count: number, width: number, height: number): string {
     if (count === 0) return `color=black:${width}x${height}[out]`;
-    if (count === 1) return '[0:v]scale=w=${width}:h=${height}[out]';
+    if (count === 1) return `[0:v]scale=w=${width}:h=${height}[out]`;
 
     const cols = Math.ceil(Math.sqrt(count));
     const rows = Math.ceil(count / cols);
@@ -205,7 +260,7 @@ export class RecordingManager {
 
   private buildSpeakerLayout(count: number, width: number, height: number): string {
     if (count === 0) return `color=black:${width}x${height}[out]`;
-    if (count === 1) return '[0:v]scale=w=${width}:h=${height}[out]';
+    if (count === 1) return `[0:v]scale=w=${width}:h=${height}[out]`;
 
     const mainW = Math.floor(width * 0.75);
     const mainH = Math.floor(height * 0.75);
@@ -225,7 +280,7 @@ export class RecordingManager {
 
   private buildPipLayout(count: number, width: number, height: number): string {
     if (count === 0) return `color=black:${width}x${height}[out]`;
-    if (count === 1) return '[0:v]scale=w=${width}:h=${height}[out]';
+    if (count === 1) return `[0:v]scale=w=${width}:h=${height}[out]`;
 
     const mainW = width;
     const mainH = height;

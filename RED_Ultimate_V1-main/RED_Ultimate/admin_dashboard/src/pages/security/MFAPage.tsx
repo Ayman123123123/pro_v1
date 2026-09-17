@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { Fingerprint, ToggleLeft, ToggleRight, Shield, Key, Smartphone, Download, Save, Loader2, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { Fingerprint, Key, Smartphone, Download, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/utils';
 import { Button } from '@/components/ui/Button';
-import { Dialog } from '@/components/ui/Dialog';
-import { Form } from '@/components/ui/Form';
+import { Form, FormField } from '@/components/ui/Form';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { Tabs } from '@/components/ui/Tabs';
@@ -23,9 +22,9 @@ export function MFAPage() {
   const [activeTab, setActiveTab] = useState('settings');
   
   const tabs = [
-    { id: 'settings', label: 'MFA Settings', icon: Shield },
-    { id: 'methods', label: 'Auth Methods', icon: Fingerprint },
-    { id: 'enrollment', label: 'Enrollment', icon: Key },
+    { value: 'settings', label: 'MFA Settings' },
+    { value: 'methods', label: 'Auth Methods' },
+    { value: 'enrollment', label: 'Enrollment' },
   ];
   
   return (
@@ -47,7 +46,7 @@ export function MFAPage() {
         </div>
       </div>
       
-      <Tabs value={activeTab} onValueChange={setActiveTab} tabs={tabs} />
+      <Tabs value={activeTab} onChange={setActiveTab} tabs={tabs} />
       
       {activeTab === 'settings' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -146,9 +145,11 @@ export function MFAPage() {
           </Card>
           
           <Card title="WebAuthn Settings" subtitle="Configure WebAuthn relying party">
-            <Form.Field name="rpName" label="Relying Party Name" placeholder="RED Admin Dashboard" />
-            <Form.Field name="rpId" label="Relying Party ID" placeholder="admin.example.com" />
-            <Form.Field name="origin" label="Origin" placeholder="https://admin.example.com" />
+            <Form onSubmit={() => {}} initialValues={{}}>
+              <FormField name="rpName" label="Relying Party Name" placeholder="RED Admin Dashboard" />
+              <FormField name="rpId" label="Relying Party ID" placeholder="admin.example.com" />
+              <FormField name="origin" label="Origin" placeholder="https://admin.example.com" />
+            </Form>
           </Card>
         </div>
       )}
@@ -199,7 +200,7 @@ function MethodCard({ title, description, icon: Icon, enabled, stats }: { title:
         <div className="w-12 h-12 rounded-xl bg-yn-green/15 flex items-center justify-center">
           <Icon className="w-6 h-6 text-yn-green" />
         </div>
-        <Badge variant={enabled ? 'green' : 'default'} dot>{enabled ? 'Enabled' : 'Disabled'}</Badge>
+        <Badge variant={enabled ? 'green' : 'default'}>{enabled ? 'Enabled' : 'Disabled'}</Badge>
       </div>
       <h3 className="font-medium text-yn-text mb-1">{title}</h3>
       <p className="text-sm text-yn-text-secondary mb-4">{description}</p>
@@ -226,3 +227,5 @@ function MethodCard({ title, description, icon: Icon, enabled, stats }: { title:
     </div>
   );
 }
+
+export default MFAPage;

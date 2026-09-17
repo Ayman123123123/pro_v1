@@ -93,7 +93,20 @@ fun ProfileScreen(
     }
 
     var editingName by remember { mutableStateOf(displayName) }
-    var editingBio by remember { mutableStateOf("") }
+    var editingBio by remember { mutableStateOf(viewModel.bio) }
+    var editingStatus by remember { mutableStateOf(viewModel.statusText) }
+    // تتبّع آخر قيمة وصلت من الخادم: نتبع الخادم فقط ما دام المستخدم لم يحرّر
+    // الحقل، فلا يُصفَّر إدخاله عند وصول bio/status متأخراً من الشبكة.
+    var lastServerBio by remember { mutableStateOf(viewModel.bio) }
+    var lastServerStatus by remember { mutableStateOf(viewModel.statusText) }
+    LaunchedEffect(viewModel.bio) {
+        if (editingBio == lastServerBio) editingBio = viewModel.bio
+        lastServerBio = viewModel.bio
+    }
+    LaunchedEffect(viewModel.statusText) {
+        if (editingStatus == lastServerStatus) editingStatus = viewModel.statusText
+        lastServerStatus = viewModel.statusText
+    }
     var showQr by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
@@ -221,8 +234,7 @@ fun ProfileScreen(
             supportingText = { Text("${editingBio.length}/280") }
         )
 
-        // حالة المستخدم (قابلة للتعديل)
-        var editingStatus by remember(viewModel.statusText) { mutableStateOf(viewModel.statusText) }
+        // حالة المستخدم (قابلة للتعديل — مُصرَّح عنها أعلى الشاشة لتتبّع الخادم)
         OutlinedTextField(
             value = editingStatus,
             onValueChange = { editingStatus = it.take(100) },

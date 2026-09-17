@@ -1,16 +1,11 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* ربط متغيرات YOUNES بـ Tailwind — استعمل bg-younes-green إلخ في أي مكان مخصص */
-@theme {
-  --color-younes-green: var(--yns-green);
-  --color-younes-gold: var(--yns-gold);
-  --color-younes-blue: var(--yns-blue);
-  --color-younes-navy: var(--yns-navy);
-  --color-younes-dark: var(--yns-dark);
-  --color-younes-surface: var(--yns-surface);
-  --color-younes-warning: var(--yns-warning);
-  --color-younes-error: var(--yns-error);
-  --color-younes-success: var(--yns-success);
-  --color-younes-muted: var(--yns-text-muted);
-  --color-younes-text: var(--yns-text);
-}
+/* ─── Tailwind v3 — المصدر الوحيد ليوتيليتي yn-* هو tailwind.config.ts ───
+ * حُذف ازدواج `younes-*` مقابل `yn-*`: لا شيء في src يستعمل
+ * bg-younes-* إطلاقًا، والمعتمد هو bg-yn-* / text-yn-* / border-yn-*
+ * المعرّفة في `colors.yn` داخل tailwind.config.ts.
+ * كتلة @theme المحذوفة خاصة بـTailwind v4 وغير صالحة هنا.
+ * قيَم وقت التشغيل (CSS vars) مصدرها styles.css ‏(--yns-*)، وتُستهلَك
+ * من tailwind.config.ts عبر backgroundImage — لا تكرار للقيم هنا. */

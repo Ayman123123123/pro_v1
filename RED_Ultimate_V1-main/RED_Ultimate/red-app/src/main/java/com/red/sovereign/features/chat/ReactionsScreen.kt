@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 🎭 YOUNES Sovereign — Reactions System
- * 
+ *
  * ميزات:
  * - اختيار إيموجي سريع (6 إيموجيات افتراضية)
  * - منتقي إيموجي كامل (emoji2-emojipicker)
@@ -321,7 +321,7 @@ class ReactionsViewModel(
 
     fun toggleReaction(messageId: String, emoji: String) {
         val existing = _reactions.value.firstOrNull { it.messageId == messageId && it.senderId == currentUserId }
-        
+
         if (existing != null) {
             if (existing.emoji == emoji) {
                 // إزالة التفاعل

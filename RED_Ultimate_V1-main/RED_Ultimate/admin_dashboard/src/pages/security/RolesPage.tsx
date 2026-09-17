@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Shield, Plus, Edit, Trash2, MoreVertical, Eye, Key, User, Lock, Users, Download } from 'lucide-react';
+import { Plus, Edit, Trash2, MoreVertical, Key } from 'lucide-react';
 import { useRoles, mutations } from '@/api/queries';
-import { cn } from '@/utils';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -9,7 +8,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { DropdownMenu } from '@/components/ui/DropdownMenu';
 import { Dialog } from '@/components/ui/Dialog';
-import { Form } from '@/components/ui/Form';
+import { Form, FormField } from '@/components/ui/Form';
 
 const mockRoles = [
   { id: 'role-super-admin', name: 'Super Admin', description: 'Full system access', permissions: ['*'], isSystem: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
@@ -47,7 +46,7 @@ export function RolesPage() {
   const columns = [
     {
       key: 'name',
-      header: 'Role Name',
+      title: 'Role Name',
       cell: (role: any) => (
         <div>
           <p className="font-medium text-yn-text">{role.name}</p>
@@ -57,12 +56,12 @@ export function RolesPage() {
     },
     {
       key: 'description',
-      header: 'Description',
+      title: 'Description',
       cell: (role: any) => <span className="text-yn-text-secondary max-w-xs truncate block">{role.description || '—'}</span>,
     },
     {
       key: 'permissions',
-      header: 'Permissions',
+      title: 'Permissions',
       cell: (role: any) => (
         <Badge variant={role.permissions.includes('*') ? 'danger' : 'blue'}>
           {role.permissions.length} permissions
@@ -71,17 +70,17 @@ export function RolesPage() {
     },
     {
       key: 'isSystem',
-      header: 'Type',
+      title: 'Type',
       cell: (role: any) => <Badge variant={role.isSystem ? 'gold' : 'green'}>{role.isSystem ? 'System' : 'Custom'}</Badge>,
     },
     {
       key: 'createdAt',
-      header: 'Created',
+      title: 'Created',
       cell: (role: any) => <span className="text-yn-text-secondary">{new Date(role.createdAt).toLocaleDateString()}</span>,
     },
     {
       key: 'actions',
-      header: 'Actions',
+      title: 'Actions',
       cell: (role: any) => (
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
@@ -99,7 +98,7 @@ export function RolesPage() {
               Manage Permissions
             </DropdownMenu.Item>
             {!role.isSystem && (
-              <DropdownMenu.Item className="text-yn-error" onClick={() => deleteMutation.mutate(role.id)}>
+              <DropdownMenu.Item onClick={() => deleteMutation.mutate(role.id)}>
                 <Trash2 className="w-4 h-4 mr-2" />
                 Delete
               </DropdownMenu.Item>
@@ -134,7 +133,7 @@ export function RolesPage() {
       </div>
       
       <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingRole(null); }} title={editingRole ? 'Edit Role' : 'Create Role'}>
-        <Form onSubmit={(data) => {
+        <Form onSubmit={(data: any) => {
           if (editingRole) {
             updateMutation.mutate({ id: editingRole.id, data });
           } else {
@@ -143,8 +142,8 @@ export function RolesPage() {
           setDialogOpen(false);
           setEditingRole(null);
         }} initialValues={editingRole || {}}>
-          <Form.Field name="name" label="Role Name" placeholder="Content Manager" required />
-          <Form.Field name="description" label="Description" type="textarea" placeholder="Role description" />
+          <FormField name="name" label="Role Name" placeholder="Content Manager" required />
+          <FormField name="description" label="Description" type="textarea" placeholder="Role description" />
         </Form>
       </Dialog>
       
@@ -160,7 +159,7 @@ export function RolesPage() {
                     defaultChecked={permissionRole.permissions.includes('*') || permissionRole.permissions.includes(perm)}
                     className="w-4 h-4 rounded border-yn-border bg-yn-navy text-yn-green focus:ring-yn-green"
                   />
-                  <span className="text-sm text-yn-text font-mono text-xs">{perm}</span>
+                  <span className="text-yn-text font-mono text-xs">{perm}</span>
                 </label>
               ))}
             </div>
@@ -170,3 +169,5 @@ export function RolesPage() {
     </div>
   );
 }
+
+export default RolesPage;

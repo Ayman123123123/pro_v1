@@ -8,6 +8,10 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import java.time.Instant
 
+/**
+ * نماذج المجموعات — الفهارس الفعلية يُنشئها [GroupIndexInitializer] وحده
+ * (Single Source of Truth)؛ تعليقات @CompoundIndex/@Indexed هنا عقد توثيقي.
+ */
 @Document("groups")
 data class GroupDocument(
     @Id val id: String,

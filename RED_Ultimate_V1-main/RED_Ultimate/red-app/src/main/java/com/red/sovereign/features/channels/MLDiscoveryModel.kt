@@ -16,7 +16,7 @@ data class ChannelRecommendation(
 )
 
 @Serializable
-enum class RecommendationReason {
+enum class RecommendationReason(val displayName: String) {
     SIMILAR_INTERESTS("اهتمامات مشابهة"),
     TRENDING_IN_AREA("رائج في منطقتك"),
     FRIENDS_SUBSCRIBED("أصدقاؤك مشتركين"),
@@ -25,8 +25,6 @@ enum class RecommendationReason {
     CATEGORY_MATCH("فئة مفضلة"),
     CROSS_PROMOTION("ترويج متبادل"),
     REENGAGEMENT("إعادة تفاعل");
-
-    val displayName: String
 }
 
 @Serializable

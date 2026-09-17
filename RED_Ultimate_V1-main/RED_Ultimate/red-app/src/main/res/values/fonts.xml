@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- YOUNES Sovereign — Professional Typography System -->
-    <!-- Cairo for headings (official, authoritative) + Tajawal for body (readable, warm) -->
-    <string name="font_family_cairo">cairo</string>
-    <string name="font_family_tajawal">tajawal</string>
-    <string name="font_family_primary">cairo</string>
-    <string name="font_family_title">cairo</string>
+    <!-- العائلة الرسمية الوحيدة: IBM Plex Sans Arabic (@font/plex_arabic)، مضمّنة
+         في الحزمة عبر font/plex_arabic.xml (أوزان 400/500/600/700) — لا تُجلب من
+         الشبكة. حُذفت أسماء Cairo/Tajawal الوهمية: لا ملفات لها في res/font وكان
+         بقاؤها يوهم بهوية غير مطبّقة. يربط styles.xml كل android:fontFamily
+         مباشرة بـ @font/plex_arabic. -->
+    <string name="font_family_primary">plex_arabic</string>
+    <string name="font_family_title">plex_arabic</string>
+    <string name="font_family_body">plex_arabic</string>
 
     <!-- Font Size Tokens — Harmonized 1.25 scale -->
     <dimen name="font_size_caption">11sp</dimen>

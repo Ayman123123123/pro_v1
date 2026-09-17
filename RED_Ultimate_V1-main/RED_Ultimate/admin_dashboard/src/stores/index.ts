@@ -2,12 +2,107 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User, Session, Notification, ThemeMode } from '@/types';
 
+/**
+ * عقد مخزن التوكن الوحيد — مشترك حرفيًا مع `src/api.ts` (العميل الحي).
+ * - رمز الوصول + المستخدم في sessionStorage (يُمسح بإغلاق التبويب)
+ * - رمز التجديد في localStorage (يبقى عبر الجلسات)
+ * المفاتيح الفيزيائية مطابقة عمدًا لمفاتيح `authStore` في `src/api.ts`
+ * (ACCESS/REFRESH/USER) فيكون المخزن واحدًا فعليًا لا مخزنين.
+ * حدث انتهاء الجلسة الوحيد: `younes:auth-expired` (تستمع له App).
+ */
+const ACCESS_KEY = 'red_admin_access';
+const REFRESH_KEY = 'red_admin_refresh';
+const USER_KEY = 'red_admin_user';
+
+export const AUTH_EXPIRED_EVENT = 'younes:auth-expired';
+
+interface PersistedAuth {
+  user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  isAuthenticated: boolean;
+}
+
+function safeGet(getter: () => string | null): string | null {
+  try {
+    return getter();
+  } catch {
+    return null;
+  }
+}
+
+/** قراءة من المفاتيح الفيزيائية الموحدة (تُبنى منها لقطة zustand). */
+function readSplit(name: string): string | null {
+  const access = safeGet(() => sessionStorage.getItem(ACCESS_KEY));
+  const refresh = safeGet(() => localStorage.getItem(REFRESH_KEY));
+  const rawUser = safeGet(() => sessionStorage.getItem(USER_KEY));
+  if (!access && !refresh && !rawUser) {
+    // ترحيل صامت لمرة واحدة: القيمة القديمة كانت تحفظ الكل في sessionStorage
+    const legacy = safeGet(() => sessionStorage.getItem(name));
+    if (legacy) {
+      try {
+        const parsed = JSON.parse(legacy) as { state?: PersistedAuth };
+        const s = parsed?.state;
+        if (s?.accessToken) sessionStorage.setItem(ACCESS_KEY, s.accessToken);
+        if (s?.refreshToken) localStorage.setItem(REFRESH_KEY, s.refreshToken);
+        if (s?.user) sessionStorage.setItem(USER_KEY, JSON.stringify(s.user));
+      } catch {
+        /* قيمة قديمة تالفة — تُتجاهل */
+      }
+      return legacy;
+    }
+    return null;
+  }
+  let user: User | null = null;
+  try {
+    user = rawUser ? (JSON.parse(rawUser) as User) : null;
+  } catch {
+    user = null;
+  }
+  return JSON.stringify({
+    state: { user, accessToken: access, refreshToken: refresh, isAuthenticated: !!access } as PersistedAuth,
+    version: 0,
+  });
+}
+
+/** كتابة منقسمة: الوصول+المستخدم → sessionStorage، والتجديد → localStorage. */
+function writeSplit(name: string, value: string): void {
+  try {
+    const parsed = JSON.parse(value) as { state?: PersistedAuth };
+    const s = parsed?.state;
+    if (!s) return;
+    if (s.accessToken) sessionStorage.setItem(ACCESS_KEY, s.accessToken);
+    else sessionStorage.removeItem(ACCESS_KEY);
+    if (s.user) sessionStorage.setItem(USER_KEY, JSON.stringify(s.user));
+    else sessionStorage.removeItem(USER_KEY);
+    if (s.refreshToken) localStorage.setItem(REFRESH_KEY, s.refreshToken);
+    else localStorage.removeItem(REFRESH_KEY);
+    // إزالة القيمة القديمة أحادية المخزن حتى لا يبقى توكنان متوازيان
+    if (name !== ACCESS_KEY) sessionStorage.removeItem(name);
+  } catch {
+    /* تخزين غير متاح — يُتجاهل */
+  }
+}
+
+function removeSplit(name: string): void {
+  try {
+    sessionStorage.removeItem(ACCESS_KEY);
+    sessionStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(name);
+    localStorage.removeItem(REFRESH_KEY);
+  } catch {
+    /* يُتجاهل */
+  }
+}
+
 interface AuthState {
   user: User | null;
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
   setAuth: (user: User, accessToken: string, refreshToken?: string) => void;
+  /** حفظ توكنات التجديد مع إبقاء المستخدم (يستخدمها عميل api عند rotate). */
+  setTokens: (accessToken: string, refreshToken?: string) => void;
   clearAuth: () => void;
   updateUser: (user: Partial<User>) => void;
 }
@@ -26,13 +121,24 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: refreshToken || null,
           isAuthenticated: true,
         }),
-      clearAuth: () =>
+      setTokens: (accessToken, refreshToken) =>
+        set((state) => ({
+          accessToken,
+          refreshToken: refreshToken ?? state.refreshToken,
+          isAuthenticated: true,
+        })),
+      clearAuth: () => {
         set({
           user: null,
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
-        }),
+        });
+        // حدث الانتهاء الوحيد — يبث مرة واحدة (تستمع له App ويتجاهل العميل الحي التكرار)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+        }
+      },
       updateUser: (userData) =>
         set((state) => ({
           user: state.user ? { ...state.user, ...userData } : null,
@@ -40,7 +146,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => ({
+        getItem: readSplit,
+        setItem: writeSplit,
+        removeItem: removeSplit,
+      })),
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
@@ -51,8 +161,18 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
+/** القراءة من المفاتيح الفيزيائية الموحدة أولاً (يغذيها أيضًا `authStore` الحي). */
 export function getAccessToken(): string | null {
-  return useAuthStore.getState().accessToken;
+  return safeGet(() => sessionStorage.getItem(ACCESS_KEY)) ?? useAuthStore.getState().accessToken;
+}
+
+export function getRefreshToken(): string | null {
+  return safeGet(() => localStorage.getItem(REFRESH_KEY)) ?? useAuthStore.getState().refreshToken;
+}
+
+/** حفظ توكنات ما بعد التجديد مع إبقاء المستخدم الحالي. */
+export function setAuthTokens(accessToken: string, refreshToken?: string): void {
+  useAuthStore.getState().setTokens(accessToken, refreshToken);
 }
 
 export function clearAuth(): void {

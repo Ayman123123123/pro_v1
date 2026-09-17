@@ -1,4 +1,4 @@
-import { GitBranch, AlertTriangle, CheckCircle, XCircle, RefreshCw, Download, MoreVertical, Eye, Play, Pause } from 'lucide-react';
+import { GitBranch, AlertTriangle, CheckCircle, XCircle, RefreshCw, Download, MoreVertical, Eye, Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/utils';
 import { Button } from '@/components/ui/Button';
@@ -24,47 +24,47 @@ export function MigrationsPage() {
   const columns = [
     {
       key: 'version',
-      header: 'Version',
+      title: 'Version',
       cell: (m: any) => <span className="font-mono font-medium text-yn-text">{m.version}</span>,
     },
     {
       key: 'description',
-      header: 'Description',
+      title: 'Description',
       cell: (m: any) => <span className="text-yn-text-secondary">{m.description}</span>,
     },
     {
       key: 'type',
-      header: 'Type',
+      title: 'Type',
       cell: (m: any) => <Badge variant="blue">{m.type}</Badge>,
     },
     {
       key: 'status',
-      header: 'Status',
-      cell: (m: any) => <Badge variant={getStatusVariant(m.status)} dot>{m.status}</Badge>,
+      title: 'Status',
+      cell: (m: any) => <Badge variant={getStatusVariant(m.status)}>{m.status}</Badge>,
     },
     {
       key: 'checksum',
-      header: 'Checksum',
+      title: 'Checksum',
       cell: (m: any) => <span className="font-mono text-yn-text-secondary text-sm">{m.checksum}</span>,
     },
     {
       key: 'executedBy',
-      header: 'Executed By',
+      title: 'Executed By',
       cell: (m: any) => <span className="text-yn-text-secondary">{m.executedBy}</span>,
     },
     {
       key: 'executedAt',
-      header: 'Executed At',
+      title: 'Executed At',
       cell: (m: any) => m.executedAt ? <span className="text-yn-text-secondary">{new Date(m.executedAt).toLocaleString()}</span> : <span className="text-yn-text-muted">—</span>,
     },
     {
       key: 'executionTime',
-      header: 'Duration',
+      title: 'Duration',
       cell: (m: any) => <span className="text-yn-text-secondary font-mono">{m.executionTime}ms</span>,
     },
     {
       key: 'actions',
-      header: 'Actions',
+      title: 'Actions',
       cell: (m: any) => (
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
@@ -147,3 +147,5 @@ function getStatusVariant(status: string): 'green' | 'gold' | 'blue' | 'danger' 
     default: return 'gold';
   }
 }
+
+export default MigrationsPage;

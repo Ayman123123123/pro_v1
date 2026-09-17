@@ -80,6 +80,18 @@ class LiveStreamSignalingClient(
     @Volatile
     private var activeStreamId: String = ""
 
+    // Exponential backoff reconnection
+    private var reconnectAttempt = 0
+    private var reconnectJob: kotlinx.coroutines.Job? = null
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
+    companion object {
+        private const val TAG = "LiveSignal"
+        private const val MAX_RECONNECT_ATTEMPTS = 10
+        private const val BASE_RECONNECT_DELAY_MS = 1000L
+        private const val MAX_RECONNECT_DELAY_MS = 30000L
+    }
+
     fun isConnected(): Boolean = connected
 
     fun reconnect(streamId: String) {
@@ -89,6 +101,9 @@ class LiveStreamSignalingClient(
         val oldSocket = socket
         socket = null
         runCatching { oldSocket?.cancel() }
+        reconnectAttempt = 0
+        reconnectJob?.cancel()
+        reconnectJob = null
         connect(streamId)
     }
 
@@ -129,6 +144,9 @@ class LiveStreamSignalingClient(
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
                     connected = true
+                    reconnectAttempt = 0
+                    reconnectJob?.cancel()
+                    reconnectJob = null
                     Log.d(TAG, "onOpen: live stream signaling connected, flushing queued signals")
                     pendingSignals.flush { signalJson ->
                         runCatching { webSocket.send(signalJson) }.getOrDefault(false)
@@ -151,6 +169,7 @@ class LiveStreamSignalingClient(
                     socket = null
                     Log.w(TAG, "onClosed: code=$code reason=$reason")
                     listener.onDisconnected()
+                    scheduleReconnect(streamId)
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -159,9 +178,28 @@ class LiveStreamSignalingClient(
                     socket = null
                     Log.e(TAG, "onFailure ${t.javaClass.simpleName}: ${t.message}")
                     listener.onDisconnected()
+                    scheduleReconnect(streamId)
                 }
             }
         )
+    }
+
+    private fun scheduleReconnect(streamId: String) {
+        reconnectJob?.cancel()
+        if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+            Log.e(TAG, "Max reconnect attempts reached for stream $streamId, giving up")
+            listener.onError("MAX_RECONNECT_ATTEMPTS_REACHED")
+            return
+        }
+        reconnectAttempt++
+        val delay = minOf(BASE_RECONNECT_DELAY_MS * (1L shl (reconnectAttempt - 1)), MAX_RECONNECT_DELAY_MS)
+        val jitter = (delay * 0.1 * (0..100).random()).toLong()
+        val totalDelay = delay + jitter
+        Log.d(TAG, "Scheduling reconnect attempt $reconnectAttempt for stream $streamId in ${totalDelay}ms")
+        reconnectJob = scope.launch {
+            kotlinx.coroutines.delay(totalDelay)
+            if (!connected) connect(streamId)
+        }
     }
 
     fun send(signal: LiveStreamSignal) {

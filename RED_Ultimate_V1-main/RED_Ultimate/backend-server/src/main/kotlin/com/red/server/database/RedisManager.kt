@@ -15,13 +15,15 @@ import java.util.concurrent.TimeUnit
  * ┌─────────────────────────────────┬────────────────────────────┬─────────┐
  * │ النمط                           │ الوصف                      │ TTL     │
  * ├─────────────────────────────────┼────────────────────────────┼─────────┤
- * │ red:presence:index              │ ZSET حضور حي redId←ms      │ 40d+purge│
+ * │ red:presence:index              │ ZSET حضور حي redId←ms      │ بلا TTL (تطهير Score 5m)│
  * │ red:online                      │ Set المتصلين (حياة=سوكت)   │ بلا (سوكت)│
  * │ red:typing:{conv}:{user}        │ "يكتب الآن"                │ 5s      │
  * │ red:ratelimit:{scope}:{key}     │ عداد Rate Limit (Lua ذري)  │ نافذة   │
  * │ red:session:{tokenHash}         │ كاش جلسة Refresh (احتياطي) │ =انتهاء │
  * │ red:notify:unread:{userId}      │ عداد غير المقروءة          │ 30d منزلق│
  * │ red:notify:queue:{userId}       │ إشعارات مؤقتة (≤100)       │ 30d     │
+ * │ red:notify:data:{notifId}       │ هاش إشعار داخل التطبيق     │ 30d     │
+ * │ red:notify:prefs:{userId}       │ تفضيلات الإشعارات (هاش)    │ 30d منزلق│
  * │ red:call:signaling:{callId}     │ إشارات WebRTC مؤقتة        │ 30m     │
  * │ red:call:pending:{redId}        │ عروض مكالمات للسحب (hash)  │ 120s    │
  * │ red:media:grant:{key}:{grantee} │ صلاحية وسائط مؤقتة         │ 1h      │
@@ -180,7 +182,11 @@ class RedisManager(private val redis: StringRedisTemplate) {
     // 📞 عروض المكالمات المعلّقة (صندوق بريد الإيقاظ)
     // ══════════════════════════════════════════
 
-    // تخزين ذرّي: سقف لكل مستقبل + TTL أصلي في عملية واحدة
+    // تخزين ذرّي: سقف لكل مستقبل + TTL أصلي في عملية واحدة.
+    // ملاحظة sliding-EXPIRE: الـ EXPIRE على مستوى مفتاح الهاش كله (شبكة أمان GC فقط)،
+    // والانتهاء الحقيقي لكل عرض هو createdAtMs+ttlSeconds داخل القيمة ويفحصه القارئ
+    // عند السحب (410 GONE بعد الانتهاء) — فلا يعتمد أي عرض على TTL المفتاح وحده.
+    // لذلك لا يُقصَّر TTL أبداً بعرض قصير لاحق: نُبقي max(الحالي، الجديد).
     private val storePendingOfferScript: DefaultRedisScript<Long> = DefaultRedisScript<Long>().apply {
         setScriptText(
             """
@@ -195,7 +201,10 @@ class RedisManager(private val redis: StringRedisTemplate) {
                 end
             end
             redis.call('HSET', key, field, value)
-            redis.call('EXPIRE', key, ttl)
+            local cur = redis.call('TTL', key)
+            if cur < 0 or ttl > cur then
+                redis.call('EXPIRE', key, ttl)
+            end
             return 1
             """.trimIndent()
         )
@@ -232,6 +241,10 @@ class RedisManager(private val redis: StringRedisTemplate) {
      * إعادة تشغيل الخادم ويُشارَك بين النسخ خلف موازن — بخلاف خريطة الذاكرة السابقة التي
      * كانت تُفقد كل عرض معلّق عند أي نشر جديد (فتضيع رنّة من تطبيق مقتول بعد وصولها).
      * يعيد false عند بلوغ سقف المستقبل — لا إسقاط صامت لعروض قائمة.
+     *
+     * عقد الانتهاء: القيمة تحمل expiresAt الضمني (createdAtMs + ttlSeconds*1000) وهو
+     * المرجع الوحيد لانتهاء العرض — القارئ يفحصه عند السحب ويرفض المنتهي. أما EXPIRE
+     * على المفتاح فشبكة أمان GC للحقل كله ولا يُقصَّر بعرض قصير (يُحفَظ max TTL).
      */
     fun storePendingCallOffer(targetRedId: String, callId: String, offerJson: String, ttlSeconds: Long): Boolean {
         val stored = redis.execute(
@@ -314,14 +327,40 @@ class RedisManager(private val redis: StringRedisTemplate) {
     }
 
     fun cleanUserData(userId: String) {
-        // P9: مفاتيح حية فقط — الحضور ZSET يُزال بـ ZREM لا DEL
+        // P9: مفاتيح حية فقط — الحضور ZSET يُزال بـ ZREM لا DEL.
+        // تُجمَع معرّفات الإشعارات *قبل* حذف القوائم لحذف هاشات البيانات التابعة
+        // (red:notify:data:/legacy notif:data:) — وإلا تيتّمت بلا TTL مرجعي.
+        val notifIds = mutableSetOf<String>()
+        runCatching {
+            redis.opsForList().range("red:notify:queue:$userId", 0, -1)?.let { notifIds += it }
+            redis.opsForList().range("notifications:$userId", 0, -1)?.let { notifIds += it } // legacy
+        }
+        // مفاتيح المتجهات مبعثرة لكل جهاز — SCAN تدريجي بدل KEYS.
+        val vectorKeys = runCatching { scanKeys("red:vector:$userId:*") }.getOrDefault(emptySet())
         redis.delete(
             listOf(
                 "red:notify:unread:$userId",
                 "red:notify:queue:$userId",
-                "red:search:recent:$userId"
+                "red:notify:prefs:$userId",
+                "notifications:$userId", // legacy
+                "notifications:unread:$userId", // legacy
+                "notifications:prefs:$userId", // legacy
+                "red:search:recent:$userId",
+                "user:status:$userId",
+                "user:privacy:$userId",
+                "contacts:$userId",
+                "red:vector-index:$userId"
             )
         )
+        if (notifIds.isNotEmpty()) {
+            val dataKeys = notifIds.flatMap { listOf("red:notify:data:$it", "notif:data:$it") } // legacy
+            runCatching { redis.delete(dataKeys) }
+        }
+        if (vectorKeys.isNotEmpty()) runCatching { redis.delete(vectorKeys) }
+        // عضوية عكسية: إزالة best-effort من قوائم جهات اتصال الآخرين.
+        runCatching {
+            scanKeys("contacts:*").forEach { redis.opsForSet().remove(it, userId) }
+        }
         redis.opsForSet().remove("red:online", userId)
         redis.opsForZSet().remove("red:presence:index", userId)
     }
