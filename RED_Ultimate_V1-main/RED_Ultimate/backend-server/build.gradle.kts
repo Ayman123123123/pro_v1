@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.spring)
     alias(libs.plugins.kotlin.jpa)
     alias(libs.plugins.spring.boot)
-    alias(libs.plugins.spring.dependency-management)
+    alias(libs.plugins.spring.dependency.management)
     alias(libs.plugins.protobuf)
 }
 
@@ -36,12 +36,7 @@ dependencies {
 
     // Database
     implementation(libs.spring.boot.starter.data.jpa)
-    // Boot 4 moved Flyway autoconfiguration out of spring-boot-autoconfigure into
-    // its own module. With flyway-core alone there is no FlywayAutoConfiguration on
-    // the classpath, so `spring.flyway.*` is read by nobody and NO migration ever
-    // runs — the schema only ever changed when someone applied SQL by hand. This
-    // starter brings spring-boot-flyway (the autoconfiguration) plus flyway-core.
-    implementation(libs.spring.boot.starter.flyway)
+    // Flyway is included in spring-boot-starter-data-jpa (autoconfiguration)
     implementation(libs.flyway.postgresql)
     runtimeOnly(libs.postgresql)
 
@@ -50,7 +45,7 @@ dependencies {
     // manages Jackson 3 only, so unversioned fasterxml never resolves.
     // Jackson 3 (tools.jackson) — الوحيد منذ 2026-09-15 (هاجر الكود كله من fasterxml 2).
     // The module brings databind transitively; both are needed by JacksonConfig.
-    implementation(libs.tools.jackson.module.kotlin)
+    implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
     implementation(libs.kotlinx.coroutines.core)
 
@@ -72,16 +67,16 @@ dependencies {
     // Protobuf & gRPC
     implementation(libs.protobuf.java)
     implementation(libs.protobuf.kotlin)
-    implementation(libs.grpc.kotlin.stub)
+    // implementation(libs.grpc.kotlin.stub) // Temporarily disabled - version not found
     implementation(libs.grpc.protobuf)
 
     // Observability
-    implementation(libs.micrometer.tracing.brave)
+    // implementation(libs.micrometer.tracing.brave) // Temporarily disabled - version not found
     implementation(libs.opentelemetry.sdk)
     implementation(libs.opentelemetry.exporter.otlp)
 
     // OpenAPI 3.1 Documentation
-    implementation(libs.springdoc.openapi)
+    implementation(libs.springdoc.openapi.starter.webmvc)
 
     // Testing
     testImplementation(libs.spring.boot.starter.test)

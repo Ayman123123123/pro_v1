@@ -3,14 +3,16 @@ import { mkdirSync, statfsSync } from 'fs';
 import { dirname } from 'path';
 import { Room, RecordingOptions, RecordingSession } from './types.js';
 import { MediaManager } from './media.js';
+import { EventEmitter } from 'events';
 
-export class RecordingManager {
+export class RecordingManager extends EventEmitter {
   private recordings: Map<string, RecordingSession> = new Map();
   private mediaManager: MediaManager;
   private ffmpegPath: string;
   private outputDir: string;
 
   constructor(mediaManager: MediaManager, ffmpegPath: string = 'ffmpeg', outputDir: string = './recordings') {
+    super();
     this.mediaManager = mediaManager;
     this.ffmpegPath = ffmpegPath;
     this.outputDir = outputDir;
@@ -102,6 +104,7 @@ export class RecordingManager {
           startReject = undefined;
           process.stderr?.off('data', onData);
           session.status = 'active';
+          this.emit('recordingStarted', { recordingId: session.id, roomId: room.id });
           resolve();
         }
       };
@@ -144,6 +147,7 @@ export class RecordingManager {
       });
     }
 
+    this.emit('recordingStopped', { recordingId, roomId: session.roomId });
     return true;
   }
 

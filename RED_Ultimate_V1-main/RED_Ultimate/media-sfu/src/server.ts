@@ -15,6 +15,8 @@ import { LiveStreamManager } from './livestream.js';
 import { AuthManager } from './auth.js';
 import { clientErrorPayload, clientErrorCode } from './protocol.js';
 import { SFUStats, HealthStatus, AuthClaims, WebSocketMessage, ProducerAppData, RoomConfig } from './types.js';
+import { createGrpcService, startGrpcServer, GrpcDependencies } from './grpc-service.js';
+import { initTelemetry, shutdownTelemetry } from './telemetry.js';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
@@ -41,12 +43,16 @@ interface ServerDependencies {
   authManager: AuthManager;
   fastify: FastifyInstance;
   wss: WebSocketServer;
+  grpcServer: any;
 }
 
 async function buildServer(): Promise<ServerDependencies> {
   const config = loadConfig();
 
   logger.info({ version: '2.0.0', config: { ...config, jwtSecret: '[REDACTED]', sfuTicketSecret: '[REDACTED]' } }, 'Starting RED Media SFU');
+
+  // Initialize OpenTelemetry
+  await initTelemetry(config);
 
   // Initialize Worker Manager
   const workerManager = new WorkerManager(config);
@@ -648,6 +654,27 @@ async function buildServer(): Promise<ServerDependencies> {
     await routerManager.closeRoomsOnWorker(pid);
   });
 
+  // Start gRPC server if enabled
+  let grpcServer: any = null;
+  if (config.grpcPort) {
+    try {
+      const grpcDeps: GrpcDependencies = {
+        routerManager,
+        workerManager,
+        recordingManager,
+        liveStreamManager,
+        authManager,
+        mediaManager,
+        transportManager,
+        config,
+      };
+      grpcServer = await startGrpcServer(grpcDeps, config.grpcPort);
+      logger.info({ port: config.grpcPort }, 'gRPC server started');
+    } catch (error) {
+      logger.error({ error }, 'Failed to start gRPC server');
+    }
+  }
+
   // Start HTTP server
   await new Promise<void>((resolve) => {
     httpServer.listen(config.port, '0.0.0.0', () => {
@@ -671,6 +698,7 @@ async function buildServer(): Promise<ServerDependencies> {
     authManager,
     fastify,
     wss,
+    grpcServer,
   };
 }
 
@@ -705,9 +733,18 @@ async function main(): Promise<void> {
     const shutdown = async (signal: string) => {
       logger.info({ signal }, 'Shutting down...');
       try {
+        if (deps.grpcServer) {
+          await new Promise<void>((resolve) => {
+            deps.grpcServer.tryShutdown((err) => {
+              if (err) logger.error({ err }, 'gRPC shutdown error');
+              resolve();
+            });
+          });
+        }
         await deps.wss.close();
         await deps.fastify.close();
         await deps.workerManager.closeAll();
+        await shutdownTelemetry();
         logger.info('Shutdown complete');
         process.exit(0);
       } catch (error) {

@@ -1,8 +1,8 @@
 plugins {
     id("java-library")
     id("com.google.protobuf") version "0.10.0"
-    id("org.jetbrains.kotlin.jvm") version "2.3.21"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.3.21"
+    id("org.jetbrains.kotlin.jvm") version "2.0.21"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
 }
 
 java {

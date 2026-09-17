@@ -25,13 +25,7 @@ export const ConfigSchema = z.object({
   jwtAudience: z.string().min(1).optional(),
   roomCleanupDelayMs: z.coerce.number().int().min(1000).default(30_000),
   maxProducersPerKind: z.coerce.number().int().min(1).max(10).default(4),
-  /**
-   * @deprecated Legacy gRPC port. No gRPC server exists in media-sfu
-   * (signaling is WS/REST only); kept for backward-compatible config
-   * parsing. Safe to remove once callers stop setting GRPC_PORT.
-   */
-  grpcPort: z.coerce.number().int().min(1).max(65535).default(50051)
-    .describe('DEPRECATED: legacy gRPC port, unused by media-sfu (no gRPC server)'),
+  grpcPort: z.coerce.number().int().min(1).max(65535).default(50051),
   enableMetrics: z.boolean().default(true),
   enableTracing: z.boolean().default(true),
   logLevel: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
@@ -46,6 +40,11 @@ export const ConfigSchema = z.object({
   }).optional(),
   liveStream: z.object({
     defaultRtmpUrl: z.string().default(''),
+  }).optional(),
+  otel: z.object({
+    serviceName: z.string().default('red-media-sfu'),
+    endpoint: z.string().optional(),
+    exporter: z.enum(['prometheus', 'otlp', 'console']).default('prometheus'),
   }).optional(),
 });
 
@@ -79,6 +78,11 @@ export function loadConfig(): Config {
     } : undefined,
     liveStream: process.env.DEFAULT_RTMP_URL ? {
       defaultRtmpUrl: process.env.DEFAULT_RTMP_URL,
+    } : undefined,
+    otel: process.env.OTEL_ENDPOINT ? {
+      serviceName: process.env.OTEL_SERVICE_NAME || 'red-media-sfu',
+      endpoint: process.env.OTEL_ENDPOINT,
+      exporter: (process.env.OTEL_EXPORTER as Config['otel']['exporter']) || 'prometheus',
     } : undefined,
   });
 

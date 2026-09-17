@@ -1,5 +1,6 @@
 import { Router, WebRtcTransport, Producer, Consumer, RtpParameters, RtpCapabilities, ProducerOptions, ConsumerOptions } from 'mediasoup';
 import { Peer, Room, ProducerAppData } from './types.js';
+import { EventEmitter } from 'events';
 
 export interface ProduceResult {
   producer: Producer;
@@ -12,10 +13,11 @@ export interface ConsumeResult {
   rtpParameters: RtpParameters;
 }
 
-export class MediaManager {
+export class MediaManager extends EventEmitter {
   private readonly maxProducersPerKind: number;
 
   constructor(maxProducersPerKind: number = 4) {
+    super();
     // Mirrors config.maxProducersPerKind (default 4).
     this.maxProducersPerKind = maxProducersPerKind;
   }
@@ -77,6 +79,7 @@ export class MediaManager {
       }
     }
 
+    this.emit('newProducer', { peerId: peer.id, producerId: producer.id, kind: producer.kind, appData: producer.appData });
     this.broadcastNewProducer(room, peer.id, producer);
 
     return { producer, producerId: producer.id };
@@ -120,6 +123,7 @@ export class MediaManager {
     });
 
     consumer.on('score', (score) => {
+      this.emit('consumerScore', { consumerId: consumer.id, score: score.score, producerScore: score.producerScore });
       if (score.score < 5 && score.producerScore >= 7) {
         this.broadcastNetworkDegraded(room, peer.id, consumer.id, score.score);
       }
@@ -127,6 +131,7 @@ export class MediaManager {
 
     consumer.on('layerschange', (layers) => {
       console.debug(`[Simulcast] Consumer ${consumer.id} spatial layer: ${layers?.spatialLayer ?? 'none'}`);
+      this.emit('consumerLayersChanged', { consumerId: consumer.id, spatialLayer: layers?.spatialLayer ?? null, temporalLayer: layers?.temporalLayer ?? null });
       this.broadcastLayersChanged(room, peer.id, consumer.id, layers);
     });
 
@@ -146,6 +151,7 @@ export class MediaManager {
     if (!producer) throw new Error('Producer not found');
 
     await producer.pause();
+    this.emit('producerPaused', { peerId: peer.id, producerId });
     this.broadcastProducerPaused(room, peer.id, producerId);
   }
 
@@ -154,6 +160,7 @@ export class MediaManager {
     if (!producer) throw new Error('Producer not found');
 
     await producer.resume();
+    this.emit('producerResumed', { peerId: peer.id, producerId });
     this.broadcastProducerResumed(room, peer.id, producerId);
   }
 
@@ -229,6 +236,7 @@ export class MediaManager {
   }
 
   private notifyProducerClosed(room: Room, peerId: string, consumerId: string, producerId?: string): void {
+    this.emit('producerClosed', { peerId, consumerId, producerId });
     for (const [id, peer] of room.peers) {
       if (peer.ws.readyState === 1) {
         peer.ws.send(JSON.stringify({

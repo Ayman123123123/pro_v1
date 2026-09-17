@@ -20,7 +20,7 @@ redis-client = "6.3.8.RELEASE"
 
 # Security
 spring-security = "6.3.5"
-jjwt = "9.37.3"
+jjwt = "0.12.6"
 bouncycastle = "1.86"
 nimbus-jose-jwt = "9.37.3"
 
@@ -29,9 +29,6 @@ micrometer-prometheus = "1.13.0"
 micrometer-tracing = "1.13.0"
 opentelemetry-sdk = "1.42.0"
 opentelemetry-exporter-otlp = "1.42.0"
-
-# OpenAPI 3.1 Documentation
-springdoc-openapi = "2.6.0"
 
 # Testing
 junit-jupiter = "5.11.4"
@@ -47,8 +44,8 @@ jackson-kotlin = "2.19.2"
 jackson-module-kotlin = "2.19.2"
 protobuf = "3.25.5"
 protobuf-gradle = "0.10.0"
-grpc = "1.62.1"
-grpc-kotlin-stub = "1.5.1"
+grpc = "1.62.2"
+grpc-kotlin-stub = "1.6.2"
 
 # Utilities
 minio = "8.6.0"
@@ -59,6 +56,12 @@ coroutines = "1.9.0"
 gradle = "8.11"
 spotbugs = "4.8.6"
 checkstyle = "10.18.0"
+
+# OpenAPI
+springdoc-openapi = "2.6.0"
+
+# Micrometer tracing - using the correct artifact
+micrometer-tracing-brave = "1.13.0"
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
@@ -109,14 +112,26 @@ grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
 
 # Observability
 micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer-prometheus" }
-micrometer-tracing-brave = { module = "io.micrometer:micrometer-tracing-bridge-brave", version.ref = "micrometer-tracing" }
+micrometer-tracing-brave = { module = "io.micrometer:micrometer-tracing-bridge-brave", version.ref = "micrometer-tracing-brave" }
 opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "opentelemetry-sdk" }
 opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp", version.ref = "opentelemetry-exporter-otlp" }
+
+# OpenAPI 3.1 Documentation
+springdoc-openapi-starter-webmvc = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc-openapi" }
 
 # Kotlin
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 kotlin-stdlib-jdk8 = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.ref = "kotlin" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+
+# Jackson
+jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson-kotlin" }
+
+# Security
+bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+jjwt-api = { module = "io.jsonwebtoken:jjwt-api", version.ref = "jjwt" }
+jjwt-impl = { module = "io.jsonwebtoken:jjwt-impl", version.ref = "jjwt" }
+jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
 
 # Utilities
 minio = { module = "io.minio:minio", version.ref = "minio" }

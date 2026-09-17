@@ -1,12 +1,14 @@
 import { spawn, ChildProcess } from 'child_process';
 import { Room, LiveStreamOptions, LiveStreamSession, RtmpOutput } from './types.js';
+import { EventEmitter } from 'events';
 
-export class LiveStreamManager {
+export class LiveStreamManager extends EventEmitter {
   private streams: Map<string, LiveStreamSession> = new Map();
   private defaultRtmpUrl: string;
   private ffmpegPath: string;
 
   constructor(defaultRtmpUrl: string = '', ffmpegPath: string = 'ffmpeg') {
+    super();
     this.defaultRtmpUrl = defaultRtmpUrl;
     // Unified on config.recording.ffmpegPath (default 'ffmpeg').
     this.ffmpegPath = ffmpegPath;
@@ -111,6 +113,7 @@ export class LiveStreamManager {
           startReject = undefined;
           process.stderr?.off('data', onData);
           session.status = 'active';
+          this.emit('liveStreamStarted', { streamId: session.id, roomId: room.id, rtmpUrl: options.rtmpUrl });
           resolve();
         }
       };
@@ -153,6 +156,7 @@ export class LiveStreamManager {
       });
     }
 
+    this.emit('liveStreamStopped', { streamId, roomId: session.roomId });
     return true;
   }
 

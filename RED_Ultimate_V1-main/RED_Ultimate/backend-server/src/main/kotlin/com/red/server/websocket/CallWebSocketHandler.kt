@@ -1,7 +1,7 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import tools.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
 import com.red.server.calls.CallStatus
@@ -16,6 +16,7 @@ import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.TextWebSocketHandler
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -422,21 +423,14 @@ class CallWebSocketHandler(
 
     private fun liveSessions(redId: String) = sessions[redId]?.filter(WebSocketSession::isOpen).orEmpty()
 
-    private fun enqueue(target: String, signal: OutgoingCallSignal) {
+    private fun enqueue(target: String, signal: PendingCallSignal) {
         val list = pending.computeIfAbsent(target) { CopyOnWriteArrayList() }
         list.removeIf { it.expiresAt.isBefore(Instant.now()) }
         // سقف صندوق البريد: 50 لكل مستخدم (إسقاط الأقدم) — بلا سقف كان الإغراق يفجر الذاكرة.
         while (list.size >= MAX_PENDING_PER_USER) {
             list.removeAt(0)
         }
-        list.add(
-            PendingCallSignal(
-                json = objectMapper.writeValueAsString(signal),
-                expiresAt = Instant.now().plusSeconds(PENDING_TTL_SECONDS),
-                callId = signal.callId,
-                type = signal.type
-            )
-        )
+        list.add(signal)
     }
 
     private fun flushPending(redId: String, session: WebSocketSession) {
@@ -457,7 +451,13 @@ class CallWebSocketHandler(
         val outbound = OutgoingCallSignal(roomId, sourceRedId, targetRedId, type.uppercase(), mode.uppercase(), payload)
         val targets = liveSessions(targetRedId)
         if (targets.isEmpty()) {
-            enqueue(targetRedId, outbound)
+            val pendingSignal = PendingCallSignal(
+                json = objectMapper.writeValueAsString(outbound),
+                expiresAt = Instant.now().plusSeconds(PENDING_TTL_SECONDS),
+                callId = roomId,
+                type = type.uppercase()
+            )
+            enqueue(targetRedId, pendingSignal)
             notifications.sendVoipPushNotification(targetRedId, sourceRedId, roomId, mode)
             return
         }
@@ -557,7 +557,13 @@ class CallWebSocketHandler(
         )
         val targets = liveSessions(targetRedId)
         if (targets.isEmpty()) {
-            enqueue(targetRedId, offer.copy(expiresAt = Instant.now().plusSeconds(ttlSeconds.toLong())))
+            val pendingSignal = PendingCallSignal(
+                json = objectMapper.writeValueAsString(offer),
+                expiresAt = Instant.now().plusSeconds(ttlSeconds.toLong()),
+                callId = callId,
+                type = "OFFER"
+            )
+            enqueue(targetRedId, pendingSignal)
         } else {
             val json = objectMapper.writeValueAsString(offer)
             targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }

@@ -1,6 +1,7 @@
 import { Router, RouterOptions, RtpCapabilities, createAudioLevelObserver } from 'mediasoup';
 import { WorkerManager } from './worker.js';
-import { MediaCodecs, Room, RoomConfig, AudioLevelObserver as AudioLevelObserverType } from './types.js';
+import { MediaCodecs, Room, RoomConfig, AudioLevelObserver as AudioLevelObserverType, ProducerInfo } from './types.js';
+import { EventEmitter } from 'events';
 
 export const MEDIA_CODECS: MediaCodecs[] = [
   {
@@ -76,12 +77,13 @@ export const MEDIA_CODECS: MediaCodecs[] = [
   },
 ];
 
-export class RouterManager {
+export class RouterManager extends EventEmitter {
   private workerManager: WorkerManager;
   private rooms: Map<string, Room> = new Map();
   private roomCleanupDelay: number;
 
   constructor(workerManager: WorkerManager, roomCleanupDelayMs: number) {
+    super();
     this.workerManager = workerManager;
     this.roomCleanupDelay = roomCleanupDelayMs;
   }
@@ -188,6 +190,22 @@ export class RouterManager {
       this.workerManager.updateWorkerStats(worker.pid, { peerCount: this.getWorkerPeerCount(worker.pid) });
     }
 
+    // Emit peerJoined event
+    const existingProducers: ProducerInfo[] = [];
+    for (const [id, p] of room.peers) {
+      if (id !== peer.id) {
+        for (const producer of p.producers.values()) {
+          existingProducers.push({
+            producerId: producer.id,
+            peerId: id,
+            kind: producer.kind,
+            displayName: producer.appData?.displayName,
+          });
+        }
+      }
+    }
+    this.emit('peerJoined', { peerId: peer.id, displayName: peer.displayName, producers: existingProducers });
+
     console.log(`Peer ${peer.id} joined room ${roomId} (peers: ${room.peers.size})`);
   }
 
@@ -202,6 +220,7 @@ export class RouterManager {
       this.workerManager.updateWorkerStats(worker.pid, { peerCount: this.getWorkerPeerCount(worker.pid) });
     }
 
+    this.emit('peerLeft', { peerId });
     this.broadcastToRoom(room, peerId, { type: 'peerLeft', peerId });
 
     if (room.peers.size === 0) {
@@ -234,6 +253,7 @@ export class RouterManager {
     }
 
     // Notify peers BEFORE tearing down transports/router.
+    this.emit('roomClosed', { roomId });
     this.broadcastToRoom(room, null, { type: 'roomClosed', roomId });
 
     for (const peer of room.peers.values()) {

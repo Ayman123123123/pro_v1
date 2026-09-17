@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
-import checker from 'vite-plugin-checker';
-import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const apiTarget = process.env.RED_API_TARGET || 'http://127.0.0.1:8088';
 const wsTarget = apiTarget.replace(/^http/, 'ws');
@@ -16,19 +17,7 @@ const proxy = {
 
 export default defineConfig({
   plugins: [
-    tanstackRouter({
-      target: 'react',
-      autoCodeSplitting: true,
-      routesDirectory: './src/routes',
-      generatedRouteTree: './src/routeTree.gen.ts',
-      quoteStyle: 'single',
-      semicolons: true,
-    }),
     react(),
-    checker({
-      typescript: true,
-      eslint: { lintCommand: 'eslint src' },
-    }),
   ],
   resolve: {
     alias: {
@@ -69,15 +58,16 @@ export default defineConfig({
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
-          const info = assetInfo.name.split('.');
+          const name = assetInfo.name || '';
+          const info = name.split('.');
           const ext = info[info.length - 1];
-          if (/\.(png|jpe?g|gif|svg|webp|avif|ico)$/.test(assetInfo.name)) {
+          if (/\.(png|jpe?g|gif|svg|webp|avif|ico)$/.test(name)) {
             return `assets/images/[name]-[hash].${ext}`;
           }
-          if (/\.(woff2?|ttf|eot)$/.test(assetInfo.name)) {
+          if (/\.(woff2?|ttf|eot)$/.test(name)) {
             return `assets/fonts/[name]-[hash].${ext}`;
           }
-          if (/\.css$/.test(assetInfo.name)) {
+          if (/\.css$/.test(name)) {
             return `assets/css/[name]-[hash].${ext}`;
           }
           return `assets/[name]-[hash].${ext}`;

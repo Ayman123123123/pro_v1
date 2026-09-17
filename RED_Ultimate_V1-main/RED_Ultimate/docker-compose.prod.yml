@@ -1,4 +1,4 @@
-# RED Sovereign — Docker Compose Production Override
+﻿# RED Sovereign — Docker Compose Production Override
 # Extends base docker-compose.yml with production settings
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
@@ -26,53 +26,52 @@ x-resource-limits-small: &resource-limits-small
     resources:
       limits:
         memory: 256M
-        cpus: '0.5'
+        cpus: "0.5"
       reservations:
         memory: 128M
-        cpus: '0.25'
+        cpus: "0.25"
 
 x-resource-limits-medium: &resource-limits-medium
   deploy:
     resources:
       limits:
-        memory: 1G
-        cpus: '1.0'
-      reservations:
         memory: 512M
-        cpus: '0.5'
+        cpus: "1.0"
+      reservations:
+        memory: 256M
+        cpus: "0.5"
 
 x-resource-limits-large: &resource-limits-large
   deploy:
     resources:
       limits:
-        memory: 2G
-        cpus: '2.0'
-      reservations:
         memory: 1G
-        cpus: '1.0'
+        cpus: "1.5"
+      reservations:
+        memory: 512M
+        cpus: "0.75"
 
 x-resource-limits-xlarge: &resource-limits-xlarge
   deploy:
     resources:
       limits:
-        memory: 4G
-        cpus: '4.0'
-      reservations:
         memory: 2G
-        cpus: '2.0'
+        cpus: "2.0"
+      reservations:
+        memory: 1G
+        cpus: "1.0"
 
 services:
-  # Production resource overrides
   postgres:
     <<: *resource-limits-xlarge
     deploy:
       resources:
         limits:
           memory: 4G
-          cpus: '4.0'
+          cpus: "4.0"
         reservations:
           memory: 2G
-          cpus: '2.0'
+          cpus: "2.0"
 
   mongo:
     <<: *resource-limits-xlarge
@@ -80,10 +79,10 @@ services:
       resources:
         limits:
           memory: 4G
-          cpus: '4.0'
+          cpus: "4.0"
         reservations:
           memory: 2G
-          cpus: '2.0'
+          cpus: "2.0"
 
   redis:
     <<: *resource-limits-large
@@ -91,10 +90,10 @@ services:
       resources:
         limits:
           memory: 2G
-          cpus: '2.0'
+          cpus: "2.0"
         reservations:
           memory: 1G
-          cpus: '1.0'
+          cpus: "1.0"
     command:
       - redis-server
       - --appendonly
@@ -112,10 +111,10 @@ services:
       resources:
         limits:
           memory: 2G
-          cpus: '2.0'
+          cpus: "2.0"
         reservations:
           memory: 1G
-          cpus: '1.0'
+          cpus: "1.0"
 
   backend:
     deploy:
@@ -123,10 +122,10 @@ services:
       resources:
         limits:
           memory: 3G
-          cpus: '3.0'
+          cpus: "3.0"
         reservations:
           memory: 1G
-          cpus: '1.0'
+          cpus: "1.0"
     environment:
       SPRING_PROFILES_ACTIVE: "prod"
       RED_ADMIN_COOKIE_SECURE: "true"
@@ -138,10 +137,10 @@ services:
       resources:
         limits:
           memory: 8G
-          cpus: '8.0'
+          cpus: "8.0"
         reservations:
           memory: 4G
-          cpus: '4.0'
+          cpus: "4.0"
     environment:
       MEDIASOUP_WORKERS: "8"
 
@@ -151,10 +150,10 @@ services:
       resources:
         limits:
           memory: 1G
-          cpus: '1.0'
+          cpus: "1.0"
         reservations:
           memory: 512M
-          cpus: '0.5'
+          cpus: "0.5"
 
   nginx:
     <<: *resource-limits-medium
@@ -162,10 +161,10 @@ services:
       resources:
         limits:
           memory: 1G
-          cpus: '1.0'
+          cpus: "1.0"
         reservations:
           memory: 512M
-          cpus: '0.5'
+          cpus: "0.5"
 
   coturn:
     <<: *resource-limits-medium
@@ -173,28 +172,27 @@ services:
       resources:
         limits:
           memory: 1G
-          cpus: '1.0'
+          cpus: "1.0"
         reservations:
           memory: 512M
-          cpus: '0.5'
+          cpus: "0.5"
 
-  # Production observability stack
   prometheus:
     image: prom/prometheus:v3.1.0
     container_name: red-prometheus
     restart: unless-stopped
     <<: *resource-limits-xlarge
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
-      - '--web.enable-admin-api'
-    ports:
-      - "9090:9090"
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
     volumes:
       - ./infrastructure/observability/prometheus:/etc/prometheus
       - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
     networks:
       - red-net
     healthcheck:
@@ -255,9 +253,9 @@ services:
       - /proc:/host/proc:ro,rslave
       - /sys:/host/sys:ro,rslave
     command:
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     logging: *default-logging
 
   cadvisor:
@@ -328,50 +326,75 @@ services:
       - nginx
     logging: *default-logging
 
-  # Full observability stack (also in base compose)
   loki:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
-        reservations:
-          memory: 2G
-          cpus: '2.0'
+    image: grafana/loki:3.7.7
+    container_name: red-loki
+    restart: unless-stopped
+    <<: *resource-limits-medium
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - loki-data:/loki
+      - ./infrastructure/observability/loki/loki.yml:/etc/loki/loki.yml:ro
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/ready"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+    networks: ["red-net"]
 
   tempo:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
-        reservations:
-          memory: 2G
-          cpus: '2.0'
+    image: grafana/tempo:2.6.0
+    container_name: red-tempo
+    restart: unless-stopped
+    <<: *resource-limits-medium
+    command: -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - tempo-data:/var/tempo
+      - ./infrastructure/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3200/ready"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+    networks: ["red-net"]
 
   pyroscope:
+    image: grafana/pyroscope:1.10.0
+    container_name: red-pyroscope
+    restart: unless-stopped
     <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
+    volumes:
+      - pyroscope-data:/var/lib/pyroscope
+    ports:
+      - "4040:4040"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4040/ready"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+    networks: ["red-net"]
 
   otel-collector:
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
+    image: otel/opentelemetry-collector-contrib:0.122.0
+    container_name: red-otel-collector
+    restart: unless-stopped
+    <<: *resource-limits-small
+    command: --config=/etc/otelcol-contrib/config.yml
+    volumes:
+      - ./infrastructure/observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8888:8888"
+      - "13133:13133"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:13133"]
+      <<: *healthcheck-defaults
+    logging: *default-logging
+    networks: ["red-net"]
 
 volumes:
   prometheus-data:

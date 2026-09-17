@@ -56,6 +56,28 @@
   --yns-success: #B78A2E;
   --yns-info: #4FC3F7;
 
+  /* New design system variables for Radix UI */
+  --background: var(--yns-dark);
+  --foreground: var(--yns-text);
+  --card: var(--yns-surface);
+  --card-foreground: var(--yns-text);
+  --popover: var(--yns-surface);
+  --popover-foreground: var(--yns-text);
+  --primary: var(--yns-green);
+  --primary-foreground: var(--yns-dark);
+  --secondary: var(--yns-surface-light);
+  --secondary-foreground: var(--yns-text);
+  --muted: var(--yns-surface-light);
+  --muted-foreground: var(--yns-text-muted);
+  --accent: var(--yns-surface-light);
+  --accent-foreground: var(--yns-text);
+  --destructive: var(--yns-error);
+  --destructive-foreground: var(--yns-text);
+  --border: var(--yns-border);
+  --input: var(--yns-border);
+  --ring: var(--yns-green);
+  --radius: var(--radius-md);
+
   /* Typography */
   --font-primary: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
   --font-heading: 'IBM Plex Sans Arabic', 'Segoe UI', sans-serif;
@@ -133,6 +155,27 @@
   --shadow-glow-green: 0 0 24px rgba(0, 122, 94, 0.18);
   --shadow-glow-gold: 0 0 24px rgba(183, 138, 46, 0.18);
   --shadow-glow-blue: 0 0 24px rgba(25, 118, 210, 0.18);
+
+  /* New design system variables for Radix UI (light theme) */
+  --background: var(--yns-dark);
+  --foreground: var(--yns-text);
+  --card: var(--yns-surface);
+  --card-foreground: var(--yns-text);
+  --popover: var(--yns-surface);
+  --popover-foreground: var(--yns-text);
+  --primary: var(--yns-green);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--yns-surface-light);
+  --secondary-foreground: var(--yns-text);
+  --muted: var(--yns-surface-light);
+  --muted-foreground: var(--yns-text-muted);
+  --accent: var(--yns-surface-light);
+  --accent-foreground: var(--yns-text);
+  --destructive: var(--yns-error);
+  --destructive-foreground: var(--yns-text);
+  --border: var(--yns-border);
+  --input: var(--yns-border);
+  --ring: var(--yns-green);
 }
 
 /* تكييف عناصر antd والهيكل للوضع الفاتح */

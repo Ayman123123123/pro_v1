@@ -1,6 +1,6 @@
 package com.red.server.zoom
 
-import tools.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate

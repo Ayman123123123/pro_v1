@@ -5,6 +5,10 @@ server:
     enabled: true
     min-response-size: 1024
     mime-types: application/json,application/xml,text/html,text/plain,text/css,application/javascript
+  # Virtual Threads (Java 21+) - Spring Boot 3.3+
+  threads:
+    virtual:
+      enabled: true
 
 spring:
   main:

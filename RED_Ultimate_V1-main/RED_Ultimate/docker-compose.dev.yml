@@ -1,4 +1,4 @@
-# RED Sovereign — Docker Compose Development Override
+﻿# RED Sovereign — Docker Compose Development Override
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 #
 # Development tools: mailhog, pgadmin, redis-commander
@@ -22,33 +22,32 @@ x-resource-limits-small: &resource-limits-small
     resources:
       limits:
         memory: 256M
-        cpus: '0.5'
+        cpus: "0.5"
       reservations:
         memory: 128M
-        cpus: '0.25'
+        cpus: "0.25"
 
 x-resource-limits-medium: &resource-limits-medium
   deploy:
     resources:
       limits:
         memory: 512M
-        cpus: '1.0'
+        cpus: "1.0"
       reservations:
         memory: 256M
-        cpus: '0.5'
+        cpus: "0.5"
 
 x-resource-limits-large: &resource-limits-large
   deploy:
     resources:
       limits:
         memory: 1G
-        cpus: '1.5'
+        cpus: "1.5"
       reservations:
         memory: 512M
-        cpus: '0.75'
+        cpus: "0.75"
 
 services:
-  # Fast local iteration: no Flyway gate, Hibernate keeps the schema
   backend:
     environment:
       SPRING_PROFILES_ACTIVE: "dev"
@@ -56,7 +55,6 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: "update"
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError"
 
-  # Loopback data-store ports so a host JVM can attach (base publishes none)
   postgres:
     ports:
       - "127.0.0.1:5432:5432"
@@ -71,22 +69,22 @@ services:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
 
-  # Lightweight dev observability (1d retention, loopback-only UIs)
   prometheus:
     image: prom/prometheus:v3.1.0
     container_name: red-prometheus-dev
     restart: unless-stopped
     <<: *resource-limits-medium
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=1d'
-      - '--web.enable-lifecycle'
-    ports:
-      - "127.0.0.1:9090:9090"
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=1d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
     volumes:
       - ./infrastructure/observability/prometheus:/etc/prometheus
       - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
     networks:
       - red-net
     healthcheck:
@@ -94,87 +92,52 @@ services:
       <<: *healthcheck-defaults
     logging: *default-logging
 
-  grafana:
-    image: grafana/grafana:11.4.0
-    container_name: red-grafana-dev
-    restart: unless-stopped
-    <<: *resource-limits-small
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_AUTH_ANONYMOUS_ENABLED=false
-    ports:
-      - "127.0.0.1:3000:3000"
-    volumes:
-      - ./infrastructure/observability/grafana:/etc/grafana/provisioning
-      - grafana-data:/var/lib/grafana
-    networks:
-      - red-net
-    depends_on:
-      - prometheus
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-
-  # Additional dev tools
   mailhog:
     image: mailhog/mailhog:v1.0.1
     container_name: red-mailhog-dev
     restart: unless-stopped
-    <<: *resource-limits-small
-    # NOTE: no healthcheck — mailhog image is FROM scratch (no shell/curl/wget),
-    # any in-container probe would fail permanently. Liveness via published 8025.
     ports:
       - "1025:1025"
       - "8025:8025"
-    networks:
-      - red-net
     logging: *default-logging
+    networks: ["red-net"]
 
   pgadmin:
-    image: dpage/pgadmin4:9.2
+    image: dpage/pgadmin4:8.13
     container_name: red-pgadmin-dev
     restart: unless-stopped
-    <<: *resource-limits-small
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@red-sovereign.local
-      - PGADMIN_DEFAULT_PASSWORD=admin
+      PGADMIN_DEFAULT_EMAIL: "admin@red-sovereign.dev"
+      PGADMIN_DEFAULT_PASSWORD: "admin"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
       - "5050:80"
     volumes:
       - pgadmin-data:/var/lib/pgadmin
-    networks:
-      - red-net
-    depends_on:
-      - postgres
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://127.0.0.1:80/ >/dev/null 2>&1 || exit 1"]
-      <<: *healthcheck-defaults
-      start_period: 30s
     logging: *default-logging
+    networks: ["red-net"]
 
   redis-commander:
-    image: ghcr.io/joeferner/redis-commander:0.12.0
+    image: ghcr.io/joeferraro/redis-commander:latest
     container_name: red-redis-commander-dev
     restart: unless-stopped
-    <<: *resource-limits-small
     environment:
-      - REDIS_HOSTS=local:redis:6379:0:redis
-      - HTTP_USER=admin
-      - HTTP_PASSWORD=admin
+      REDIS_HOSTS: "local:redis:6379:0:red-password"
+      HTTP_USER: "admin"
+      HTTP_PASSWORD: "admin"
     ports:
-      - "127.0.0.1:8081:8081"
-    networks:
-      - red-net
+      - "8081:8081"
     depends_on:
       - redis
     logging: *default-logging
+    networks: ["red-net"]
 
 volumes:
   pgadmin-data:
     driver: local
-  prometheus-data:
-    driver: local
-  grafana-data:
-    driver: local
+
+networks:
+  red-net:
+    driver: bridge
+    enable_ipv6: false
+    internal: false

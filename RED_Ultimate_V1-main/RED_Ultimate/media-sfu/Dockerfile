@@ -1,44 +1,50 @@
 # syntax=docker/dockerfile:1.7
-# RED Media SFU — production multi-stage build with mediasoup
-# Node 24 Alpine, non-root, BuildKit cache for npm
+# YOUNES Media SFU — resilient mediasoup worker install.
+# Prebuilt GitHub binary first; local compile without io_uring if the
+# download is blocked (corporate TLS intercept / firewall).
+# Node 24 matches package.json "engines": { "node": ">=24" } — the image was on
+# 22 while engines demanded 24, so `npm ci` warned/failed under engine-strict.
+FROM node:24-bookworm AS builder
 
-FROM node:24-alpine AS builder
-
-RUN apk add --no-cache \
-    python3 py3-pip py3-setuptools py3-wheel \
-    build-base pkgconfig ninja meson \
-    ca-certificates curl \
-    linux-headers
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-setuptools python3-wheel \
+        build-essential pkg-config ninja-build meson \
+        ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Copy package files first for better cache
 COPY package.json package-lock.json install-worker.sh ./
-
-# BuildKit cache mount for npm
-RUN --mount=type=cache,target=/root/.npm,cache_id=media-sfu-npm \
-    chmod +x install-worker.sh \
+RUN chmod +x install-worker.sh \
     && PYTHON=python3 ./install-worker.sh \
     && npm cache clean --force
 
-FROM node:24-alpine AS runtime
+# Build TypeScript
+COPY tsconfig.json ./
+COPY src ./src
+RUN npx tsc
 
-RUN apk add --no-cache ca-certificates \
-    && addgroup -g 1000 -S node \
-    && adduser -u 1000 -S -G node -h /app -s /sbin/nologin node
+FROM node:24-bookworm-slim
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
-COPY --from=builder --chown=node:node /app/package.json ./
-COPY --chown=node:node server.js protocol.js ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/proto ./src/proto
+RUN chown -R node:node /app
 
 USER node
 EXPOSE 4000
 EXPOSE 40000-40100/udp
 EXPOSE 40000-40100/tcp
+EXPOSE 50051
+EXPOSE 9464
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
   CMD node -e "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
-ENTRYPOINT ["node", "/app/server.js"]
+ENTRYPOINT ["node", "/app/dist/server.js"]

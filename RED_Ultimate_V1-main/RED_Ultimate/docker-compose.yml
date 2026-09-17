@@ -60,7 +60,6 @@ services:
   # ━━━━━━━━━━━━ 1. Infrastructure ━━━━━━━━━━━━
   postgres:
     image: postgres:16.15-bookworm
-    container_name: red-db-sql
     restart: unless-stopped
     <<: *resource-limits-xlarge
     environment:
@@ -95,7 +94,6 @@ services:
 
   mongo:
     image: mongo:8.0.13-noble
-    container_name: red-db-nosql
     restart: unless-stopped
     <<: *resource-limits-xlarge
     environment:
@@ -123,7 +121,6 @@ services:
 
   redis:
     image: redis:7.4.11-bookworm
-    container_name: red-cache
     restart: unless-stopped
     <<: *resource-limits-medium
     command:
@@ -155,7 +152,6 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2026-06-06T02-44-06Z
-    container_name: red-storage
     restart: unless-stopped
     <<: *resource-limits-medium
     command: server /data --console-address ":9001"
