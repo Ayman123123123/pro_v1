@@ -278,9 +278,10 @@ data class NearbyChannel(
     val isOptedIn: Boolean = true,
 )
 
-// NOTE: canonical ChannelRecommendation + RecommendationReason live in MLDiscoveryModel.kt
-// (on-device ML versions with confidence/features). The stubs that were here
-// duplicated those symbols and broke compilation — removed 2026-09-17.
+// NOTE: on-device ML discovery (ChannelRecommendation/RecommendationReason/
+// MLDiscoveryEngine) was removed 2026-09-21 as unwired dead code — no active
+// screen or repository referenced it. Reactions/threads are served by
+// MessageContent.MessageReactions + RedDao.getThreadReplies instead.
 
 @Serializable
 data class ChannelSettings(
