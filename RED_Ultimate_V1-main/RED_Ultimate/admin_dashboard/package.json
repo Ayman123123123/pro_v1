@@ -19,7 +19,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css,md}\"",
     "route:gen": "tsr generate",
-    "route:watch": "tsr generate --watch"
+    "route:watch": "tsr generate --watch",
+    "mock": "node dev-mock-server.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
