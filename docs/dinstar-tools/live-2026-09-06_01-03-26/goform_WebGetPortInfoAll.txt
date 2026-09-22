@@ -1,0 +1,124 @@
+﻿<html>
+<head>
+    <title>Login</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta http-equiv="pragma" content="no-cache">
+    <link href="css/main.css" rel="stylesheet" type="text/css">
+
+    <script type="text/javascript" language="javascript">
+        if(window.top.location != window.self.location)
+        {
+            window.top.location = window.self.location;
+        }
+        var web_language;
+        var Version = '02240221';
+        function MM_callJS(errCounts)
+        {
+            var oem_id = Version.substring(0,2);
+            
+            if(oem_id != "60" && oem_id != "62" && oem_id != "58")
+            {
+                document.getElementById("banner_img").style.display = "";
+            }
+            else
+            {
+                document.getElementById("banner_img").style.display = "none";
+            }
+
+            if(oem_id == "58")
+            {
+                document.getElementById("banner").style.height = 0;
+                document.getElementById("logo_img").style.display = "none";
+                document.getElementById("login_pic").style.display = "";
+                document.getElementById("login_text").style.display = "none";
+                document.getElementById("login_button").className = "login_button";
+
+                document.body.style.backgroundImage = "url('image/background_bg.png')";
+                document.body.style.backgroundSize = "cover";
+                document.body.style.backgroundPosition = "center center";
+                document.body.style.backgroundRepeat = "no-repeat";
+            }
+            else
+            {
+                document.getElementById("logo_img").style.display = "";
+                document.getElementById("login_pic").style.display = "none";
+                document.getElementById("login_text").style.display = "";
+                document.getElementById("login_button").className = "button";
+            }
+
+            var LoginErrCount = errCounts;
+            if(LoginErrCount > 0 && LoginErrCount <= 3)
+            {
+                document.getElementById("waringMsg").innerHTML ="UserName or Password errorï¼"
+            }
+            else if(LoginErrCount > 3 && LoginErrCount < 10)
+            {
+                document.getElementById("waringMsg").innerHTML ="The remaining number of login is "+(10-LoginErrCount)+"! ";
+            }
+            else if(LoginErrCount >= 10)
+            {
+                document.getElementById("waringMsg").innerHTML ="Your IP login failed too many times, forbid to try againï¼";
+                document.getElementById("login_button").disabled = true;
+            }
+        }
+    </script>
+</head>
+
+<body leftmargin="0" rightmargin="0" onLoad="MM_callJS(0)">
+<div class="banner" id="banner">
+<div id="logo" class="logo" style="display:">
+    <img id="logo_img" style="display:none" src='image/logo.png'/>
+</div>
+
+<div class="banner_bg" >
+	<img id="banner_img" style="display:none" src="image/banner_bg.png"/>
+</div>
+<div class="login">
+    <form id="form1" name="form1" method="post" action="/goform/IADIdentityAuth">
+        <div id="login_pic" style="text-align: center; padding-top: 12px; padding-bottom: 12px; display:none;">
+            <img src="image/logo.png" alt="Logo">
+        </div>
+            <h2 id="login_text" align="center" style="display:none">User Login</h2>
+        <table width="100px" border=0 align="center" cellpadding=0 cellspacing=0>
+            <tr>
+                <td>
+                    UserName
+                </td>
+
+            </tr>
+            <tr>
+                <td  style="padding-top: 12px">
+                    <input type="text" name="username" id="loginname" maxlength="32" value="" class="text" style="height: 29px;width: 208px;" autocomplete="on" tabindex="1">
+                </td>
+            </tr>
+            <tr>
+                <td style="padding-top: 12px">
+                    Password
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <input type="password" name="password" id="loginpass" maxlength="32" value="" class="text" style="height: 29px;width: 208px;" autocomplete="on" tabindex="2">
+                </td>
+
+            </tr>
+            <tr >
+                <td align="right" style="padding-top: 25px">
+                    <input class="button" style="height: 29px;width: 208px;" align="center" type="submit" id="login_button" value="Login" tabindex="4">
+                </td>
+
+            </tr>
+
+            <tr>
+                <td>
+                    <lable class="notes" id="waringMsg">
+                    </lable>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+</div>
+</body>
+</html>
+

@@ -1,0 +1,867 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<meta http-equiv="pragma" content="no-cache">
+<title>Media Parameter</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+var gCodecList =  eval('(' + "{item0:{name:8, payload:8, Ptime:20, rate:64, silence :0},item1:{name:0, payload:0, Ptime:20, rate:64, silence :0},item2:{name:18, payload:18, Ptime:20, rate:8, silence :0},item3:{name:4, payload:4, Ptime:60, rate:63, silence :0},count:4, max:8}" + ')');
+var g_ToneParam = eval('(' + "{user:{flag:0, value:{callback:'0,0,0,0,0,0,0,0', busy:'0,0,0,0,0,0,0,0', dial:'0,0,0,0,0,0,0,0'}},tone0:{id:0, value:{callback:'440,180,480,180,2000,4000,0,0', busy:'480,180,620,180,500,500,0,0', dial:'350,180,440,180,0,0,0,0'}},tone1:{id:1, value:{callback:'420,180,420,630,1000,5000,0,0', busy:'420,180,420,630,400,400,0,0', dial:'420,180,420,630,0,0,0,0'}},tone2:{id:2, value:{callback:'425,180,425,630,1000,3000,0,0', busy:'425,180,425,630,500,500,0,0', dial:'425,180,425,630,0,0,0,0'}},tone3:{id:3, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,300,300,0,0', dial:'425,180,425,630,0,0,0,0'}},tone4:{id:4, value:{callback:'440,180,440,630,1500,3500,0,0', busy:'440,180,440,630,500,500,0,0', dial:'440,180,440,630,0,0,0,0'}},tone5:{id:5, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,480,480,0,0', dial:'425,180,425,630,0,0,0,0'}},tone6:{id:6, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,300,300,0,0', dial:'425,180,425,630,200,300,700,800'}},tone7:{id:7, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,500,500,0,0', dial:'425,180,425,630,200,200,600,1000'}},tone8:{id:8, value:{callback:'400,180,400,630,1000,2000,0,0', busy:'400,180,400,630,500,500,0,0', dial:'400,180,400,630,0,0,0,0'}},tone9:{id:9, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,500,500,0,0', dial:'425,180,425,630,0,0,0,0'}},tone10:{id:10, value:{callback:'425,180,425,630,1500,3000,0,0', busy:'425,180,425,630,500,500,0,0', dial:'425,180,425,630,0,0,0,0'}},tone11:{id:11, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,500,500,0,0', dial:'425,180,425,630,0,0,0,0'}},tone12:{id:12, value:{callback:'400,180,450,180,400,200,400,2000', busy:'400,180,400,630,375,375,0,0', dial:'350,180,440,180,0,0,0,0'}},tone13:{id:13, value:{callback:'400,180,450,180,400,200,400,2000', busy:'425,180,425,630,375,375,0,0', dial:'400,180,450,180,0,0,0,0'}},tone14:{id:14, value:{callback:'450,180,450,630,1000,4000,0,0', busy:'450,180,450,630,350,350,0,0', dial:'450,180,450,630,0,0,0,0'}},tone15:{id:15, value:{callback:'440,180,480,180,400,200,400,3000', busy:'480,180,620,180,500,500,0,0', dial:'350,180,440,180,0,0,0,0'}},tone16:{id:16, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,250,250,0,0', dial:'425,180,425,630,0,0,0,0'}},tone17:{id:17, value:{callback:'425,180,425,630,800,3200,0,0', busy:'425,180,425,630,400,400,0,0', dial:'425,180,425,630,0,0,0,0'}},tone18:{id:18, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,500,500,0,0', dial:'425,180,425,630,0,0,0,0'}},tone19:{id:19, value:{callback:'425,180,425,630,1000,5000,0,0', busy:'425,180,425,630,500,500,0,0', dial:'425,180,425,630,0,0,0,0'}},tone20:{id:20, value:{callback:'450,180,450,630,2000,4000,0,0', busy:'450,180,450,630,500,500,0,0', dial:'450,180,450,630,0,0,0,0'}},tone21:{id:21, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,500,500,0,0', dial:'425,180,425,630,0,0,0,0'}},tone22:{id:22, value:{callback:'425,180,425,630,1000,4000,0,0', busy:'425,180,425,630,500,500,0,0', dial:'425,180,425,630,200,300,700,800'}},tone23:{id:23, value:{callback:'440,180,480,180,800,4000,0,0', busy:'480,180,620,180,500,500,0,0', dial:'350,180,440,180,0,0,0,0'}}}" + ')');
+var oPortNum=0;
+var gMaxCoder;
+var gCustomIVRExist;
+function MM_callJS(FxoPortNum, Version, PktTime0, PktTime1, PktTime2, PktTime3, Silence0, Silence1, Silence2, Silence3,CustomIVRExist)
+{
+	//alert('abc1');
+	oPortNum = parseInt(FxoPortNum);
+	IadVer=Version;
+	
+	//init_codec_list();
+	//alert('abc4');
+	
+	var curtone = document.getElementById("CallProgressTone").value;
+	//alert('abc');
+    if (curtone == 255)
+	{
+        document.getElementById("ToneRingBack").readOnly = false;
+	    document.getElementById("ToneDial").readOnly = false;
+		document.getElementById("ToneBusy").readOnly = false;
+		
+	    document.getElementById("ToneRingBack").value = eval("g_ToneParam.user.value.callback");
+		document.getElementById("ToneDial").value = eval("g_ToneParam.user.value.dial");
+ 		document.getElementById("ToneBusy").value = eval("g_ToneParam.user.value.busy");
+	}
+	//alert('abc');
+	if(oPortNum != 0)
+	{
+		document.getElementById("dtmfVol").style.display="";
+		document.getElementById("dtmfInterval").style.display="";
+		//alert(oPortNum);
+	}
+	
+	
+	if (IadVer != "v3")
+	{
+		
+		document.getElementById("idCoder3th").style.display = "";
+		gMaxCoder = 4;
+	}
+	else
+	{
+		document.getElementById("notice0").style.display="";
+		gMaxCoder = 3;
+	}
+	
+	for (i=0; i<gMaxCoder; i++)
+	{
+		CoderName = eval("document.forms[0].CoderName"+i+".value");
+		
+		PktTime_Check(i,CoderName);
+	}
+	
+	document.forms[0].CoderPktTime0.value = PktTime0;
+	document.forms[0].CoderPktTime1.value = PktTime1;
+	document.forms[0].CoderPktTime2.value = PktTime2;
+	document.forms[0].CoderSilence0.value = Silence0;
+	document.forms[0].CoderSilence1.value = Silence1;
+	document.forms[0].CoderSilence2.value = Silence2;
+	if (gMaxCoder == 4)
+	{
+		document.forms[0].CoderPktTime3.value = PktTime3;
+		document.forms[0].CoderSilence3.value = Silence3;
+	}
+
+	gCustomIVRExist = CustomIVRExist;
+	
+	if (gCustomIVRExist == "no")
+	{
+		document.forms[0].PlayIVRFrom[0].disabled=true;
+		document.forms[0].PlayIVRFrom[1].disabled=true;	
+		
+		document.forms[0].ok.disabled = true;
+	}
+	
+	mouse_click();
+}
+
+function init_codec_list()
+{
+	var i, j;
+	var CodecName = "";
+	var CodecPT = 0;
+
+	/* æ·»å éç½®é¡¹ */
+	for (i=0; i<gSupportedCodes.count; i++)
+	{
+		document.getElementById("idCoder" + i + "th").style.display = "";
+		document.getElementById("CoderName" + i).options.add(new Option("",255));
+
+		/* ææææ¯æçç¼è§£ç å¨é¨å è¿å» */
+		for (j=0; j<gSupportedCodes.count; j++)
+		{
+			CodecName = eval("gSupportedCodes.item" + j + ".name");
+			CodecPT = eval("gSupportedCodes.item" + j + ".pt");
+		
+			document.getElementById("CoderName" + i).options.add(new Option(CodecName, CodecPT));
+		}
+	}
+
+	//* æéç½®æ°æ®å¡«è¿å» */
+	for (i=0; i<gCodecList.count; i++)
+	{
+		document.getElementById("CoderName" + i).value = eval("gCodecList.item" + i + ".name");
+		CoderChange(i);
+		if (eval("gCodecList.item" + i + ".name") == 255)
+		{
+			continue;	
+		}
+		
+		document.getElementById("CoderPT" + i).value = eval("gCodecList.item" + i + ".payload");
+		document.getElementById("CoderPktTime" + i).value = eval("gCodecList.item" + i + ".Ptime");
+		document.getElementById("CoderRate" + i).value = eval("gCodecList.item" + i + ".rate");
+		document.getElementById("CoderSilence" + i).value = eval("gCodecList.item" + i + ".silence");
+	}
+}
+
+function mouse_click()
+{
+    var curtone = document.getElementById("CallProgressTone").value;
+	if (curtone == 255)
+	{
+		document.getElementById("ToneRingBack").readOnly = false;
+		document.getElementById("ToneDial").readOnly = false;
+		document.getElementById("ToneBusy").readOnly = false;
+				
+		if (g_ToneParam.user.flag == 1)
+		{
+			document.getElementById("ToneRingBack").value = eval("g_ToneParam.user.value.callback");
+			document.getElementById("ToneDial").value = eval("g_ToneParam.user.value.dial");
+			document.getElementById("ToneBusy").value = eval("g_ToneParam.user.value.busy");
+		}
+	}
+	else
+	{
+	    document.getElementById("ToneRingBack").readOnly = true;
+		document.getElementById("ToneDial").readOnly = true;
+		document.getElementById("ToneBusy").readOnly = true;
+	    document.getElementById("ToneRingBack").value = eval("g_ToneParam.tone"+curtone+".value.callback");
+		document.getElementById("ToneDial").value = eval("g_ToneParam.tone"+curtone+".value.dial");
+		document.getElementById("ToneBusy").value = eval("g_ToneParam.tone"+curtone+".value.busy");
+	}	
+	
+	if(document.forms[0].PlayHintToOPort[1].checked)
+	{
+		document.getElementById("idIVRDuration").style.display = "";
+	}
+	else
+	{
+		document.getElementById("idIVRDuration").style.display = "none";
+	}
+
+  if(2==document.getElementById("DTMFMethod").value)
+  {
+    //RFC2833
+		document.getElementById("2833PT").style.display = "";
+	}
+	else
+	{
+		document.getElementById("2833PT").style.display = "none";
+	} 
+}
+
+function PktTime_Check(number,coder)
+{	
+	var i, CoderPktTime;
+	
+	CoderPktTime = document.getElementById("CoderPktTime"+number);
+	
+	//remove all(remain)
+	CoderPktTime.options.length = 0;
+	
+	if (coder == 0 || coder == 8)//G711
+	{
+		//10,20,30,40,50,60
+		for (i=10; i<=60; i+=10)
+		{
+			CoderPktTime.options.add(new Option(i,i));
+		}
+	}
+	else if (coder == 4)//G723
+	{
+		//30,60
+		CoderPktTime.options.add(new Option(30,30));
+		CoderPktTime.options.add(new Option(60,60));
+	}
+	else if (coder == 18)//G729
+	{
+		//10,20,30,40,50,60
+		CoderPktTime.options.add(new Option(10,10));
+		CoderPktTime.options.add(new Option(20,20));
+		CoderPktTime.options.add(new Option(30,30));
+		CoderPktTime.options.add(new Option(40,40));
+		CoderPktTime.options.add(new Option(50,50));
+		CoderPktTime.options.add(new Option(60,60));
+	}
+	
+	return true;
+}
+
+
+function CoderChange(serial)
+{
+	var i,j,coder, Tmp;
+	
+	coder = eval("document.forms[0].CoderName"+serial+".value");
+	//alert('abc');
+	if (IadVer == "v3")
+	{
+		if(coder==4 || coder==18)
+		{
+			for(i=0; i<gMaxCoder; i++)
+			{
+				if (i == serial)
+				{
+					continue;
+				}
+				Tmp = eval("document.forms[0].CoderName"+i+".value");
+				if ((Tmp==4 && coder==18) || (Tmp==18 && coder==4))
+				{
+					alert("Please don't set 723 and 729 at the same time!");
+					window.location=location;
+					return true;
+				}	
+			}
+		}
+	}
+	
+	PktTime_Check(serial, coder);
+			
+	if (coder == 0)
+	{
+		eval("document.forms[0].CoderPT"+serial+".value=0");
+		eval("document.forms[0].CoderPktTime"+serial+".value=20");
+		eval("document.forms[0].CoderRate"+serial+".value=64");
+	}
+	else if (coder == 4)
+	{
+		eval("document.forms[0].CoderPT"+serial+".value=4");
+		eval("document.forms[0].CoderPktTime"+serial+".value=30");
+		eval("document.forms[0].CoderRate"+serial+".value=6.3");
+	}
+	else if (coder == 8)
+	{
+		eval("document.forms[0].CoderPT"+serial+".value=8");
+		eval("document.forms[0].CoderPktTime"+serial+".value=20");
+		eval("document.forms[0].CoderRate"+serial+".value=64");
+	}
+	else if (coder == 18)
+	{
+		eval("document.forms[0].CoderPT"+serial+".value=18");
+		eval("document.forms[0].CoderPktTime"+serial+".value=20");
+		eval("document.forms[0].CoderRate"+serial+".value=8");
+	}
+	
+	eval("document.forms[0].CoderSilence"+serial+".value=0");
+
+	return true;
+}
+
+function form_check()
+{
+	if (document.getElementById("CallProgressTone").value == 255)
+	{
+		if (!check_call_process_tone_str(document.getElementById("ToneRingBack").value))
+		{
+			alert("'Ring Back Tone' is incorrect, please attention to the notes!");
+			document.getElementById("ToneRingBack").focus();
+			return false;
+		}
+		if (!check_call_process_tone_str(document.getElementById("ToneBusy").value))
+		{
+			alert("'Busy Tone' is incorrect, please attention to the notes!");
+			document.getElementById("ToneBusy").focus();
+			return false;
+		}
+		
+		if (!check_call_process_tone_str(document.getElementById("ToneDial").value))
+		{
+			alert("'Dial Tone' is incorrect, please attention to the notes!");
+			document.getElementById("ToneDial").focus();
+			return false;
+		}
+	}
+	
+	if(!is_number(document.forms[0].RtpPort.value,1024,64000))
+	{
+		alert("'RTP Start Port' is incorrect, please enter a number between 1024 and 64000!");
+		document.forms[0].RtpPort.select();
+		return false;
+	}
+
+	if(!is_number(document.forms[0].Payload2833.value,0,200))
+	{
+		alert("'RFC2833 Payload Type' is incorrect, please enter a number between 0 and 200!");
+		document.forms[0].Payload2833.select();
+		return false;
+	}
+	
+	if(!is_number(document.forms[0].DTMFSendInterval.value,10,2000))
+	{
+		alert("'DTMF Send Interval' is incorrect, please enter a number between 10 and 2000!");
+		document.forms[0].DTMFSendInterval.select();
+		return false;
+	}
+	
+	if (IadVer == "v3")
+	{
+		var flag723 = 0, flag729 = 0;
+		/*ç¼è§£ç æ£æµ*/
+		if (document.forms[0].CoderName0.value == 4)
+		{
+			flag723 = 1;
+		}
+		else if (document.forms[0].CoderName0.value == 18)
+		{
+			flag729 = 1;
+		}
+		if (document.forms[0].CoderName1.value == 4)
+		{
+			if (flag729 == 1)
+			{
+				alert("Don't config G.723.1 and G.729AB at the same time!");
+				document.forms[0].CoderName1.select();
+				return false;
+			}
+			else
+			{
+				flag723 = 1;
+			}
+		}
+		else if (document.forms[0].CoderName1.value == 18)
+		{
+			if (flag723 == 1)
+			{
+				alert("Don't config G.723.1 and G.729AB at the same time!");
+				document.forms[0].CoderName1.select();
+				return false;
+			}
+			else
+			{
+				flag729 = 1;
+			}
+		}
+		if (document.forms[0].CoderName2.value == 4)
+		{
+			if (flag729 == 1)
+			{
+				alert("Don't config G.723.1 and G.729AB at the same time!");
+				document.forms[0].CoderName2.select();
+				return false;
+			}
+			else
+			{
+				flag723 = 1;
+			}
+		}
+		else if (document.forms[0].CoderName2.value == 18)
+		{
+			if (flag723 == 1)
+			{
+				alert("Don't config G.723.1 and G.729AB at the same time!");
+				document.forms[0].CoderName2.select();
+				return false;
+			}
+			else
+			{
+				flag729 = 1;
+			}
+		}
+	}
+
+	return true;
+}
+</script>
+</head>
+<body onLoad="MM_callJS('8', 'v9', '20', '20', '20', '60', '0', '0', '0', '0');">
+<form action="/goform/EiaMediaParamCfg" method="post" name="MediaParamCfg" id="MediaParamCfg">
+<table width="70%" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+   <td>Media Parameter</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+<table width="70%" align="center" class="TB">
+  <tr>
+    <td class="sidebar">&nbsp;</td>
+    <td>
+      <table width="100%" class="context">
+        <tr>
+          <td width="5%">&nbsp;</td>
+          <td width="5%">&nbsp;</td>
+          <td width="45%">&nbsp;</td>
+          <td width="45%">&nbsp;</td>
+        </tr>
+        <tr>
+          <td class="td_title" colspan="3">Local Start RTP Port</td>
+          <td><input class="text" id="RtpPort" maxlength="5" name="RtpPort" size="18" value="8000">       
+          </td>
+        </tr>
+        <tr id="idFlashEventBlank" style="display:none">
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+        </tr>
+        <tr>
+          <td class="td_title" colspan="3">Enable Silence Suppression</td>
+          <td>
+           <input name="SilenceSuppression" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+           <input name="SilenceSuppression" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	      </td>
+        </tr>
+		<tr>
+          <td class="td_title" colspan="3">Enable Busy Tone Detect</td>
+          <td>
+           <input name="BusytoneDetect" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+           <input name="BusytoneDetect" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	      </td>
+        </tr>
+		<tr style="display:none">
+          <td class="td_title" colspan="3">Enable UDP Checksum Detect</td>
+          <td>
+           <input name="UdpChecksumDetect" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+           <input name="UdpChecksumDetect" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	      </td>
+        </tr>
+        <tr>		
+		  <td class="td_title" colspan="3">SRTP Mode</td>
+          <td>
+            <select name="SRTPMode" class="list" id="SRTPMode" onChange="mouse_click();" alt="config/media/srtp_mode">
+              <option value="0" selected>Disable</option>
+              <option value="1" >Auto</option>
+              <option value="2" >Force</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="idFlashEventBlank" style="display:none">
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+        </tr>
+        <tr>
+	      <td class="td_title" colspan="3">Call Progress Tone</td>
+	      <td>
+	    <select name="CallProgressTone" class="list" id="CallProgressTone" onChange="mouse_click()">
+        <option value="0" selected>USA</option>
+		<option value="1" >AUSTRIA</option>
+        <option value="2" >BELGIUM</option>
+        <option value="3" >FINLAND</option>
+		<option value="4" >FRANCE</option>
+		<option value="5" >GERMANY</option>
+		<option value="6" >GREECE</option>
+		<option value="7" >ITALY</option>
+		<option value="8" >JAPAN</option>
+		<option value="9" >NORWAY</option>
+		<option value="10" >SPAIN</option>
+		<option value="11" >SWEDEN</option>
+		<option value="12" >UK</option>
+		<option value="13" >AUSTRALIA</option>
+		<option value="14" >CHINA</option>
+		<option value="15" >HONGKONG</option>
+		<option value="16" >DENMARK</option>
+		<option value="17" >RUSSIA</option>
+		<option value="18" >POLAND</option>
+		<option value="19" >PORTUGAL</option>
+		<option value="20" >TURKEY</option>
+		<option value="21" >DUTCH</option>
+    <option value="255" >User Define</option>
+    	</select>
+	     </td>
+	   </tr>
+	   <tr id="idToneRingBack">
+         <td>&nbsp;</td>
+         <td colspan="2">Ring Back Tone</td>
+         <td><input type="text" class="text" name="ToneRingBack" id="ToneRingBack" /></td>
+       </tr>
+       <tr id="idToneBusy">
+         <td>&nbsp;</td>
+         <td colspan="2">Busy Tone</td>
+         <td><input type="text" class="text" name="ToneBusy" id="ToneBusy" /></td>
+        </tr>
+        <tr id="idToneDial">
+          <td>&nbsp;</td>
+          <td colspan="2">Dial Tone</td>
+          <td><input type="text" class="text" name="ToneDial" id="ToneDial" /></td>
+        </tr>
+        <tr>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+        </tr>
+        <tr>
+          <td colspan="4" class="td_title">DTMF Parameter</td>
+        </tr>
+        <tr>
+          <td>&nbsp;</td>
+          <td colspan = 2>DTMF Method</td>
+          <td>
+	    <select name="DTMFMethod" class="list" id="DTMFMethod" onChange="mouse_click()">
+        <option value="0" >INBAND</option> 
+		    <option value="1" >SIGNAL</option>
+        <option value="2" selected>RFC2833</option>
+        </select>      </td>
+         </tr>
+         <tr id="2833PT">
+          <td>&nbsp;</td>
+          <td colspan = 2>RFC2833 Payload Type</td>
+          <td>
+       <input class="text" id="Payload2833" maxlength="3" name="Payload2833" size="18" value="101">      </td>
+         </tr>
+         <tr id="dtmfVol" style="display:none">
+          <td>&nbsp;</td>
+          <td colspan = 2>DTMF Volume</td>
+          <td>
+	    <select name="DTMFVolume" class="list" id="DTMFVolume" >
+        <option value="-6" >-6dB</option>
+		<option value="-4" >-4dB</option>
+        <option value="-2" >-2dB</option>
+        <option value="0" selected>0dB</option>
+		<option value="2" >+2dB</option>
+		<option value="4" >+4dB</option>
+		<option value="6" >+6dB</option>
+        </select>      </td>
+         </tr>
+         <tr id="dtmfInterval" style="display:none">
+          <td>&nbsp;</td>
+          <td colspan = 2>DTMF Interval</td>
+          <td>
+       <input class="text" id="DTMFSendInterval" maxlength="4" name="DTMFSendInterval" size="18" value="200">
+       ms      </td>
+         </tr>
+		 
+		 <tr>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+        </tr>
+		 
+		 <tr>
+			<td colspan=4 class="td_title">IVR Parameter</td>
+		 </tr>
+		 <tr>
+		  <td>&nbsp;</td>
+		  <td colspan="2">Play IVR for GSM Incoming Calls</td>
+		  <td>
+		   <input name="PlayHintToOPort" type="radio" value="0" onClick="mouse_click();" checked>
+		   No
+		   <input name="PlayHintToOPort" type="radio" value="1" onClick="mouse_click();" >
+		   Yes
+		  </td>
+		 </tr>
+		 <tr id="idIVRDuration" style="display:none">
+		  <td>&nbsp;</td>
+		  <td colspan="2">IVR Play Duration</td>
+		  <td><input class="text" id="IVRDuration" maxlength="3" name="IVRDuration" size="18" value="25">
+			 Sec(s) </td>
+		 </tr>
+		 
+		 <tr>
+			<td>&nbsp;</td>
+			<td colspan=2>Play IVR Voice Prompt from</td>
+			<td>
+			  <input name="PlayIVRFrom" type="radio" value="0" checked>
+			  Default
+			  <input name="PlayIVRFrom" type="radio" value="1" >
+			  Custom
+			</td>
+		</tr>
+		 
+      </table>
+      <table width="100%" class="context">
+        <tr>
+          <td width="5%">&nbsp;</td>
+          <td width="5%">&nbsp;</td>
+          <td width="20%">&nbsp;</td>
+          <td width="20%">&nbsp;</td>
+          <td width="20%">&nbsp;</td>
+          <td width="20%">&nbsp;</td>
+          <td width="0">&nbsp;</td>
+        </tr>
+        <tr>
+          <td colspan="7" class="td_title">Preferred Coders(in listed order)</td>
+        </tr>
+        <tr align="center">
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>Coder Name</td>
+          <td>Payload Type</td>
+          <td>Packetization Time(ms)</td>
+          <td>Rate(kbps)</td>
+          <td style="display:none" >Silence Suppression</td>
+        </tr>
+        <tr id="idCoder0th">
+          <td>&nbsp;</td>
+          <td>1</td>
+          <td>
+            <select name="CoderName0" class="list" style="width:100%;" id="CoderName0" onChange="CoderChange(0)">
+            <option value="0" >PCMU</option>
+            <option value="4" >G.723.1</option>
+            <option value="8" selected>PCMA</option>
+            <option value="18" >G.729AB</option>
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderPT0" name="CoderPT0" style="width:90%;" maxlength="3" value="8" disabled>
+          </td>
+          <td>
+            <select name="CoderPktTime0" class="list" style="width:100%;" id="CoderPktTime0"   >
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderRate0" name="CoderRate0" style="width:90%;" maxlength="2" value="64" disabled>
+          </td>
+          <td style="display:none">
+            <select name="CoderSilence0" class="list" id="CoderSilence0" style="width:0%;">
+              <option value="0" 0>Disable</option>
+              <option value="1" 0>Enable</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="idCoder1th">
+          <td>&nbsp;</td>
+          <td>2</td>
+          <td>
+            <select name="CoderName1" class="list" style="width:100%;" id="CoderName1" onChange="CoderChange(1)">
+            <option value="0" selected>PCMU</option>
+            <option value="4" >G.723.1</option>
+            <option value="8" >PCMA</option>
+            <option value="18" >G.729AB</option>
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderPT1" name="CoderPT1" style="width:90%;" maxlength="3" value="0" disabled>
+          </td>
+          <td>
+            <select name="CoderPktTime1" class="list" style="width:100%;" id="CoderPktTime1">
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderRate1" name="CoderRate1" style="width:90%;" maxlength="2" value="64" disabled>
+          </td>
+          <td style="display:none">
+            <select name="CoderSilence1" class="list" style="width:0%;" id="CoderSilence1">
+              <option value="0" 0>Disable</option>
+              <option value="1" 0>Enable</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="idCoder2th">
+          <td>&nbsp;</td>
+          <td>3</td>
+          <td>
+            <select name="CoderName2" class="list" style="width:100%;" id="CoderName2" onChange="CoderChange(2)">
+            <option value="0" >PCMU</option>
+            <option value="4" >G.723.1</option>
+            <option value="8" >PCMA</option>
+            <option value="18" selected>G.729AB</option>
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderPT2" name="CoderPT2" style="width:90%;" maxlength="3" value="18" disabled>
+          </td>
+          <td>
+            <select name="CoderPktTime2" class="list" style="width:100%;" id="CoderPktTime2">
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderRate2" name="CoderRate2" style="width:90%;" maxlength="2" value="8" disabled>
+          </td>
+          <td style="display:none">
+            <select name="CoderSilence2" class="list" style="width:0%;" id="CoderSilence2">
+              <option value="0" 0>Disable</option>
+              <option value="1" 0>Enable</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="idCoder3th">
+          <td>&nbsp;</td>
+          <td>4</td>
+          <td>
+            <select name="CoderName3" class="list" style="width:100%;" id="CoderName3" onChange="CoderChange(3)">
+            <option value="0" >PCMU</option>
+            <option value="4" selected>G.723.1</option>
+            <option value="8" >PCMA</option>
+            <option value="18" >G.729AB</option>
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderPT3" name="CoderPT3" style="width:90%;" maxlength="3" value="4" disabled>
+          </td>
+          <td>
+            <select name="CoderPktTime3" class="list" style="width:100%;" id="CoderPktTime3">
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderRate3" name="CoderRate3" style="width:90%;" maxlength="2" value="6.3" disabled>
+          </td>
+          <td style="display:none">
+            <select name="CoderSilence3" class="list" id="CoderSilence3" style="width:0%;">
+              <option value="0" 0>Disable</option>
+              <option value="1" 0>Enable</option>
+            </select>          </td>
+        </tr>
+        <tr id="idCoder4th" style="display:none">
+          <td>&nbsp;</td>
+          <td>5</td>
+          <td>
+            <select name="CoderName4" class="list" style="width:100%;" id="CoderName4" onChange="CoderChange(4)">
+            <option value="0" >PCMU</option>
+            <option value="4" >G.723.1</option>
+            <option value="8" >PCMA</option>
+            <option value="18" >G.729AB</option>
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderPT4" name="CoderPT4" style="width:90%;" maxlength="3" value="255" disabled>
+          </td>
+          <td>
+            <select name="CoderPktTime4" class="list" style="width:100%;" id="CoderPktTime4">
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderRate4" name="CoderRate4" style="width:90%;" maxlength="2" value="255" disabled>
+          </td>
+          <td style="display:none">
+            <select name="CoderSilence4" class="list" id="CoderSilence4" style="width:0%;">
+              <option value="0" 0>Disable</option>
+              <option value="1" 0>Enable</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="idCoder5th" style="display:none">
+          <td>&nbsp;</td>
+          <td>6</td>
+          <td>
+            <select name="CoderName5" class="list" style="width:100%;" id="CoderName5" onChange="CoderChange(5)">
+            <option value="0" >PCMU</option>
+            <option value="4" >G.723.1</option>
+            <option value="8" >PCMA</option>
+            <option value="18" >G.729AB</option>
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderPT5" name="CoderPT5" style="width:90%;" maxlength="3" value="255" disabled>
+          </td>
+          <td>
+            <select name="CoderPktTime5" class="list" style="width:100%;" id="CoderPktTime5">
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderRate5" name="CoderRate5" style="width:90%;" maxlength="2" value="255" disabled>
+          </td>
+          <td style="display:none">
+            <select name="CoderSilence5" class="list" id="CoderSilence5" style="width:0%;">
+              <option value="0" 0>Disable</option>
+              <option value="1" 0>Enable</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="idCoder6th" style="display:none">
+          <td>&nbsp;</td>
+          <td>7</td>
+          <td>
+            <select name="CoderName6" class="list" style="width:100%;" id="CoderName6" onChange="CoderChange(6)">
+            <option value="0" >PCMU</option>
+            <option value="4" >G.723.1</option>
+            <option value="8" >PCMA</option>
+            <option value="18" >G.729AB</option>
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderPT6" name="CoderPT6" style="width:90%;" maxlength="3" value="255" disabled>
+          </td>
+          <td>
+            <select name="CoderPktTime6" class="list" style="width:100%;" id="CoderPktTime6">
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderRate6" name="CoderRate6" style="width:90%;" maxlength="2" value="255" disabled>
+          </td>
+          <td style="display:none">
+            <select name="CoderSilence6" class="list" id="CoderSilence6" style="width:0%;">
+              <option value="0" 0>Disable</option>
+              <option value="1" 0>Enable</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="idCoder7th" style="display:none">
+          <td>&nbsp;</td>
+          <td>8</td>
+          <td>
+            <select name="CoderName7" class="list" style="width:100%;" id="CoderName7" onChange="CoderChange(7)">
+            <option value="0" >PCMU</option>
+            <option value="4" >G.723.1</option>
+            <option value="8" >PCMA</option>
+            <option value="18" >G.729AB</option>
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderPT7" name="CoderPT7" style="width:90%;" maxlength="3" value="255" disabled>
+          </td>
+          <td>
+            <select name="CoderPktTime7" class="list" style="width:100%;" id="CoderPktTime7">
+            </select>
+          </td>
+          <td>
+            <input class="text" id="CoderRate7" name="CoderRate7" style="width:90%;" maxlength="2" value="255" disabled>
+          </td>
+          <td style="display:none">
+            <select name="CoderSilence7" class="list" id="CoderSilence7" style="width:0%;">
+              <option value="0" 0>Disable</option>
+              <option value="1" 0>Enable</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="notice0" style="display:none">
+        <td colspan="2">&nbsp;</td>
+        <td colspan="5" class="td_title">Notice: The device will restart automatically  when 'preferred coders' is changed between G.723.1 and G.729AB.</td>
+       </tr>
+        
+        <tr>
+          <td colspan="7">&nbsp;</td>
+        </tr>
+      </table>
+    </td>
+    <td class="swidth">&nbsp;</td>
+  </tr>
+</table>
+<table width="70%" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+   <td width="35%"> </td>
+   <td>&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes">NOTE:&nbsp;</td>
+   <td class="notes">It must restart the device to take effect.</td>
+  </tr>
+ </table>
+<p align="center" class="buttonbox">
+  <input name="Save" class="button" type="submit" id="Save" value="Save" onClick="return form_check();">
+</p>
+</form>
+</body>
+</html>
+

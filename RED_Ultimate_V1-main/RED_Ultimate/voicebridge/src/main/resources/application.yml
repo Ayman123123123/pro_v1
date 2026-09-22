@@ -1,0 +1,131 @@
+# RED Sovereign VoiceBridge — Application Configuration
+# Environment-specific overrides in application-{dev,prod}.yml
+
+spring:
+  application:
+    name: voicebridge
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://postgres:5432/voicebridge}
+    username: ${DATABASE_USER:voicebridge}
+    password: ${DATABASE_PASSWORD:changeme}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  web:
+    resources:
+      static-locations: classpath:/static/
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+  codec:
+    max-in-memory-size: 10MB
+
+server:
+  port: ${VOICEBRIDGE_HTTP_PORT:8090}
+  address: 0.0.0.0
+  servlet:
+    context-path: /voicebridge
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,loggers,env,configprops
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${spring.profiles.active}
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  level:
+    com.red.sovereign.voicebridge: DEBUG
+    org.springframework.web: INFO
+    org.asteriskjava: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
+
+voicebridge:
+  stasis-app-name: ${VOICEBRIDGE_STASIS_APP:voicebridge}
+  max-concurrent-calls: ${VOICEBRIDGE_MAX_CALLS:100}
+  call-timeout-seconds: ${VOICEBRIDGE_CALL_TIMEOUT:180}
+  rtp-port-pool-size: ${VOICEBRIDGE_RTP_POOL:50}
+  barge-in-enabled: ${VOICEBRIDGE_BARGE_IN:true}
+  recording-enabled: ${VOICEBRIDGE_RECORDING:false}
+  recording-path: ${VOICEBRIDGE_RECORDING_PATH:/var/spool/asterisk/recordings}
+
+  ari:
+    host: ${ARI_HOST:asterisk}
+    port: ${ARI_PORT:8088}
+    username: ${ARI_USER:voicebridge}
+    password: ${ARI_PASSWORD:changeme}
+    base-url: http://${ARI_HOST:asterisk}:${ARI_PORT:8088}/ari
+    web-socket-path: /ari/events?app=${VOICEBRIDGE_STASIS_APP:voicebridge}
+    connect-timeout-ms: 5000
+    read-timeout-ms: 30000
+    auto-reconnect: true
+    reconnect-interval-ms: 5000
+
+  rtp:
+    bind-port: ${RTP_BIND_PORT:12100}
+    port-range-start: ${RTP_PORT_START:12100}
+    port-range-end: ${RTP_PORT_END:13100}
+    frame-size-ms: ${RTP_FRAME_MS:20}
+    sample-rate: ${RTP_SAMPLE_RATE:8000}
+    default-codec: ${RTP_DEFAULT_CODEC:PCMU}
+    symmetric-rtp: true
+    learn-peer: true
+    jitter-buffer-size: 100
+
+  bot:
+    provider: ${BOT_PROVIDER:openai-realtime}
+    openai-api-key: ${OPENAI_API_KEY}
+    openai-realtime-url: ${OPENAI_REALTIME_URL:wss://api.openai.com/v1/realtime}
+    openai-model: ${OPENAI_MODEL:gpt-4o-realtime-preview-2024-12-17}
+    system-prompt: ${BOT_SYSTEM_PROMPT:You are a helpful AI assistant for RED Sovereign communications platform.}
+    temperature: 0.8
+    max-tokens: 4096
+    vad-enabled: true
+    vad-threshold: 0.5
+    vad-prefix-padding-ms: 300
+    vad-silence-duration-ms: 500
+    truncation-enabled: true
+    external-bot-ws-url: ${EXTERNAL_BOT_WS_URL}

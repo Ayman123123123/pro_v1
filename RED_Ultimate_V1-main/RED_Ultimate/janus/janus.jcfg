@@ -1,0 +1,115 @@
+{
+  "general": {
+    "configs_folder": "/etc/janus",
+    "certificates_folder": "/etc/janus/certs",
+    "logs_folder": "/var/log/janus",
+    "pid_file": "/var/run/janus/janus.pid",
+    "ipv4": true,
+    "ipv6": false,
+    "interface": "eth0",
+    "public_ip": "${JANUS_PUBLIC_IP}",
+    "server_name": "RED Sovereign Janus Gateway",
+    "rtp_port_range": "20000-40000",
+    "ice_lite": false,
+    "ice_tcp": true,
+    "ice_udp": true,
+    "stun_server": "${STUN_SERVER:-stun.l.google.com}",
+    "stun_port": 19302,
+    "turn_server": "${TURN_SERVER}",
+    "turn_port": 3478,
+    "turn_type": "udp",
+    "turn_user": "${TURN_USER}",
+    "turn_password": "${TURN_PASSWORD}",
+    "plugins_folder": "/usr/lib/janus/plugins",
+    "disable_stdout": false,
+    "log_to_stdout": true,
+    "log_file": "/var/log/janus/janus.log",
+    "log_level": 4,
+    "debug_level": 0,
+    "daemon": false,
+    "admin_secret": "${JANUS_ADMIN_SECRET}",
+    "admin_token": "${JANUS_ADMIN_TOKEN}",
+    "event_handlers": true
+  },
+  "transports": [
+    {
+      "type": "ws",
+      "port": 8188,
+      "ip": "0.0.0.0",
+      "cert_pem": "/etc/janus/certs/janus.pem",
+      "cert_key": "/etc/janus/certs/janus.key",
+      "ciphers": "HIGH:!aNULL:!MD5:@STRENGTH"
+    },
+    {
+      "type": "wss",
+      "port": 8189,
+      "ip": "0.0.0.0",
+      "cert_pem": "/etc/janus/certs/janus.pem",
+      "cert_key": "/etc/janus/certs/janus.key",
+      "ciphers": "HIGH:!aNULL:!MD5:@STRENGTH"
+    },
+    {
+      "type": "http",
+      "port": 8088,
+      "ip": "0.0.0.0"
+    }
+  ],
+  "plugins": {
+    "janus.plugin.sip": true,
+    "janus.plugin.streaming": true,
+    "janus.plugin.audiobridge": true,
+    "janus.plugin.recordplay": true
+  },
+  "sip": {
+    "sip_port": 5060,
+    "sip_ip": "0.0.0.0",
+    "sip_transport": "udp",
+    "sip_tls_port": 5061,
+    "sip_tls_ip": "0.0.0.0",
+    "sip_realm": "${SIP_REALM:-red-sovereign}",
+    "sip_username": "${SIP_USERNAME:-janus-edge}",
+    "sip_password": "${SIP_PASSWORD}",
+    "sip_display_name": "Janus Edge Gateway",
+    "sip_contact": "sip:${SIP_USERNAME}@${JANUS_PUBLIC_IP}:5060",
+    "sip_from_user": "${SIP_USERNAME}",
+    "sip_from_domain": "${SIP_REALM}",
+    "sip_register": true,
+    "sip_registrar": "sip:${KAMAILIO_PRIVATE_IP}:5060",
+    "sip_register_expires": 600,
+    "sip_register_retry": 60,
+    "sip_rtp_port_range": "20000-40000",
+    "sip_rtp_encryption": "dtls",
+    "sip_ice": true,
+    "sip_ice_lite": false,
+    "sip_rtcp_mux": true,
+    "sip_rtp_timeout": 300,
+    "sip_rtp_keepalive": 30,
+    "sip_audio_codecs": "opus,PCMU,PCMA,G722",
+    "sip_video_codecs": "VP8,VP9,H264",
+    "sip_dtls": true,
+    "sip_dtls_auto_generate": true,
+    "sip_dtls_cert": "/etc/janus/certs/janus.pem",
+    "sip_dtls_key": "/etc/janus/certs/janus.key",
+    "sip_check_origin": true,
+    "sip_allowed_origins": "*",
+    "sip_nat_1xx": true,
+    "sip_nat_media": true,
+    "sip_force_symmetric_rtp": true,
+    "sip_rewrite_contact": true,
+    "sip_event_callback": true,
+    "sip_event_callback_url": "http://backend:8080/api/internal/janus/sip-event"
+  },
+  "streaming": {
+    "streaming_port": 5004,
+    "streaming_ip": "0.0.0.0",
+    "streaming_rtp_port_range": "20000-40000"
+  },
+  "audiobridge": {
+    "audiobridge_port": 5005,
+    "audiobridge_ip": "0.0.0.0"
+  },
+  "recordplay": {
+    "recordplay_port": 5006,
+    "recordplay_ip": "0.0.0.0"
+  }
+}
