@@ -137,6 +137,8 @@ function LoginCard({ onSubmit, isLoading, formError, onFormError }: SharedLoginP
           </div>
 
           <ServerStatusBadge />
+          {/* ختم البناء — يعرّف النسخة المعروضة في أي لقطة شاشة */}
+          <p className="mt-1 text-center text-[10px] text-muted-foreground/60 font-mono">build 2026-09-23·3</p>
         </CardContent>
       </Card>
     </div>

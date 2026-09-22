@@ -40,6 +40,22 @@ function redDevApiFallback(): Plugin {
       );
       // إعادة الفحص دورياً (لو أُقلع compose لاحقاً نتحول للباكد الحقيقي)
       setInterval(() => { realApiAvailable = null; probePromise = null; void ensureProbe(); }, 60_000);
+      // ✅ 2026-09-23: مسجّل طلبات — محاولات المستخدم تصبح مرئية في السجل
+      server.middlewares.use((req, res, next) => {
+        const path = (req.url || '').split('?')[0];
+        if (path === '/' || path.startsWith('/api') || path === '/health') {
+          res.on('finish', () => {
+            // eslint-disable-next-line no-console
+            console.log(`📥 ${new Date().toLocaleTimeString('en-GB')} ${req.method} ${path} → ${res.statusCode}`);
+          });
+        }
+        next();
+      });
+      // no-store لصفحة الدخول كي لا يخزن المتصفح نسخة قديمة أبداً
+      server.middlewares.use((req, res, next) => {
+        if ((req.url || '').split('?')[0] === '/') res.setHeader('Cache-Control', 'no-store');
+        next();
+      });
       server.middlewares.use((req, res, next) => {
         void ensureProbe().then((real) => (real ? next() : mockHandler(req, res, next)));
       });
