@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -135,6 +135,8 @@ function LoginCard({ onSubmit, isLoading, formError, onFormError }: SharedLoginP
             <p>بيانات الدخول الافتراضية</p>
             <p className="font-mono text-xs mt-1">admin / admin123</p>
           </div>
+
+          <ServerStatusBadge />
         </CardContent>
       </Card>
     </div>
@@ -166,6 +168,29 @@ function LoginPageRouter() {
       onFormError={setFormError}
     />
   );
+}
+
+/**
+ * ✅ 2026-09-23: مؤشر حالة الخادم — تشخيص فوري على الشاشة نفسها.
+ * أخضر: متصل بخادم حقيقي | كهرماني: وضع العرض التجريبي (بيانات محاكية) | أحمر: لا خادم.
+ */
+function ServerStatusBadge() {
+  const [status, setStatus] = useState<'checking' | 'real' | 'mock' | 'down'>('checking');
+  useEffect(() => {
+    let alive = true;
+    fetch('/health', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive) setStatus(d && d.mock ? 'mock' : d ? 'real' : 'down'); })
+      .catch(() => { if (alive) setStatus('down'); });
+    return () => { alive = false; };
+  }, []);
+  const cfg = {
+    checking: { text: 'جارٍ فحص الخادم…', cls: 'text-muted-foreground' },
+    real: { text: '● متصل بالخادم الحقيقي', cls: 'text-emerald-600 dark:text-emerald-400' },
+    mock: { text: '● وضع العرض — بيانات تجريبية (بدون باكد)', cls: 'text-amber-600 dark:text-amber-400' },
+    down: { text: '● الخادم غير متاح — حدّث الصفحة (Ctrl+Shift+R)', cls: 'text-red-600 dark:text-red-400' },
+  }[status];
+  return <p className={cn('mt-3 text-xs font-medium', cfg.cls)}>{cfg.text}</p>;
 }
 
 /** Classic mode — App.tsx (الغلاف ينفذ التحقق) */

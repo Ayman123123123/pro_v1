@@ -15,10 +15,10 @@ const wsTarget = apiTarget.replace(/^http/, 'ws');
 // بين الجلسات). إن وُجد باكد حقيقي (Docker/compose) نمرر للبروكسي كالمعتاد.
 let realApiAvailable: boolean | null = null;
 let probePromise: Promise<boolean> | null = null;
-function ensureProbe(): Promise<boolean> {
-  if (realApiAvailable !== null) return Promise.resolve(realApiAvailable);
+async function ensureProbe(): Promise<boolean> {
+  if (realApiAvailable !== null) return realApiAvailable;
   if (!probePromise) {
-    probePromise = probeRealApi(apiTarget).then((ok) => {
+    probePromise = probeRealApi(apiTarget).then((ok: boolean) => {
       realApiAvailable = ok;
       return ok;
     });

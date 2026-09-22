@@ -241,9 +241,13 @@ export function loginFailureMessage(status: number | undefined, body: Record<str
   if (status === 502 || status === 503 || status === 504) {
     return 'Nginx لا يجد الباك اند بعد. انتظر حتى يصبح /health أخضر ثم أعد المحاولة.';
   }
+  if (status === 500) {
+    // ✅ 2026-09-23: رسالة 500 التشخيصية — 500 هنا يعني بروكسي بلا باكد
+    return 'لا يوجد خادم خلفي على المنفذ 8088. حدّث الصفحة قسرياً (Ctrl+Shift+R)؛ وإن كنت تشغّل المشروع محلياً فاسحب آخر تحديث للمستودع ثم: npm run dev (أو npm run mock).';
+  }
   const code = String(body?.error || body?.message || '');
   if (status === 401 || /INVALID_CREDENTIALS/i.test(code)) {
-    return 'بيانات الدخول مرفوضة. استخدم RED_ADMIN_USERNAME و RED_ADMIN_PASSWORD من ملف RED_Ultimate/.env';
+    return 'بيانات الدخول مرفوضة. استخدم admin / admin123 (أو RED_ADMIN_USERNAME من ملف .env)';
   }
   if (status === 403 || status === 423) {
     return 'الحساب موجود لكنه غير معتمد أو محظور. ادخل بحساب المسؤول من .env';
