@@ -1123,3 +1123,37 @@ export async function deleteAdminPost(postId: string) {
 export async function restoreAdminPost(postId: string) {
   return writeJson(await apiFetch(`/api/admin/social/posts/${postId}/restore`, { method: 'POST' }));
 }
+
+// ✅ 2026-09-23: أُعيد تنفيذ عقد الحضور اللحظي (استُعيد مع OnlinePresenceCard من
+// الفرع الأضخم وكان تعريفه ضاع مع نسخة api.ts القديمة). أساسي: /api/admin/presence/online
+// — وإن فشل: مشتق من قائمة المستخدمين (isOnline) بمصدر fallback موثق.
+export interface PresenceUser {
+  id: string;
+  displayName?: string;
+  username?: string;
+  avatarUrl?: string;
+  lastSeen?: number;
+}
+export interface PresenceSnapshot {
+  users: PresenceUser[];
+  count: number;
+  source: 'presence' | 'fallback';
+  note: string;
+}
+export async function getPresenceOnlineWithFallback(): Promise<PresenceSnapshot> {
+  try {
+    const data = await writeJson(await apiFetch('/api/admin/presence/online'));
+    const users = Array.isArray((data as { users?: PresenceUser[] }).users)
+      ? (data as { users: PresenceUser[] }).users
+      : [];
+    return { users, count: typeof (data as { count?: number }).count === 'number' ? (data as { count: number }).count : users.length, source: 'presence', note: '' };
+  } catch {
+    try {
+      const page = await getUsers({ page: 0, size: 50, status: 'APPROVED' });
+      const online = (page.content || []).filter((u) => (u as unknown as { isOnline?: boolean }).isOnline).slice(0, 12);
+      return { users: online as PresenceUser[], count: online.length, source: 'fallback', note: 'مصدر بديل: قائمة المستخدمين (خدمة الحضور غير متاحة)' };
+    } catch {
+      return { users: [], count: 0, source: 'fallback', note: 'تعذّر جلب الحضور — الخادم غير متصل' };
+    }
+  }
+}
