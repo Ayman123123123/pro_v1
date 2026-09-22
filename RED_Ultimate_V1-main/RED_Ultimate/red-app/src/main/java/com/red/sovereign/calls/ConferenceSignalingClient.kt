@@ -17,7 +17,7 @@ import okhttp3.WebSocketListener
 /**
  * رسالة إشارات المؤتمر — تُرسل وتُستقبل عبر WebSocket مع media-sfu.
  * النوع "JOIN", "PRODUCE", "CONSUME", "ICE", "LEAVE", "ROOM_STATE", "PARTICIPANT_LEFT",
- * "PRODUCER_READY", "CONSUMER_READY", "LIVE_START", "LIVE_STOP"
+ * "PRODUCER_READY", "CONSUMER_READY", "LIVE_START", "LIVE_STOP", "LOBBY"
  */
 @Serializable
 data class ConferenceSignal(
@@ -181,6 +181,12 @@ class ConferenceSignalingClient(
                                 val waitingCount = signal.payload["waiting_count"]?.toIntOrNull() ?: 0
                                 val waiting = (0 until waitingCount).mapNotNull { signal.payload["waiting_user_$it"] }.sorted()
                                 listener.onLobbyState(signal.payload["lobby"] == "true", waiting)
+                            }
+                            "LOBBY" -> {
+                                val lobbyState = signal.payload["state"].orEmpty()
+                                listener.onLobbyState(lobbyState, signal.payload["waiting"]?.toIntOrNull() ?: 0)
+                                // الإطار يُمرَّر أيضًا كما كان: بعض الواجهات تقرأ onSignal مباشرة.
+                                listener.onSignal(signal)
                             }
                             "PARTICIPANT_LEFT" -> {
                                 signal.payload["userId"]?.let { listener.onParticipantLeft(it) }

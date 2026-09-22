@@ -79,7 +79,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
                 CallFilterType.MISSED -> item.status.equals("MISSED", ignoreCase = true) || item.status.equals("NO_ANSWER", ignoreCase = true)
                 CallFilterType.INCOMING -> item.direction.equals("INCOMING", ignoreCase = true)
                 CallFilterType.OUTGOING -> item.direction.equals("OUTGOING", ignoreCase = true)
-                CallFilterType.GROUP -> item.type.equals("GROUP", ignoreCase = true)
+                CallFilterType.GROUP -> item.type.equals("GROUP", ignoreCase = true) || item.type.equals("GROUP_VIDEO", ignoreCase = true) || item.type.equals("GROUP_VOICE", ignoreCase = true)
                 CallFilterType.LIVE -> item.type in setOf("LIVE", "SPACE", "CONFERENCE")
                 CallFilterType.VIDEO -> item.type.equals("VIDEO", ignoreCase = true)
             }

@@ -258,8 +258,28 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         mediaKind = kind
         hasVideo = kind.wantsVideo
         cameraRequestedByUser = false
-        currentBitrateProfile = NetworkStats.BitrateProfile.STANDARD
+        currentBitrateProfile = when (kind) {
+            CallMediaKind.LIVE -> NetworkStats.BitrateProfile.HD
+            CallMediaKind.CONFERENCE -> NetworkStats.BitrateProfile.STANDARD
+            else -> NetworkStats.BitrateProfile.STANDARD
+        }
         val created = createPeerConnection(kind) ?: return ApiResult.Error(null, "PEER_CONNECTION_FAILED")
+        // RED LEGENDARY FIX 2026: بث مباشر - أضف transceivers recvonly صريح لضمان وصول الصوت والفيديو
+        // بدون هذا، بعض إصدارات WebRTC لا تنشئ m-lines للاستقبال فقط
+        try {
+            val pc = peer
+            if (pc != null) {
+                // صوت recvonly
+                pc.addTransceiver(org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY))
+                // فيديو recvonly إذا مطلوب
+                if (kind.wantsVideo) {
+                    pc.addTransceiver(org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY))
+                }
+                android.util.Log.i("WebRtcEngine", "createReceiverOnly: added recvonly transceivers for $kind")
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("WebRtcEngine", "Failed to add recvonly transceivers: ${e.message}")
+        }
         localMedia = null
         return ApiResult.Success(200, Unit)
     }

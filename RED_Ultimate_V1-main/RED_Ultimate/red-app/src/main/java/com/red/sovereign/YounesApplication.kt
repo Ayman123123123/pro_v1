@@ -33,8 +33,13 @@ class YounesApplication : Application() {
         if (BuildConfig.RED_TLS_PINS.isNotBlank()) {
             com.red.sovereign.security.CertificatePinner.provisionPins(this, BuildConfig.RED_TLS_PINS)
         }
-        // تهيئة عنوان الخادم (من BuildConfig + اكتشاف الشبكة)
+        // تهيئة عنوان الخادم (من BuildConfig + اكتشاف الشبكة) + الشبكات الموحدة
         ServerEndpoint.initialize(this)
+        // نظام الشبكات الموحد - يدعم كل الشبكات المحلية وكل الشبكات
+        runCatching { 
+            com.red.sovereign.core.UnifiedNetworkManager.initialize(this)
+            android.util.Log.i("YounesApp", "✅ UnifiedNetworkManager initialized - All networks supported")
+        }
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
             override fun onActivityStarted(activity: Activity) = Unit

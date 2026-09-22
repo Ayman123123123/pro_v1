@@ -110,6 +110,7 @@ import com.red.sovereign.contacts.PublicRedProfile
 import com.red.sovereign.core.MessageStore
 import com.red.sovereign.core.PinsApi
 import com.red.sovereign.core.RedConnectionService
+import com.red.sovereign.core.RedConnectionService.Companion.isGroupConversation
 import com.red.sovereign.core.ReactionEventBus
 import com.red.sovereign.core.RichMessage
 import com.red.sovereign.core.TypingEventBus
@@ -757,7 +758,7 @@ fun ChatHubScreen(
             }
         }
         if (!item.outgoing) {
-            if (item.conversationId.length > 32) {
+            if (isGroupConversation(item.conversationId)) {
                 if (item.conversationId != groupConversationId) groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
             } else {
                 if (item.conversationId != conversationId(account.redId, target)) chatUnread[item.conversationId] = (chatUnread[item.conversationId] ?: 0) + 1
@@ -885,7 +886,13 @@ fun ChatHubScreen(
             com.red.sovereign.calls.InlineChatCallBar(peerId = target)
             }
             val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
-            val conversationMessages = resolveRichMessages(decrypted.filter { it.conversationId == conversation })
+            // RED LEGENDARY FIX: رسائل لا تظهر - فلتر مرن يضمن الظهور حتى لو conversationId مختلف (fallback عبر senderId/target)
+            val conversationMessages = resolveRichMessages(decrypted.filter { 
+                it.conversationId == conversation || 
+                (it.conversationId == target) || 
+                (it.senderRedId == target && !isGroupConversation(it.conversationId)) ||
+                (it.conversationId.contains(target.take(8)) && !isGroupConversation(it.conversationId))
+            })
             androidx.compose.runtime.LaunchedEffect(conversationMessages.size, target) {
                 if (conversationMessages.isNotEmpty()) messagesListState.animateScrollToItem(conversationMessages.lastIndex)
             }
@@ -1695,7 +1702,7 @@ fun ChatHubScreen(
     }
     selectedChatMessage?.let { message ->
         val payload = if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext) else null
-        val isGroupMsg = message.conversationId.length > 32
+        val isGroupMsg = isGroupConversation(message.conversationId)
         ModalBottomSheet(
             onDismissRequest = { selectedChatMessage = null },
             containerColor = MaterialTheme.colorScheme.surface,

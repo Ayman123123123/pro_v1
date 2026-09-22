@@ -16,8 +16,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
+/**
+ * AuthViewModel - نظيف بدون PSTN/DINSTAR
+ * تم إلغاء كل ما يتعلق بالهاتف اليمني حسب طلب المستخدم
+ * التركيز على E2EE + مكالمات يونس + مجموعات + بث + مؤتمرات
+ */
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
-    // مهلة قصيرة على LAN: 15 ثانية كانت تُبقي شاشة «جارٍ الاتصال» بلا داعٍ.
     private val api = AuthApi(
         application,
         SecureOkHttpClient.build(application, connectTimeout = 4, readTimeout = 6, writeTimeout = 4),
@@ -47,16 +51,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * تعيين عنوان الخادم يدويًا.
-     *
-     * كان غياب هذا المدخل يجعل المستخدم رهينة الاكتشاف التلقائي لشبكة /24؛
-     * إن كان الخادم على شبكة فرعية أخرى أو عبر نفق (WireGuard/Tailscale) فلا
-     * سبيل لإدخال عنوانه. يعيد null عند النجاح أو رسالة خطأ عربية.
-     */
     fun setServerUrl(value: String): String? {
         val trimmed = value.trim()
-        if (trimmed.isBlank()) return "أدخل عنوان الخادم (مثال: http://192.168.1.10:8088)" // ALLOW-IP: user-facing example text
+        if (trimmed.isBlank()) return "أدخل عنوان الخادم (مثال: http://192.168.1.10:8088)"
         if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
             return "يجب أن يبدأ العنوان بـ http:// أو https://"
         }
@@ -128,7 +125,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** تحديث الاسم المعروض (display name) على الخادم ثم محلياً. */
     fun updateDisplayName(newName: String, done: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
         val trimmed = newName.trim()
         if (trimmed.isBlank() || trimmed.length > 50) { done(false, "الاسم يجب أن يكون 1-50 حرفاً"); return@launch }
@@ -175,7 +171,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         serverState = ServerState.Discovering
         val result = discovery.discover(mode)
         if (result is ApiResult.Error && mode == LocalServerDiscovery.Mode.FAST) {
-            // الفحص السريع فشل → تصعيد تلقائي لمسح LAN الشامل قبل إظهار الخطأ.
             val thorough = discovery.discover(LocalServerDiscovery.Mode.THOROUGH)
             if (thorough is ApiResult.Success) {
                 serverState = ServerState.Ready(thorough.value)
@@ -214,8 +209,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         val first = request()
         if (first !is ApiResult.Error || first.code != null) return first
         serverState = ServerState.Discovering
-        // FAST أولاً (العنوان الحالي + المرشحات)، ثم مسح LAN الشامل —
-        // بدونه لا يجد الهاتف الحقيقي الخادم أبدًا (10.0.2.2 للمحاكي فقط).
         val fast = discovery.discover(LocalServerDiscovery.Mode.FAST)
         if (fast is ApiResult.Success) {
             serverState = ServerState.Ready(fast.value)

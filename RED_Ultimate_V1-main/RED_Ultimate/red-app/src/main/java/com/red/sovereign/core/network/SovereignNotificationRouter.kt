@@ -13,8 +13,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import okhttp3.*
 
 /**
- * 🔔 YOUNES Sovereign Notification Router
+ * 🔔 RED Sovereign Notification Router - RED-only
  * محرك التوجيه السيادي — يربط WebSocket بالإشعارات المحلية
+ * بدون PSTN/DINSTAR - مكالمات RED فقط عبر WebRTC
  */
 class SovereignNotificationRouter : Service() {
 
@@ -34,8 +35,8 @@ class SovereignNotificationRouter : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = NotificationCompat.Builder(this, "red_system")
-            .setContentTitle("يونس سيادي")
-            .setContentText("موجه الإشعارات نشط")
+            .setContentTitle("يونس سيادي RED-only")
+            .setContentText("موجه الإشعارات نشط - مكالمات RED + بث + مساحات")
             .setSmallIcon(R.drawable.younes_icon_master_vector)
             .setOngoing(true)
             .build()
@@ -52,13 +53,13 @@ class SovereignNotificationRouter : Service() {
     private fun createChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            // الأهمية يجب أن تطابق YounesApplication/ConferenceService/LiveStreamService (IMPORTANCE_HIGH)
-            // وإلا يثبّت أندرويد أول إنشاء ويتجاهل الباقي — سلوك غير حتمي حسب ترتيب التشغيل.
             nm.createNotificationChannel(NotificationChannel(CHANNEL_MESSAGES, getString(com.red.sovereign.R.string.channel_messages_name), NotificationManager.IMPORTANCE_HIGH))
             nm.createNotificationChannel(NotificationChannel(CHANNEL_CALLS, getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
-            // قناة المكالمات الواردة — أولوية قصوى مع رنين وفتح أمام قفل الشاشة.
+            // قناة المكالمات الواردة — IMPORTANCE_HIGH كبقية القنوات (IMPORTANCE_MAX مهجورة من
+            // API 29 وتُعامل معاملة HIGH، فالصراحة هنا تزيل تعارض الفاحص بلا أي تغيير سلوكي).
+            // تجاوز «عدم الإزعاج» يبقى صريحًا في السطر أدناه ولا يُستمد من الأولوية.
             // إنشاؤها هنا يمنع ظهور إشعار المكالمة الواردة بدون قناة (نغمة صامتة) قبل أول مكالمة.
-            nm.createNotificationChannel(NotificationChannel("red_calls_incoming", getString(com.red.sovereign.R.string.channel_calls_incoming_name), NotificationManager.IMPORTANCE_MAX).apply {
+            nm.createNotificationChannel(NotificationChannel("red_calls_incoming", getString(com.red.sovereign.R.string.channel_calls_incoming_name), NotificationManager.IMPORTANCE_HIGH).apply {
                 enableVibration(true)
                 setBypassDnd(true)
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC

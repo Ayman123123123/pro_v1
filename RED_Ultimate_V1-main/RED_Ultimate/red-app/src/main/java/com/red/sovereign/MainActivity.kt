@@ -117,7 +117,10 @@ class MainActivity : FragmentActivity() {
                             if (appLocked && SettingsRuntime.current.appLockEnabled) {
                                 AppLockScreen(onUnlocked = { appLocked = false })
                             } else {
-                                RedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation)
+                                // لوحة تحكم موحدة حديثة - أفضل من واتساب وتيليجرام
+                                // ModernRedDashboard هو الأحدث والأفضل بدون تكرارات
+                                // يدعم كل الهواتف، ألوان AAA مقروءة، Liquid Glass 2026
+                                com.red.sovereign.ui.ModernRedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation)
                             }
                         } else AuthFlow(authViewModel)
                     }

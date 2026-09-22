@@ -3,6 +3,10 @@ package com.red.sovereign.auth
 import android.content.Context
 import com.red.sovereign.core.SecureStore
 
+/**
+ * TokenStore - نظيف بدون PSTN
+ * تم إلغاء كل ما يتعلق بالهاتف اليمني
+ */
 class TokenStore(val context: Context) {
     private val store = SecureStore(context, "red_session")
     val accessToken get() = store.get("access")
@@ -29,7 +33,6 @@ class TokenStore(val context: Context) {
     @Volatile private var pendingPasswordMemory: String? = null
     fun rememberPendingLogin(username: String, password: String) {
         store.put("pending_username", username)
-        // هجرة: امسح أي بقايا قرصية من نسخ سابقة كانت تخزن pending_password.
         store.remove("pending_password")
         pendingPasswordMemory = password
     }
@@ -40,13 +43,17 @@ class TokenStore(val context: Context) {
         pendingPasswordMemory = null
     }
     fun save(response: AuthResponse) {
-        store.put("access", response.accessToken); store.put("refresh", response.refreshToken)
+        store.put("access", response.accessToken)
+        store.put("refresh", response.refreshToken)
         response.deviceId?.let(::rememberDevice)
         store.put("red_id", response.user.redId); store.put("username", response.user.username)
         store.put("role", response.user.role.toString())
         clearPendingLogin()
     }
-    fun updateTokens(response: RefreshResponse) { store.put("access", response.accessToken); store.put("refresh", response.refreshToken) }
+    fun updateTokens(response: RefreshResponse) {
+        store.put("access", response.accessToken)
+        store.put("refresh", response.refreshToken)
+    }
     fun clearSession() {
         pendingPasswordMemory = null
         store.remove("access", "refresh", "red_id", "username", "role",
