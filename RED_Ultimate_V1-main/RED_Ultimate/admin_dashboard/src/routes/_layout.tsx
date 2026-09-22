@@ -1,5 +1,6 @@
-import { createFileRoute, Outlet, Link, useLoaderData } from '@tanstack/react-router';
-import { LayoutDashboard, Users, BarChart3, Shield, Settings, Lock, LogOut, User, Menu, X, Sun, Moon, Monitor, Bell, ChevronDown, ChevronRight } from 'lucide-react';
+import { createFileRoute, Outlet, Link, useLoaderData, useRouter } from '@tanstack/react-router';
+import { useEffect } from 'react';
+import { LayoutDashboard, Users, BarChart3, Shield, Settings, Lock, LogOut, User, Menu, X, Sun, Moon, Monitor, Bell, ChevronDown, ChevronRight, Boxes, FileText, Newspaper, ScrollText, CheckCircle2, Megaphone, Flag, PhoneCall, Archive, Activity, Database, Gauge, KeyRound } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useSidebar } from '@/components/providers/SidebarProvider';
 import { useTheme } from '@/components/providers/ThemeProvider';
@@ -13,22 +14,58 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 
+// ✅ 2026-09-22: دُمجت ميزات الجيل الأول (App.tsx) في الراوتر الحديث.
+// كل بند يحمل group لتجميعه بصرياً في الشريط الجانبي.
 const navItems = [
-  { path: '/dashboard', label: 'navigation.dashboard', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT', 'VIEWER'] },
-  { path: '/users', label: 'navigation.users', icon: Users, roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'] },
-  { path: '/analytics', label: 'navigation.analytics', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'ANALYST'] },
-  { path: '/moderation', label: 'navigation.moderation', icon: Shield, roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR'] },
-  { path: '/system', label: 'navigation.system', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { path: '/security', label: 'navigation.security', icon: Lock, roles: ['SUPER_ADMIN', 'ADMIN', 'SECURITY'] },
+  // ── عام ──
+  { path: '/overview', label: 'navigation.overview', icon: Gauge, group: 'general', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT', 'VIEWER'] },
+  { path: '/dashboard', label: 'navigation.dashboard', icon: LayoutDashboard, group: 'general', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT', 'VIEWER'] },
+  { path: '/data-overview', label: 'navigation.dataOverview', icon: Database, group: 'general', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'] },
+  { path: '/analytics', label: 'navigation.analytics', icon: BarChart3, group: 'general', roles: ['SUPER_ADMIN', 'ADMIN', 'ANALYST'] },
+  // ── المجتمع ──
+  { path: '/users', label: 'navigation.users', icon: Users, group: 'community', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'] },
+  { path: '/groups', label: 'navigation.groups', icon: Boxes, group: 'community', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR'] },
+  { path: '/posts', label: 'navigation.posts', icon: FileText, group: 'community', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR'] },
+  { path: '/content', label: 'navigation.content', icon: Newspaper, group: 'community', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR'] },
+  { path: '/calls', label: 'navigation.calls', icon: PhoneCall, group: 'community', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT'] },
+  // ── الإشراف ──
+  { path: '/moderation', label: 'navigation.moderation', icon: Shield, group: 'oversight', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR'] },
+  { path: '/approvals', label: 'navigation.approvals', icon: CheckCircle2, group: 'oversight', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR'] },
+  { path: '/reports', label: 'navigation.reports', icon: ScrollText, group: 'oversight', roles: ['SUPER_ADMIN', 'ADMIN', 'MODERATOR'] },
+  { path: '/announcements', label: 'navigation.announcements', icon: Megaphone, group: 'oversight', roles: ['SUPER_ADMIN', 'ADMIN'] },
+  // ── النظام ──
+  { path: '/system', label: 'navigation.system', icon: Settings, group: 'system', roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { path: '/featureflags', label: 'navigation.featureflags', icon: Flag, group: 'system', roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { path: '/backups', label: 'navigation.backups', icon: Archive, group: 'system', roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { path: '/diagnostics', label: 'navigation.diagnostics', icon: Activity, group: 'system', roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { path: '/audit', label: 'navigation.audit', icon: ScrollText, group: 'system', roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { path: '/security', label: 'navigation.security', icon: Lock, group: 'system', roles: ['SUPER_ADMIN', 'ADMIN', 'SECURITY'] },
+  { path: '/security-center', label: 'navigation.securityCenter', icon: KeyRound, group: 'system', roles: ['SUPER_ADMIN', 'ADMIN', 'SECURITY'] },
 ];
+
+const navGroupLabels: Record<string, string> = {
+  general: 'عام',
+  community: 'المجتمع',
+  oversight: 'الإشراف',
+  system: 'النظام',
+};
 
 export const Route = createFileRoute('/_layout')({
   component: () => {
-    const { user, isAuthenticated, logout } = useAuth();
+    const { user, isAuthenticated, isLoading, logout } = useAuth();
     const { isOpen, isCollapsed, toggleSidebar, setSidebarOpen, toggleCollapse } = useSidebar();
     const { theme, resolvedTheme, setTheme } = useTheme();
     const { t, i18n } = useTranslation();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    // ✅ 2026-09-22: حارس المصادقة الناقص — غير الموثّق يُوجَّه إلى /login
+    // (كانت اللوحة تُعرض للجميع بدون دخول!)
+    const navigate = useRouter().navigate;
+    useEffect(() => {
+      if (!isLoading && !isAuthenticated) {
+        navigate({ to: '/login', replace: true });
+      }
+    }, [isLoading, isAuthenticated, navigate]);
 
     const filteredNavItems = navItems.filter((item) =>
       !item.roles || !user?.role || item.roles.includes(user.role)
@@ -86,20 +123,33 @@ export const Route = createFileRoute('/_layout')({
               <ScrollArea className="flex-1 py-4">
                 <nav className={cn('px-2', isCollapsed && 'px-1')} aria-label="Main navigation">
                   <ul className="space-y-1" role="list">
-                    {filteredNavItems.map((item) => (
-                      <li key={item.path}>
-                        <Link
-                          to={item.path}
-                          className={cn(
-                            'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                            'hover:bg-accent hover:text-accent-foreground',
-                            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2'
-                          )}
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          <item.icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
-                          {!isCollapsed && <span>{t(item.label)}</span>}
-                        </Link>
+                    {Object.entries(
+                      filteredNavItems.reduce<Record<string, typeof filteredNavItems>>((acc, item) => {
+                            (acc[item.group] = acc[item.group] || []).push(item);
+                            return acc;
+                          }, {})
+                    ).map(([group, items]) => (
+                      <li key={group} className="mb-1">
+                        {!isCollapsed && (
+                          <p className="px-3 pt-2 pb-1 text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
+                            {navGroupLabels[group] || group}
+                          </p>
+                        )}
+                        {items.map((item) => (
+                          <Link
+                            key={item.path}
+                            to={item.path}
+                            className={cn(
+                              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                              'hover:bg-accent hover:text-accent-foreground',
+                              'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2'
+                            )}
+                            onClick={() => setMobileMenuOpen(false)}
+                          >
+                            <item.icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+                            {!isCollapsed && <span>{t(item.label)}</span>}
+                          </Link>
+                        ))}
                       </li>
                     ))}
                   </ul>

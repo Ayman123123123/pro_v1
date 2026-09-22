@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Key, Download, Save, Moon, Sun, Monitor } from 'lucide-react';
 import { cn } from '@/utils';
 import { useUIStore, useAuthStore } from '@/stores';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Form, FormField } from '@/components/ui/Form';
-import { Tabs } from '@/components/ui/Tabs';
-import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Form, FormField } from '@/components/ui/form';
+import { Tabs } from '@/components/ui/tabs';
+import { Select } from '@/components/ui/select';
 
 export function SettingsPage() {
   const { theme, setTheme } = useUIStore();

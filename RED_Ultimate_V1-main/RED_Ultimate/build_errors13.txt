@@ -1,0 +1,60 @@
+﻿To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.7.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+✅ Android prefs resolved to: C:\Users\hpc01/.android (Gradle 9.7 strict mode)
+
+> Configure project :app
+WARNING: The option setting 'android.experimental.enableScreenshotTest=true' is experimental.
+The current default is 'false'.
+Add android.sync.suppressAgpWarnings=UNSUPPORTED_PROJECT_OPTION_USE to the gradle.properties file to suppress this warning.
+WARNING: The option setting 'android.experimental.enableTestFixturesKotlinSupport=true' is experimental.
+The current default is 'false'.
+Add android.sync.suppressAgpWarnings=UNSUPPORTED_PROJECT_OPTION_USE to the gradle.properties file to suppress this warning.
+
+> Task :shared-proto:protobufDummy UP-TO-DATE
+> Task :shared-proto:extractIncludeProto UP-TO-DATE
+> Task :shared-proto:extractProto UP-TO-DATE
+> Task :shared-proto:generateProto UP-TO-DATE
+> Task :shared-proto:compileJava UP-TO-DATE
+> Task :shared-proto:processProtoResources UP-TO-DATE
+> Task :shared-proto:processResources UP-TO-DATE
+> Task :shared-proto:classes UP-TO-DATE
+> Task :shared-proto:jar UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :app:kspDebugKotlin
+> Task :app:compileDebugKotlin
+./gradlew : e: file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/
+sovereign/media/VoiceMessageViewModel.kt:447:48 'fun <T> async(context: CoroutineContext = ..., start: CoroutineStart 
+= ..., block: suspend CoroutineScope.() -> T): Deferred<T>' is deprecated. 'async' can not be called without the 
+corresponding coroutine scope. Consider wrapping 'async' in 'coroutineScope { }', using 'runBlocking { }', or using 
+some other 'CoroutineScope'.
+At line:4 char:138
++ ... n=lenient"; ./gradlew :app:compileDebugKotlin --no-daemon --no-config ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (e: file:///C:/U...oroutineScope'.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+> Task :app:compileDebugKotlin FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin' (registered by plugin 'com.android.internal.application').
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.btapi.BuildToolsApiCompilationWork
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 2m 44s
+15 actionable tasks: 2 executed, 13 up-to-date

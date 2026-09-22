@@ -156,40 +156,6 @@ ACTION_START -> {
                     updateNotification("تعذر بدء المكالمة: المعرّف غير صالح")
                     return START_STICKY
                 }
-                // حارس الانشغال: لا تسحق مكالمة قائمة (1:1/جماعية/مؤتمر/زوم/بث).
-                if (CallServiceIntegration.hasActiveCall(this)) {
-                    outgoingPending = false
-                    CallRuntime.state = CallUiState.Busy(peer = target)
-                    updateNotification("مشغول — أنهِ المكالمة الحالية أولاً")
-                    mainScope.launch {
-                        runCatching {
-                            android.widget.Toast.makeText(this@YounesCallService, "مشغول — أنهِ المكالمة الحالية أولاً", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    return START_STICKY
-                }
-                // حارس الذات: لا تتصل بنفسك.
-                runCatching {
-                    val own = com.red.sovereign.auth.TokenStore(this).redId
-                    if (own.isNotBlank() && target == own) {
-                        outgoingPending = false
-                        CallRuntime.state = CallUiState.Error("لا يمكنك الاتصال بنفسك")
-                        updateNotification("لا يمكنك الاتصال بنفسك")
-                        mainScope.launch {
-                            runCatching {
-                                android.widget.Toast.makeText(this@YounesCallService, "لا يمكنك الاتصال بنفسك", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                        return START_STICKY
-                    }
-                }
-                // حارس السيرفر طافي: اعرض الحالة بدل قصف المحاولات المزعجة.
-                if (!com.red.sovereign.core.ConnectionStatusRepository.isOnline) {
-                    outgoingPending = false
-                    CallRuntime.state = CallUiState.Error("السيرفر غير متصل — تحقق من الاتصال وحاول لاحقًا")
-                    updateNotification("السيرفر غير متصل — تعذّر بدء المكالمة")
-                    return START_STICKY
-                }
                 // AUTO-FIX (call audio): outgoing calls must verify RECORD_AUDIO before engine
                 // setup, mirroring the incoming-path permission check.
                 if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -203,13 +169,10 @@ ACTION_START -> {
                     runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) }
                         .onFailure { e ->
                             android.util.Log.e("YounesCallService", "telecom.addCall OUTGOING failed target=$target mode=$mode call=$callId", e)
-                            // IncomingActivity للخلفية/القفل فقط — في المقدمة يكفي Overlay الداخلي.
-                            if (com.red.sovereign.YounesApplication.shouldLaunchIncomingActivity()) {
-                                val fbCallId = callId.orEmpty()
-                                val fbPeer = target
-                                val fbMode = mode
-                                runCatching { IncomingCallActivity.launch1to1(this@YounesCallService, fbCallId, fbPeer, fbMode, fbPeer) }
-                            }
+                            val fbCallId = callId.orEmpty()
+                            val fbPeer = target
+                            val fbMode = mode
+                            runCatching { IncomingCallActivity.launch1to1(this@YounesCallService, fbCallId, fbPeer, fbMode, fbPeer) }
                             updateNotification("تعذر ربط النظام — المكالمة مستمرة داخل التطبيق…")
                         }
                 }
@@ -801,18 +764,9 @@ override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
      * يُستدعى من `onNetworkStats` لتسجيل الـ Telemetry.
      */
     private fun onStatsReceived(stats: NetworkStats) {
-        // Update CallQualityManager for UI indicators
-        CallQualityManager.update(
-            rttMs = stats.rttMs.toInt(),
-            packetLoss = stats.packetLossPercent.toFloat(),
-            bitrateKbps = stats.bandwidthKbps.toInt(),
-            fps = stats.framesPerSecond,
-            jitterMs = stats.jitterMs.toInt()
-        )
-        
-        // Apply adaptive bitrate via engine
-        engine?.applyAdaptiveBitrate(stats)
-        
+        // ملاحظة: لا نستدعي engine.adjustQuality هنا — التكييف النشط يتم عبر
+        // WebRtcEngine.applyAdaptiveBitrate (profiles + simulcast) داخل pollStats.
+        // الجمع بين النظامين كان يتعارض كل دورة (أحدهما يخفض والآخر يرفع).
         CallTelemetry.onNetworkStats(stats)
     }
     override fun onError(message: String) {

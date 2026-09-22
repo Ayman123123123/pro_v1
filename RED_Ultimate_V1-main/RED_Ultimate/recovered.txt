@@ -1,0 +1,208 @@
+Created At: 2026-08-16T07:18:04+03:00
+Completed At: 2026-08-16T07:18:05+03:00
+File Path: `file:///c:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/services/DinstarHardwareService.kt`
+Total Lines: 749
+Total Bytes: 42288
+Showing lines 1 to 200
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: package com.red.server.services
+2: 
+3: import com.burgstaller.okhttp.AuthenticationCacheInterceptor
+4: import com.burgstaller.okhttp.CachingAuthenticatorDecorator
+5: import com.burgstaller.okhttp.DispatchingAuthenticator
+6: import com.burgstaller.okhttp.basic.BasicAuthenticator
+7: import com.burgstaller.okhttp.digest.CachingAuthenticator
+8: import com.burgstaller.okhttp.digest.Credentials
+9: import com.burgstaller.okhttp.digest.DigestAuthenticator
+10: import com.fasterxml.jackson.databind.ObjectMapper
+11: import okhttp3.Cookie
+12: import okhttp3.CookieJar
+13: import okhttp3.FormBody
+14: import okhttp3.HttpUrl
+15: import okhttp3.HttpUrl.Companion.toHttpUrl
+16: import okhttp3.MediaType.Companion.toMediaType
+17: import okhttp3.OkHttpClient
+18: import okhttp3.Request
+19: import okhttp3.RequestBody.Companion.toRequestBody
+20: import org.slf4j.LoggerFactory
+21: import org.springframework.beans.factory.annotation.Value
+22: import org.springframework.http.HttpStatus
+23: import org.springframework.jdbc.core.JdbcTemplate
+24: import org.springframework.stereotype.Service
+25: import org.springframework.web.server.ResponseStatusException
+26: import java.net.HttpCookie
+27: import java.net.InetAddress
+28: import java.security.MessageDigest
+29: import java.security.SecureRandom
+30: import java.security.cert.CertificateException
+31: import java.security.cert.X509Certificate
+32: import java.util.Base64
+33: import java.util.UUID
+34: import java.util.concurrent.ConcurrentHashMap
+35: import java.util.concurrent.TimeUnit
+36: import javax.net.ssl.SSLContext
+37: import javax.net.ssl.TrustManager
+38: import javax.net.ssl.X509TrustManager
+39: 
+40: /** محوّل UC2000-VE (‑4/8G و‑4/8T). لا يكشف إلا عمليات HTTP API الموثقة. */
+41: @Service
+42: class DinstarHardwareService(
+43:     @Value("\${red.dinstar.ip}") private val configuredIp: String,
+44:     @Value("\${red.dinstar.port:443}") private val configuredPort: Int,
+45:     @Value("\${red.dinstar.scheme:https}") private val configuredScheme: String,
+46:     @Value("\${red.dinstar.username:admin}") private val gatewayUsername: String,
+47:     @Value("\${red.dinstar.password:admin}") private val gatewayPassword: String,
+48:     @Value("\${red.dinstar.cert.sha256-pins:}") private val certPins: String,
+49:     private val mapper: ObjectMapper,
+50:     private val jdbc: JdbcTemplate,
+51:     private val connections: DinstarConnectionFactory
+52: ) {
+53:     companion object {
+54:         private val log = LoggerFactory.getLogger(DinstarHardwareService::class.java)
+55:         private val JSON = "application/json; charset=utf-8".toMediaType()
+56: 
+57:         /**
+58:          * رموز القبول. 202 = «قُبل وسيُنفَّذ لاحقًا» ترجعه العمليات
+59:          * غير المتزامنة (`send_sms`، `send_ussd`).
+60:          */
+61:         private val ACCEPTED_CODES = setOf(200, 202)
+62: 
+63:         /** الحد الموثق للمستلمين في طلب `send_sms` الواحد. */
+64:         const val MAX_SMS_RECIPIENTS = 128
+65: 
+66:         /** الحد الموثق لحجم نص الرسالة. */
+67:         const val MAX_SMS_TEXT_BYTES = 1500
+68:     }
+69: 
+70:     /**
+71:      * OkHttp client configured with:
+72:      * 1. HTTP Digest + Basic auth (Dinstar New API ≥1102 uses Digest; older firmware uses Basic)
+73:      * 2. Auth caching to avoid re-challenging on every request
+74:      * 3. Certificate Pinning for Dinstar's self-signed certificate on private management network
+75:      *    Pins are configured via `red.dinstar.cert.sha256-pins` (comma-separated SPKI SHA-256 hashes, base64-encoded)
+76:      *    If no pins configured, falls back to system trust store (production should always configure pins).
+77:      */
+78:     private val client: OkHttpClient by lazy { buildOkHttpClient() }
+79: 
+80:     private fun buildOkHttpClient(): OkHttpClient {
+81:         // --- Digest + Basic authenticator with caching ---
+82:         val credentials = Credentials(gatewayUsername, gatewayPassword)
+83:         val digestAuthenticator = DigestAuthenticator(credentials)
+84:         val basicAuthenticator = BasicAuthenticator(credentials)
+85: 
+86:         // DispatchingAuthenticator handles both schemes; registered in lowercase
+87:         val dispatchingAuthenticator = DispatchingAuthenticator.Builder()
+88:             .with("digest", digestAuthenticator)
+89:             .with("basic", basicAuthenticator)
+90:             .build()
+91: 
+92:         val authCache = ConcurrentHashMap<String, CachingAuthenticator>()
+93: 
+94:         // --- Certificate trust: the configured SPKI pins ARE the trust anchor ---
+95:         // The UC2000 serves a self-signed certificate (CN=Dinstar.com, valid to 2039)
+96:         // on a private management network. OkHttp's CertificatePinner alone cannot
+97:         // accept it:
+98:         //   1. The JVM trust manager runs during the handshake BEFORE the pin check,
+99:         //      so an untrusted self-signed chain dies with PKIX first.
+100:         //   2. Even with a permissive trust manager, OkHttp builds its
+101:         //      CertificateChainCleaner from getAcceptedIssuers() of that manager —
+102:         //      with an empty set the cleaner drops the self-signed leaf, the pinner
+103:         //      then sees an empty peer chain and reports "Certificate pinning failure!".
+104:         // Therefore, when pins are configured the pin check lives INSIDE
+105:         // checkServerTrusted and no OkHttp pinner is used. Without pins the system
+106:         // trust store stays in effect.
+107:         val pinTrustManager: X509TrustManager? = if (certPins.isNotBlank()) {
+108:             val pins = certPins.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+109:             log.info("Certificate Pinning ENABLED for Dinstar with {} pin(s)", pins.size)
+110:             object : X509TrustManager {
+111:                 override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+112:                 override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+113:                     val certs = chain ?: throw CertificateException("DINSTAR presented no certificate")
+114:                     val match = certs.any { cert ->
+115:                         val b64 = Base64.getEncoder().encodeToString(
+116:                             MessageDigest.getInstance("SHA-256").digest(cert.publicKey.encoded)
+117:                         )
+118:                         pins.any { it == "sha256/$b64" || it == b64 }
+119:                     }
+120:                     if (!match) throw CertificateException("DINSTAR certificate does not match any configured pin")
+121:                 }
+122:                 override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+123:             }
+124:         } else {
+125:             log.warn("Certificate Pinning DISABLED for Dinstar — using system trust store. Configure red.dinstar.cert.sha256-pins for production!")
+126:             null
+127:         }
+128:         val sslContext = pinTrustManager?.let {
+129:             SSLContext.getInstance("TLS").apply { init(null, arrayOf<TrustManager>(it), SecureRandom()) }
+130:         }
+131: 
+132:         // UC2000 web UI session cookie: the device's web interface (firmware
+133:         // variants) protects the realtime JSON endpoints behind a session that
+134:         // is opened by POSTing credentials to /goform/IADIdentityAuth. Without
+135:         // the JSESSIONID the endpoints reply 302 -> enLogin.htm. The
+136:         // cookieJar below persists that session cookie so every subsequent
+137:         // request is accepted.
+138:         val cookieJar = object : CookieJar {
+139:             private val sessionCookies = ConcurrentHashMap<String, List<Cookie>>()
+140:             override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+141:                 sessionCookies[url.host] = cookies
+142:             }
+143:             override fun loadForRequest(url: HttpUrl): List<Cookie> =
+144:                 sessionCookies[url.host]?.orEmpty() ?: emptyList()
+145:         }
+146: 
+147:         // شهادة UC2000 ذاتية التوقيع: الـ pinning وحده لا يكفي — OkHttp
+148:         // يشغّل trust manager أثناء المصافحة *قبل* فحص الـ pin، فتسقط PKIX
+149:         // أولًا ولا يصل الفحص أبدًا؛ حتى مع مدير متسامح يبني OkHttp منظف
+150:         // السلسلة من getAcceptedIssuers() الفارغة فيحذف الورقة الذاتية ويصل
+151:         // الـ pinner بسلسلة فارغة. لذا عندما تُضبط الأرقام يكون فحص الـ pin
+152:         // داخل checkServerTrusted نفسه (مرساة الثقة). بلا أرقام (نشر بدون
+153:         // pins) يبقى المخزن العام سليمًا.
+154:         val pinTrustManager: X509TrustManager? = if (certPins.isNotBlank()) {
+155:             object : X509TrustManager {
+156:                 override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+157:                 override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+158:                 override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+159:             }
+160:         } else null
+161:         val sslContext = pinTrustManager?.let {
+162:             SSLContext.getInstance("TLS").apply { init(null, arrayOf<TrustManager>(it), SecureRandom()) }
+163:         }
+164: 
+165:         val clientBuilder = OkHttpClient.Builder()
+166:             .authenticator(CachingAuthenticatorDecorator(dispatchingAuthenticator, authCache))
+167:             .addInterceptor(AuthenticationCacheInterceptor(authCache))
+168:             .cookieJar(cookieJar)
+169:             .connectTimeout(5, TimeUnit.SECONDS)
+170:             .readTimeout(10, TimeUnit.SECONDS)
+171:             .callTimeout(15, TimeUnit.SECONDS)
+172:         if (sslContext != null && pinTrustManager != null) {
+173:             // CN=Dinstar.com لا يطابق عنوان IP — الهوية من الـ pin لا من الاسم.
+174:             clientBuilder.sslSocketFactory(sslContext.socketFactory, pinTrustManager)
+175:             clientBuilder.hostnameVerifier { _, _ -> true }
+176:         }
+177:         val client = clientBuilder.build()
+178: 
+179:         ensureSession(client)
+180:         return client
+181:     }
+182: 
+183:     /**
+184:      * Opens a web UI session on the gateway. The realtime JSON endpoints
+185:      * (`/WebGetPortInfoAll` on the UC2000 family) require the JSESSIONID that
+186:      * `/goform/IADIdentityAuth` issues; a plain HTTP call gets redirected to
+187:      * enLogin.htm instead. Digest alone is not enough on these firmware
+188:      * variants. Failures here surface immediately instead of being masked as a
+189:      * generic 404/401 later.
+190:      */
+191:     private fun ensureSession(client: OkHttpClient) {
+192:         val form = FormBody.Builder()
+193:             .add("username", gatewayUsername)
+194:             .add("password", gatewayPassword)
+195:             .build()
+196:         val login = Request.Builder()
+197:             .url("$configuredScheme://$activeHost:$configuredPort/goform/IADIdentityAuth")
+198:             .post(form)
+199:             .build()
+200:         client.newCall(login).execute().use { response ->
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

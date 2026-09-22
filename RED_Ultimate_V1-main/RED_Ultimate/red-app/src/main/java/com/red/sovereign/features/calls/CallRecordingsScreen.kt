@@ -1,6 +1,5 @@
 package com.red.sovereign.features.calls
 
-import androidx.compose.material3.MaterialTheme
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.compose.foundation.background
@@ -159,7 +158,7 @@ fun CallRecordingsScreen(onBack: () -> Unit) {
             Spacer(Modifier.width(6.dp))
             Column {
                 Text("تسجيلات المكالمات", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("مشفّرة AES-256-GCM على جهازك فقط", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("مشفّرة AES-256-GCM على جهازك فقط", color = Color.Gray, fontSize = 12.sp)
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -175,7 +174,7 @@ fun CallRecordingsScreen(onBack: () -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Filled.FiberManualRecord, null, tint = AqyalGold.copy(0.6f), modifier = Modifier.size(54.dp))
                     Text("لا توجد تسجيلات", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                    Text("سجّل أي مكالمة بموافقة صريحة وستظهر هنا", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    Text("سجّل أي مكالمة بموافقة صريحة وستظهر هنا", color = Color.Gray, fontSize = 13.sp)
                 }
             }
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -196,14 +195,14 @@ fun CallRecordingsScreen(onBack: () -> Unit) {
                 onDismissRequest = { confirmDelete = null },
                 containerColor = Color(0xFF151C2E),
                 title = { Text("حذف التسجيل؟", color = Color.White) },
-                text = { Text("سيُحذف الملف المشفّر نهائياً من جهازك ولا يمكن استرجاعه.", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                text = { Text("سيُحذف الملف المشفّر نهائياً من جهازك ولا يمكن استرجاعه.", color = Color.Gray) },
                 confirmButton = {
                     TextButton(onClick = { confirmDelete = null; delete(rec) }) {
                         Text("حذف", color = Color(0xFFE57373), fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirmDelete = null }) { Text("إلغاء", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    TextButton(onClick = { confirmDelete = null }) { Text("إلغاء", color = Color.Gray) }
                 }
             )
         }
@@ -235,7 +234,7 @@ private fun RecordingRow(rec: CallRecording, isPlaying: Boolean, onToggle: () ->
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(rec.callId.ifBlank { "مكالمة" }, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Text("$date • ${sizeKb}KB", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("$date • ${sizeKb}KB", color = Color.Gray, fontSize = 12.sp)
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, "حذف", tint = Color(0xFFE57373))

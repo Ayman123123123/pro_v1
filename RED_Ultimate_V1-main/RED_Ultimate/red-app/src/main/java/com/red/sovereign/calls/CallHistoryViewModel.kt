@@ -16,8 +16,6 @@ import com.red.sovereign.core.database.CallLogEntity
 import com.red.sovereign.core.database.LocalRepository
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.text.SimpleDateFormat
@@ -47,10 +45,6 @@ data class CallStatsSummary(
     val peakHour: Int?
 )
 
-/** جسم طلب حذف سجلات محددة — يطابق DeleteHistoryRequest في الخادم. */
-@Serializable
-private data class HistoryDeleteRequest(val callIds: List<String>)
-
 class CallHistoryViewModel(application: Application) : AndroidViewModel(application) {
     private val client = AuthorizedApiClient(TokenStore(application))
     private val repository = LocalRepository(application)
@@ -63,12 +57,6 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
 
     var searchQuery by mutableStateOf("")
     var selectedFilter by mutableStateOf(CallFilterType.ALL)
-
-    // ── Cursor-based pagination for history sync ──────────────
-    private var syncCursor: String? = null
-    private var syncHasMore = true
-    private var serverVersion = 0L
-    var isSyncing = false; private set
 
     // ── Paging للسجل (يتفوق على واتساب في القوائم الطويلة) ──────────────
     var visibleLimit by mutableStateOf(PAGE_SIZE); private set
@@ -91,12 +79,12 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
                 CallFilterType.MISSED -> item.status.equals("MISSED", ignoreCase = true) || item.status.equals("NO_ANSWER", ignoreCase = true)
                 CallFilterType.INCOMING -> item.direction.equals("INCOMING", ignoreCase = true)
                 CallFilterType.OUTGOING -> item.direction.equals("OUTGOING", ignoreCase = true)
-                CallFilterType.GROUP -> item.type.equals("GROUP", ignoreCase = true)
+                CallFilterType.GROUP -> item.type.equals("GROUP", ignoreCase = true) || item.type.equals("GROUP_VIDEO", ignoreCase = true) || item.type.equals("GROUP_VOICE", ignoreCase = true)
                 CallFilterType.LIVE -> item.type in setOf("LIVE", "SPACE", "CONFERENCE")
                 CallFilterType.VIDEO -> item.type.equals("VIDEO", ignoreCase = true)
             }
 
-            matchesQuery && matchesCategory && !item.deletedForMe
+            matchesQuery && matchesCategory
         }
     }
 
@@ -136,94 +124,6 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
         isLoadingMore = false
     }
 
-    /** مزامنة التدرج باستخدام الترقيم القائم على المؤشر (Cursor-based) */
-    fun syncHistory() = viewModelScope.launch {
-        if (isSyncing) return@launch
-        isSyncing = true
-        error = null
-        
-        try {
-            val request = CallHistorySyncRequest(
-                cursor = syncCursor,
-                limit = PAGE_SIZE,
-                sinceVersion = serverVersion
-            )
-            val body = json.encodeToString(request)
-            when (val result = client.request("POST", "/api/calls/history/sync", body)) {
-                is ApiResult.Success -> runCatching {
-                    json.decodeFromString<CallHistorySyncResponse>(result.value)
-                }.onSuccess { response ->
-                    if (response.items.isNotEmpty()) {
-                        // Merge with conflict resolution (server wins for newer versions)
-                        val merged = mergeWithConflictResolution(calls.toList(), response.items)
-                        repository.saveCallLogs(merged.map { it.toCallLogEntity() })
-                        calls.clear()
-                        calls.addAll(merged)
-                    }
-                    syncCursor = response.nextCursor
-                    syncHasMore = response.hasMore
-                    serverVersion = response.serverVersion
-                    if (!response.hasMore) {
-                        remoteExhausted = true
-                    }
-                }.onFailure { 
-                    error = "SYNC_PARSE_FAILED: ${it.message}"
-                }
-                is ApiResult.Error -> error = "SYNC_FAILED: ${result.message}"
-            }
-        } finally {
-            isSyncing = false
-        }
-    }
-
-    /** حل التعارضات: الأحدث يفوز (بناءً على version و updatedAt) */
-    private fun mergeWithConflictResolution(local: List<CallHistoryItem>, remote: List<CallHistoryItem>): List<CallHistoryItem> {
-        val map = local.associateBy { it.id }.toMutableMap()
-        
-        for (item in remote) {
-            val existing = map[item.id]
-            if (existing == null) {
-                map[item.id] = item
-            } else {
-                // Compare versions - higher version wins
-                if (item.version > existing.version) {
-                    map[item.id] = item
-                } else if (item.version == existing.version) {
-                    // Same version - compare updatedAt
-                    val localTime = parseCallTimestamp(existing.updatedAt) ?: parseCallTimestamp(existing.startedAt) ?: 0L
-                    val remoteTime = parseCallTimestamp(item.updatedAt) ?: parseCallTimestamp(item.startedAt) ?: 0L
-                    if (remoteTime > localTime) {
-                        map[item.id] = item
-                    }
-                }
-                // If local is newer, keep local
-            }
-        }
-        
-        // Also add local items that aren't in remote (new local calls)
-        // They will be synced to server on next push
-        
-        return map.values.toList().sortedByDescending { 
-            parseCallTimestamp(it.startedAt) ?: 0L 
-        }
-    }
-
-    /** Push local changes to server */
-    fun pushLocalChanges() = viewModelScope.launch {
-        val unsynced = calls.filter { it.version <= serverVersion }
-        if (unsynced.isEmpty()) return@launch
-        
-        val body = json.encodeToString(mapOf("items" to unsynced))
-        when (val result = client.request("POST", "/api/calls/history/push", body)) {
-            is ApiResult.Success -> {
-                // Update local versions
-                unsynced.forEach { it.copy(version = serverVersion + 1) }
-                // Items will be updated on next sync
-            }
-            is ApiResult.Error -> error = "PUSH_FAILED: ${result.message}"
-        }
-    }
-
     init {
         viewModelScope.launch {
             repository.getCallLogs().collectLatest { entities ->
@@ -256,7 +156,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
             runCatching { applyRetentionPolicy() }
             return@launch
         }
-        syncHistory()
+        load()
     }
 
     suspend fun applyRetentionPolicy(): Int {
@@ -270,55 +170,21 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
         onDone?.invoke(deleted)
     }
 
-    /**
-     * الحذف محلياً **وعلى الخادم**.
-     *
-     * بدون الخادم كان الحذف المحلي يُلغى عند أول مزامنة: `load()` يجلب صفوف الخادم
-     * ويخزّنها بـ REPLACE فتعود المحذوفة فوراً — أي أن «مسح السجل» كان بلا أثر عملي.
-     * والخادم بدوره يُخفي السجل عن هذا المستخدم وحده (المستند مشترك بين الطرفين)
-     * فلا يتأثر سجل الطرف الآخر.
-     */
     fun deleteCall(callId: String) = viewModelScope.launch {
-        hideOnServer(listOf(callId))
         repository.deleteCallLog(callId)
         calls.removeAll { it.id == callId }
     }
 
     fun deleteCalls(callIds: List<String>) = viewModelScope.launch {
         if (callIds.isEmpty()) return@launch
-        hideOnServer(callIds)
         repository.deleteCallLogs(callIds)
         calls.removeAll { it.id in callIds }
     }
 
     fun clearHistory() = viewModelScope.launch {
-        hideAllOnServer()
         repository.clearCallLogs()
         calls.clear()
     }
-
-    /** يُخفي السجلات على الخادم أولاً. فشل الشبكة لا يمنع الحذف المحلي لكنه يُبلَّغ. */
-    private suspend fun hideOnServer(callIds: List<String>): Boolean {
-        val ids = callIds.filter { it.isNotBlank() }
-        if (ids.isEmpty()) return true
-        val body = json.encodeToString(HistoryDeleteRequest(ids))
-        return when (val r = client.request("POST", "/api/calls/history/delete", body)) {
-            is ApiResult.Success -> true
-            is ApiResult.Error -> {
-                error = "DELETE_SYNC_FAILED: ${r.message} → الحذف محلي فقط وسيعود عند المزامنة"
-                false
-            }
-        }
-    }
-
-    private suspend fun hideAllOnServer(): Boolean =
-        when (val r = client.request("DELETE", "/api/calls/history")) {
-            is ApiResult.Success -> true
-            is ApiResult.Error -> {
-                error = "DELETE_SYNC_FAILED: ${r.message} → الحذف محلي فقط وسيعود عند المزامنة"
-                false
-            }
-        }
 
     fun getStats(): CallStatsSummary {
         val total = calls.size

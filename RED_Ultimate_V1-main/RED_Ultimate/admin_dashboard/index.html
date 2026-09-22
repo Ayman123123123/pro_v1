@@ -6,11 +6,25 @@
     <meta name="theme-color" content="#030712" />
     <meta name="application-name" content="YOUNES Master" />
     <meta name="description" content="لوحة إدارة يونس السيادية المحلية" />
+    <meta http-equiv="Cache-Control" content="no-store" />
     <link rel="icon" type="image/svg+xml" href="/admin-master-icon.svg" />
     <link rel="alternate icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <title>يونس ماستر — لوحة الإدارة السيادية</title>
+    <script>
+      // ✅ 2026-09-23: منظّف الكاش — يلغي أي service worker قديم مسجّل على هذا
+      // النطاق (من نشر سابق) ويمسح CacheStorage، كي لا يعرض المتصفح أبداً
+      // نسخة أقدم من اللوحة بعد التحديث.
+      try {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); });
+        }
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); });
+        }
+      } catch (e) { /* تجاهل */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 export function SystemPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'flags' | 'config' | 'audit' | 'backups' | 'migrations' | 'cache'>('flags');
+  const [activeTab, setActiveTab] = useState<string>('flags');
 
   return (
     <div className="space-y-6">
@@ -218,4 +218,3 @@ export function SystemPage() {
 }
 
 import { Shield } from 'lucide-react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';

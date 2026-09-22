@@ -77,6 +77,11 @@ import com.red.sovereign.stories.StoryViewerState
 import com.red.sovereign.stories.StoryViewModel
 import com.red.sovereign.ui.StoryFullscreen
 import com.red.sovereign.ui.conversationId // Phase-1 (2026-09-14): كان يُحل من ChatsScreen الميت (نفس الحزمة) — الآن من DashboardIdentifiers بعد أرشفته
+import com.red.sovereign.ui.theme.AqyalCyanGlow
+import com.red.sovereign.ui.theme.AqyalGold
+import com.red.sovereign.ui.theme.AqyalRoyalBlue
+import com.red.sovereign.ui.theme.AqyalSurfaceNavy
+import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
 
 /**
@@ -105,7 +110,7 @@ fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: S
         }
         item {
             Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("لك", "أتابعهم", "محلي").forEachIndexed { i, title ->
+                listOf("لك", "أتابعهم", "اليمن").forEachIndexed { i, title ->
                     FilterChip(filter == i, {
                         filter = i
                         feed.load(when (i) { 1 -> "FOLLOWING"; 2 -> "YEMEN"; else -> null })
@@ -114,15 +119,15 @@ fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: S
             }
         }
         item {
-            Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp).clickable(onClick = onCreate), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+            Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp).clickable(onClick = onCreate), colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FeedAvatar("أ"); Text("ماذا يحدث في يونس؟", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(horizontal = 12.dp)); Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.tertiary)
+                    FeedAvatar("أ"); Text("ماذا يحدث في يونس؟", color = Color.LightGray, modifier = Modifier.weight(1f).padding(horizontal = 12.dp)); Icon(Icons.Default.Add, null, tint = AqyalGold)
                 }
             }
         }
         if (feed.state is FeedState.Message) item { Text((feed.state as FeedState.Message).text, color = AqyalGold, modifier = Modifier.padding(horizontal = 18.dp)) }
         when {
-            feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) } }
+            feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
             feed.state is FeedState.Error -> item { HomeEmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", (feed.state as FeedState.Error).message) }
             feed.posts.isEmpty() -> item { HomeEmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات، بينما المحتوى الخاص ينتظر تشفير E2EE.") }
             else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::requestFriend, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
@@ -157,7 +162,7 @@ fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: S
         AlertDialog(
             onDismissRequest = { quotePost = null; quoteText = "" },
             title = { Text("اقتباس منشور @${quoted.authorUsername}") },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Card { Text(quoted.text, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }; OutlinedTextField(quoteText, { quoteText = it }, Modifier.fillMaxWidth(), label = { Text("تعليقك") }, maxLines = 5) } },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Card { Text(quoted.text, Modifier.padding(12.dp), color = Color.Gray) }; OutlinedTextField(quoteText, { quoteText = it }, Modifier.fillMaxWidth(), label = { Text("تعليقك") }, maxLines = 5) } },
             confirmButton = { Button({ feed.quote(quoted, quoteText) { quotePost = null; quoteText = "" } }, enabled = quoteText.isNotBlank() && feed.state != FeedState.Publishing) { Text("نشر الاقتباس") } },
             dismissButton = { TextButton({ quotePost = null; quoteText = "" }) { Text("إلغاء") } }
         )
@@ -231,8 +236,8 @@ fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: S
 
 @Composable
 fun StoryCircle(label: String, own: Boolean, click: () -> Unit) = Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = click)) {
-    Box(Modifier.size(66.dp).clip(CircleShape).background(if (own) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(58.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(66.dp).clip(CircleShape).background(if (own) AqyalGold else AqyalCyanGlow), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(58.dp).clip(CircleShape).background(AqyalRoyalBlue), contentAlignment = Alignment.Center) {
             Icon(if (own) Icons.Default.Add else Icons.Default.Person, null)
         }
     }
@@ -255,7 +260,7 @@ fun PostCard(
     onReport: (Post) -> Unit = {}
 ) = Card(
     Modifier.fillMaxWidth().padding(horizontal = 14.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy.copy(alpha = .96f)),
     shape = RoundedCornerShape(24.dp)
 ) {
     val context = LocalContext.current
@@ -264,10 +269,10 @@ fun PostCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(48.dp).clip(CircleShape).background(
-                    Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.secondary))
+                    Brush.linearGradient(listOf(YounesEmerald, AqyalCyanGlow, AqyalGold))
                 ),
                 contentAlignment = Alignment.Center
-            ) { Text(post.authorDisplayName.take(1).ifBlank { "ي" }, color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Black) }
+            ) { Text(post.authorDisplayName.take(1).ifBlank { "ي" }, color = Color(0xFF03120E), fontWeight = FontWeight.Black) }
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(post.authorDisplayName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("@${post.authorUsername} · ${post.authorRedId}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -293,24 +298,24 @@ fun PostCard(
         Text(post.text, fontSize = 17.sp, lineHeight = 25.sp, color = MaterialTheme.colorScheme.onSurface)
         if (post.hashtags.isNotEmpty() || post.mentions.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                post.hashtags.forEach { tag -> Text(tag, color = MaterialTheme.colorScheme.tertiary, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
-                post.mentions.forEach { m -> Text(m, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp) }
+                post.hashtags.forEach { tag -> Text(tag, color = AqyalCyanGlow, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+                post.mentions.forEach { m -> Text(m, color = YounesEmerald, fontSize = 13.sp) }
             }
         }
         post.linkCard?.let { card ->
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(10.dp)) {
                     Text(card.title ?: card.url, fontWeight = FontWeight.Bold, maxLines = 1)
-                    Text(card.description ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 2)
+                    Text(card.description ?: "", color = Color.Gray, fontSize = 12.sp, maxLines = 2)
                 }
             }
         }
-        if (post.editedAt != null) Text("تم التعديل", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        if (post.editedAt != null) Text("تم التعديل", color = Color.Gray, fontSize = 11.sp)
         post.quotePostId?.let { quotedId ->
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .72f))) {
+            Card(colors = CardDefaults.cardColors(containerColor = AqyalSurfaceRaised.copy(alpha = .72f))) {
                 Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Repeat, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp))
-                    Text(" اقتباس يونس · ${quotedId.take(8)}", color = MaterialTheme.colorScheme.tertiary, fontSize = 12.sp)
+                    Icon(Icons.Default.Repeat, null, tint = AqyalGold, modifier = Modifier.size(18.dp))
+                    Text(" اقتباس يونس · ${quotedId.take(8)}", color = AqyalGold, fontSize = 12.sp)
                 }
             }
         }
@@ -333,14 +338,14 @@ fun PostCard(
                             LinearProgressIndicator(
                                 progress = { ratio },
                                 modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(50)),
-                                color = MaterialTheme.colorScheme.primary,
+                                color = YounesEmerald,
                                 trackColor = MaterialTheme.colorScheme.surface
                             )
                             Text("${option.votes} صوت", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                 }
-                Text("إجمالي الأصوات: ${poll.options.sumOf { it.votes }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("إجمالي الأصوات: ${poll.options.sumOf { it.votes }}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
@@ -368,7 +373,7 @@ fun PostCard(
 fun PostAction(icon: ImageVector, label: String, enabled: Boolean, action: () -> Unit) = TextButton(action, enabled = enabled) { Icon(icon, label, Modifier.size(18.dp)); Text(" $label", fontSize = 11.sp) }
 
 @Composable
-private fun FeedAvatar(text: String) = Box(Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.tertiary), contentAlignment = Alignment.Center) { Text(text, color = MaterialTheme.colorScheme.onTertiaryContainer, fontWeight = FontWeight.Black) }
+private fun FeedAvatar(text: String) = Box(Modifier.size(42.dp).clip(CircleShape).background(AqyalGold), contentAlignment = Alignment.Center) { Text(text, color = Color.Black, fontWeight = FontWeight.Black) }
 
 @Composable
-fun HomeEmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
+fun HomeEmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp)) }

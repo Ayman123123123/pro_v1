@@ -1,0 +1,88 @@
+package com.red.sovereign.conversationlist
+
+import android.content.Context
+import android.content.res.ColorStateList
+import android.view.View
+import android.widget.TextView
+import androidx.core.content.ContextCompat
+import com.red.sovereign.R
+import com.red.sovereign.components.settings.app.chats.folders.ChatFolderContextMenu
+import com.red.sovereign.components.settings.app.chats.folders.ChatFolderRecord
+import com.red.sovereign.util.adapter.mapping.LayoutFactory
+import com.red.sovereign.util.adapter.mapping.MappingAdapter
+import com.red.sovereign.util.adapter.mapping.MappingViewHolder
+import com.red.sovereign.util.visible
+import org.signal.core.ui.R as CoreUiR
+
+/**
+* RecyclerView adapter for the chat folders displayed on conversation list
+*/
+class ChatFolderAdapter(val callbacks: Callbacks) : MappingAdapter() {
+
+  init {
+    registerFactory(ChatFolderMappingModel::class.java, LayoutFactory({ v -> ViewHolder(v, callbacks) }, R.layout.chat_folder_item))
+  }
+
+  class ViewHolder(itemView: View, private val callbacks: Callbacks) : MappingViewHolder<ChatFolderMappingModel>(itemView) {
+
+    private val name: TextView = findViewById(R.id.name)
+    private val unreadCount: TextView = findViewById(R.id.unread_count)
+
+    override fun bind(model: ChatFolderMappingModel) {
+      itemView.isSelected = model.isSelected
+
+      val folder = model.chatFolder
+      name.text = getName(itemView.context, folder)
+      unreadCount.visible = model.unreadCount > 0
+      unreadCount.text = if (model.unreadCount > 99) itemView.context.getString(R.string.ChatFolderAdapter__99p) else model.unreadCount.toString()
+      itemView.setOnClickListener {
+        callbacks.onChatFolderClicked(model.chatFolder)
+      }
+      itemView.setOnLongClickListener { view ->
+        ChatFolderContextMenu.show(
+          context = itemView.context,
+          anchorView = view,
+          folderType = model.chatFolder.folderType,
+          unreadCount = model.unreadCount,
+          isEmpty = model.isEmpty,
+          isMuted = model.isMuted,
+          onEdit = { callbacks.onEdit(model.chatFolder) },
+          onMuteAll = { callbacks.onMuteAll(model.chatFolder) },
+          onUnmuteAll = { callbacks.onUnmuteAll(model.chatFolder) },
+          onReadAll = { callbacks.onReadAll(model.chatFolder) },
+          onFolderSettings = { callbacks.onFolderSettings() }
+        )
+        true
+      }
+      if (model.isSelected) {
+        itemView.backgroundTintList = if (callbacks.isScrolled()) {
+          ColorStateList.valueOf(ContextCompat.getColor(itemView.context, CoreUiR.color.signal_colorBackground))
+        } else {
+          ColorStateList.valueOf(ContextCompat.getColor(itemView.context, CoreUiR.color.signal_colorSurface2))
+        }
+        name.setTextColor(ContextCompat.getColor(itemView.context, CoreUiR.color.signal_colorOnSurface))
+      } else {
+        itemView.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.transparent))
+        name.setTextColor(ContextCompat.getColor(itemView.context, CoreUiR.color.signal_colorOnSurfaceVariant))
+      }
+    }
+
+    private fun getName(context: Context, folder: ChatFolderRecord): String {
+      return if (folder.folderType == ChatFolderRecord.FolderType.ALL) {
+        context.getString(R.string.ChatFoldersFragment__all_chats)
+      } else {
+        folder.name
+      }
+    }
+  }
+
+  interface Callbacks {
+    fun onChatFolderClicked(chatFolder: ChatFolderRecord)
+    fun onEdit(chatFolder: ChatFolderRecord)
+    fun onMuteAll(chatFolder: ChatFolderRecord)
+    fun onUnmuteAll(chatFolder: ChatFolderRecord)
+    fun onReadAll(chatFolder: ChatFolderRecord)
+    fun onFolderSettings()
+    fun isScrolled(): Boolean
+  }
+}

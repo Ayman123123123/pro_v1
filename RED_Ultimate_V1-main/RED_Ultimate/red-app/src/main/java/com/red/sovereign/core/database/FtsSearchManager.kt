@@ -115,12 +115,6 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
         )
         db.execSQL(
             "CREATE TRIGGER IF NOT EXISTS messages_fts_delete " +
-                "AFTER DELETE ON local_history BEGIN " +
-                "DELETE FROM messages_fts WHERE messageId = old.id; END"
-        )
-        // تنظيف مكرر: احذف القديم قبل الإدراج (لا UNIQUE في FTS — REPLACE لا تعمل بلا قيد).
-        db.execSQL(
-            "CREATE TRIGGER IF NOT EXISTS messages_fts_cleanup_insert " +
                 "AFTER DELETE ON messages BEGIN " +
                 "DELETE FROM messages_fts WHERE messageId = old.id; END"
         )
@@ -128,10 +122,8 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
 
     fun indexMessage(messageId: String, conversationId: String, senderId: String, plaintext: String) {
         if (plaintext.length < MIN_QUERY_LENGTH || plaintext.length > MAX_INDEXED_LENGTH) return
-        // FTS بلا UNIQUE: احذف القديم أولًا لمنع التكرار (LocalRepository + Paging كانا يفهرسان مرتين).
-        runCatching { db.execSQL("DELETE FROM messages_fts WHERE messageId = ?", arrayOf(messageId)) }
         db.execSQL(
-            "INSERT INTO messages_fts(messageId, conversationId, senderId, content) " +
+            "INSERT OR REPLACE INTO messages_fts(messageId, conversationId, senderId, content) " +
                 "VALUES (?, ?, ?, ?)",
             arrayOf(messageId, conversationId, senderId, normalizeArabic(plaintext))
         )

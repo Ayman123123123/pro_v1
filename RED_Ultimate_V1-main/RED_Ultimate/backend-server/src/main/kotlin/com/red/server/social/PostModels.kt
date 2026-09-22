@@ -1,7 +1,6 @@
 package com.red.server.social
 
 import org.springframework.data.annotation.Id
-import org.springframework.data.mongodb.core.index.CompoundIndex
 import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
 import java.time.Instant
@@ -37,7 +36,7 @@ data class PostDocument(
  * خصوصية المنشور. `FRIENDS` أضافها main ويستعملها `FeedService` فعلًا
  * في ترشيح الفيد، ولذلك بقيت.
  */
-enum class PostVisibility { PUBLIC, FRIENDS, LOCAL_YEMEN, PRIVATE }
+enum class PostVisibility { PUBLIC, FRIENDS, LOCAL_YEMEN }
 
 /**
  * نطاق الفيد المطلوب.
@@ -140,7 +139,6 @@ data class PollVote(@Id val id: String, @Indexed val postId: String, @Indexed va
 data class Repost(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, val createdAt: Instant = Instant.now())
 
 @Document("follows")
-@CompoundIndex(name = "followerId_1_followedId_1", def = "{'followerId': 1, 'followedId': 1}", unique = true)
 data class FollowDocument(
     @Id val id: String,
     @Indexed val followerId: String,

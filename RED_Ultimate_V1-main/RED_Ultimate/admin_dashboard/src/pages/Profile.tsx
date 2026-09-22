@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 import { useTranslation } from 'react-i18next';
 import { User, Settings, Activity, Smartphone, Monitor, LogOut, Edit, Key, Shield } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -13,7 +14,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 export function ProfilePage() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'devices' | 'sessions' | 'activity'>('profile');
+  const [activeTab, setActiveTab] = useState<string>('profile');
 
   return (
     <div className="space-y-6">

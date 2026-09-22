@@ -1,6 +1,5 @@
 package com.red.sovereign.features.contacts
 
-import androidx.compose.material3.MaterialTheme
 import com.red.sovereign.core.YounesId
 
 import android.Manifest
@@ -95,7 +94,7 @@ fun QrScannerSheet(
             )
             Text(
                 "وجّه الكاميرا نحو رمز QR للشخص أو أدخل RED ID يدوياً",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.Gray,
                 fontSize = 13.sp
             )
             Spacer(Modifier.height(16.dp))

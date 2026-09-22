@@ -1,0 +1,467 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<meta http-equiv="pragma" content="no-cache">
+<title>SysInfo</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<style>
+	.tdcss5{text-decoration:underline;cursor:pointer;} 
+</style>
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+function doRefresh()
+{
+	location.href="enSysInfo.htm";
+	return true;
+}
+var SystemUptime;
+var xmlHttp;
+var UserboardCount;
+var g_CurrentTime;
+var month=new Array();
+
+function GetTime()
+{
+	var strdate;
+	var date;
+
+	date = new Date(parseInt(g_CurrentTime) * 1000);
+	
+	date = date + "";
+	str = date.split(" ");
+	if (str[4].indexOf("UTC") >= 0) // IE 
+	{
+		strdate = str[5] + "-" +month[str[1]] + "-" + str[2] + "  " + str[3];
+	}
+	else
+	{
+		strdate = str[3] + "-" +month[str[1]] + "-" + str[2] + "  " + str[4];
+	}
+	return strdate;
+}
+
+function MM_callJS(TotalPort,IsSupportComplexCfg,WanMode,RouteModeFlag,VoiceVlanValid,ManageVlanValid, VPNEnable, NtpTime) 
+{
+	var PortNum=parseInt(TotalPort);
+	UserboardCount = get_userboard_count(PortNum);
+	
+	month["Jan"]=1;
+	month["Feb"]=2;
+	month["Mar"]=3;
+	month["Apr"]=4;
+	month["May"]=5;
+	month["Jun"]=6;
+	month["Jul"]=7;
+	month["Aug"]=8;
+	month["Sep"]=9;
+	month["Oct"]=10;
+	month["Nov"]=11;
+	month["Dec"]=12;
+	if(IsSupportComplexCfg=="yes")
+	{
+		document.getElementById("NetWorkMode").style.display = "";
+		if(RouteModeFlag =="checked")
+		{
+			document.getElementById("LANPortInfo").style.display = "";
+		}
+	}
+	
+	if("checked" == VPNEnable)
+	{
+		if("selected" == "selected")
+		{
+			document.getElementById("idVPNState").style.display = "";
+			document.getElementById("idVPNServer").style.display = "";
+			document.getElementById("idVPNLocalIP").style.display = "";
+			//document.getElementById("idVPNRemoteIP").style.display = "";
+			document.getElementById("idVPNBlank").style.display = "";
+		}
+	}
+	
+	var valid= 'Enable';
+	if(valid ==  "Disable" )
+	{
+		document.getElementById("LicenseInvid").style.color = "#FF0000";
+	    document.getElementById("LicenseInvid").style.fontSize = "18px";
+	    //document.getElementById("LicenseInvid").style.height = "18px";	
+	}
+	else
+	{
+		document.getElementById("LicenseInvid").style.color = "#003399";
+	    document.getElementById("LicenseInvid").style.fontSize = "12px";
+	    //document.getElementById("LicenseInvid").style.height = "12px";	
+	}
+	document.getElementById("LicenseInvid").value = valid;
+	
+	var DBOvalid= '8';
+	document.getElementById("LienceValidPort").style.color = "#003399";
+	document.getElementById("LienceValidPort").style.fontSize = "12px";
+	document.getElementById("LienceValidPort").value = DBOvalid;
+	
+	//V1??DBO
+	var EiaVpnAvailable = '1';	
+	
+	var validity = 0;
+    var validity_str;
+    if(validity == 0)
+    {
+        validity_str = "0 Day";
+        document.getElementById("idLicenseValidity").style.color = "#FF0000";
+    }
+    else if(validity <= 3600)
+    {
+        validity_str = "Less Than 1 Hour";
+        document.getElementById("idLicenseValidity").style.color = "#FF0000";
+    }
+    else if(validity <= (3600 * 24))
+    {
+        validity_str = Math.ceil(validity / 3600) +" Hours";
+        document.getElementById("idLicenseValidity").style.color = "#FF0000";
+    }
+    else
+    {
+        validity_str = Math.ceil(validity / (3600 * 24)) + " Days";
+        document.getElementById("idLicenseValidity").style.color = "#003399";
+    }
+	document.getElementById("idLicenseValidity").style.fontSize = "12px";
+	document.getElementById("idLicenseValidity").value = validity_str;
+	
+	if(parseInt(0) == 1)
+    {
+		document.getElementById("idLicenseValidityNode").style.display = "";
+	}
+	else
+	{
+		document.getElementById("idLicenseValidityNode").style.display = "none";
+	}
+	
+	if (NtpTime != "")
+	{
+		g_CurrentTime = Date.parse(NtpTime) / 1000;
+		document.getElementById("trSysTime").style.display = "";
+		document.getElementById("SysTime").innerHTML = GetTime();
+	}
+	var temp = '24655';
+	SystemUptime = parseInt(temp);
+	
+	//document.getElementById("SysUptime").style.color = "#003399";
+	//document.getElementById("SysUptime").style.fontSize = "12px";
+	//document.getElementById("SysUptime").style.height = "12px";
+	
+	RefreshSysTime();
+	window.setInterval("RefreshSysTime()",1000);
+
+	menu_click();	
+}
+
+function RefreshSysTime()
+{
+	SystemUptime = SystemUptime + 1;
+	h = Math.floor(SystemUptime / 3600);
+    m = Math.floor((SystemUptime % 3600) / 60);
+    s = Math.floor(SystemUptime % 60); 
+	var d = Math.floor(h/24);
+    h = h % 24;
+		
+	if(d > 0 )
+	{
+	    buff = d + ' d ' + h + ' h ' + m + ' m ' + s + ' s ';
+	}
+	else if(0 == d && h > 0)
+	{
+		buff = h + ' h ' + m + ' m ' + s + ' s ';
+	}
+	else if(0 == d && 0 == h && m > 0)
+	{
+		buff = m + ' m ' + s + ' s ';
+	}
+	else
+	{
+		buff = s + 's';
+	}
+	document.getElementById("SysUptime").innerHTML = buff;	
+	
+	g_CurrentTime++;
+	document.getElementById("SysTime").innerHTML = GetTime();;
+}
+
+function menu_click()
+{
+	var i;
+	
+	document.getElementById("id_WebVer").style.display = "";
+	document.getElementById("id_HardwareVer").style.display = "";
+	document.getElementById("id_logicVer").style.display = "";
+	document.getElementById("id_DspVer").style.display = "";
+			
+	for(i=0; i<UserboardCount; i++)
+	{
+		document.getElementById("id_UserboardVer" + i).style.display = "";
+	}
+}
+</script>
+</head>
+<body  onLoad="MM_callJS('8','no','Static','','no','no','', '2026/09/05 00:01:46')">
+<script>
+    if("enSysInfo.htm" == "enPassword.htm")
+    {
+        var str=""
+        str=str+"<table align='center'>"
+        str=str+"<tr>"
+        str = str +"<td class='notes' align='center' style='font-size: 16px;'>The default password has not been changed!</td>"
+        str=str+"</tr>"
+        str=str+"<tr>"
+        str = str +"<td class='notes' align='center'>Please change the password to protect your device!</td>"
+        str=str+"</tr>"
+        if("ARM_32_10 Aug 26 2019 16:21:07" == "")
+        {
+          str=str+"<tr>"
+          str = str + "<td class='notes' align='center' style='font-size: 16px;'>DSP not authorized!</td>"  
+          str=str+"</tr>"
+        }
+        str=str+"</table>"
+        document.write(str)
+    }
+</script>
+<table width="1000px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td class="title_text">Run Information</td>
+  </tr>
+ </table>
+<table width="1000px" align="center" class="TB" cellpadding="0" cellspacing="0">
+  <tr>
+   <td width="4%">&nbsp;</td>
+   <td width="92%">
+    <table width="100%">
+     <tr>
+      <td width="25%">&nbsp;</td>
+      <td width="25%">&nbsp;</td>
+      <td width="25%">&nbsp;</td>
+      <td width="25%">&nbsp;</td>
+     </tr>    
+     <tr>
+      <td>MAC Address </td>
+      <td>
+       F8-A0-3D-85-EE-44
+      </td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>
+	 <tr id="NetWorkMode" style="display:none">
+	  <td>Network Mode</td>
+	  <td></td>
+	  <td>&nbsp;</td>
+	  <td>&nbsp;</td>
+	 </tr>
+     <tr>
+      <td>
+       Network</td>
+      <td>
+       192.168.11.1
+      </td>
+      <td>
+       255.255.255.0
+      </td>
+      <td>
+       Static
+      </td>
+     </tr>
+    <tr id="idVoiceVlan" style="display:none">
+     <td>Voice VLAN</td>
+     <td></td>
+     <td></td>
+     <td></td>
+    </tr>
+    <tr id="idManageVlan" style="display:none">
+     <td>Management VLAN</td>
+     <td></td>
+     <td></td>
+     <td></td>
+    </tr>         
+     <tr id="LANPortInfo" style="display:none">
+      <td>LAN Port</td>
+      <td>
+       
+      </td>
+      <td>
+       
+      </td>
+      <td>&nbsp;</td>
+     </tr>
+     <tr>
+      <td>DNS Server </td>
+      <td>
+       8.8.8.8
+      </td>
+      <td>
+       0.0.0.0
+      </td>
+      <td>&nbsp;</td>
+     </tr>
+     <tr>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>
+     <tr id="idDeviceSN">
+      <td>Device SN</td>
+      <td>dd45-0104-2109-0014</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>  
+     <tr id="idDeviceID">
+      <td> Hardware ID</td>
+      <td>7c53-db2e-0f36</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>     
+     <tr id="idServerRegStatus">
+      <td>Cloud Register Status</td>
+      <td>Not Registered</td><td>&nbsp;</td><td>&nbsp;</td>
+     </tr>
+     <tr>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>    
+     <tr id="idVPNState" style="display:none">
+      <td>VPN Connection Status</td>
+      <td>Not connected</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>                
+     <tr id="idVPNServer" style="display:none">
+      <td>VPN Server</td>
+      <td></td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>
+     <tr id="idVPNLocalIP" style="display:none">
+      <td>VPN Local IP</td>
+      <td></td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>
+     <tr id="idVPNRemoteIP" style="display:none">
+      <td>VPN Remote IP</td>
+      <td></td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>     
+     <tr id="idVPNBlank" style="display:none">
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr> 
+     
+      <tr>
+	  <td>License</td>
+      <td>Basic Function</td>
+	  <td>
+       <input type="text" id="LicenseInvid" style="background:transparent; border:none " width="200px" readonly></input></td>
+      <td>&nbsp;</td>
+      </tr> 
+      <tr id="idLienceValidPort">
+      <td>&nbsp;</td>
+	  <td>Valid Port</td>
+	  <td>
+      <input type="text" id="LienceValidPort" style="background:transparent; border:none " width="200px" readonly></input></td>
+      <td>&nbsp;</td>
+      </tr> 
+	  <tr id="idLicenseValidityNode" style="display:none">
+      <td>&nbsp;</td>
+	  <td>Validity</td>
+	  <td>
+      <input type="text" id="idLicenseValidity" style="background:transparent; border:none " width="200px" readonly></input></td>
+      <td>&nbsp;</td>
+      </tr>                          
+	  <tr>
+	  <td>System Up Duration</td>
+	  <td colspan="2" id="SysUptime" ></td>
+      <td>&nbsp;</td>
+     </tr>
+     <tr id="trSysTime" style="display:none">
+	  <td>System Time</td>
+	  <td colspan="2" >
+       <div id="SysTime"></div>
+      </td>
+      <td>&nbsp;</td>
+     </tr>
+     <tr>
+      <td>Network&nbsp;Traffic Statistics</td>
+      <td>Received&nbsp;40085155&nbsp;Bytes</td>
+      <td>Sent&nbsp;68645914&nbsp;Bytes </td>
+	 <td>&nbsp;</td>
+     </tr>
+     <tr>
+      <td width="30%">&nbsp;</td>
+      <td width="30%">&nbsp;</td>
+      <td width="30%">&nbsp;</td>
+      <td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td>Version Information</td>
+      <td>Device Model</td>
+      <td colspan="4">UC2000-VE       </td>
+    </tr>
+    <tr>
+     <td>&nbsp;</td>
+     <td>Package Version</td>
+      <td>02240221 2025-02-21 16:57:15 official      </td>
+    </tr>  
+    <tr>
+     <td>&nbsp;</td>
+     <td>Software Version</td>
+      <td colspan="4">02240221 2025-02-21 16:56:20      </td>
+    </tr>  
+    <tr id="id_WebVer" style="display:none">
+     <td>&nbsp;</td>
+     <td>Web Version</td>
+      <td colspan="4">02240221      </td>
+    </tr>
+    <tr id="id_HardwareVer" style="display:none">
+     <td>&nbsp;</td>
+     <td>Hardware Version</td>
+      <td colspan="4">PCB 3      </td>
+    </tr>
+    <tr id="id_logicVer" style="display:none">
+     <td>&nbsp;</td>
+     <td>Logic Version</td>
+      <td colspan="4">LOGIC 2      </td>
+    </tr>
+	<tr id="id_bootVer">
+     <td>&nbsp;</td>
+     <td>Boot Version</td>
+      <td colspan="4">25      </td>
+    </tr>
+	<tr id="id_kernelVer">
+     <td>&nbsp;</td>
+     <td>Kernel Version</td>
+      <td colspan="4">38      </td>
+    </tr>
+    <tr id="id_DspVer" style="display:none">
+     <td>&nbsp;</td>
+     <td>DSP Version</td>
+      <td colspan="4">ARM_32_10 Aug 26 2019 16:21:07      </td>
+    </tr>
+      <tr id='id_UserboardVer0' style='display:none'><td>&nbsp;</td><td>Userboard 0 Version</td><td>B3.11.19.11L4 &nbsp;&nbsp;&nbsp;</td></tr> 
+   </table>
+  </td>
+  <td width="4%">&nbsp;</td>
+ </tr>
+</table>
+   </td>
+   <td width="4%">&nbsp;</td>
+  </tr>
+ </table>
+ <p>&nbsp;</p>
+ <p align="center">
+   <input name="Refresh"  class="button" type="button" id="Refresh" value="Refresh" onClick="return doRefresh();">
+ </p>
+</body>
+</html>

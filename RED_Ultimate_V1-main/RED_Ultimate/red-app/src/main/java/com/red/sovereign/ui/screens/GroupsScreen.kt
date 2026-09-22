@@ -1,6 +1,5 @@
 package com.red.sovereign.ui.screens
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -230,7 +229,7 @@ fun GroupsScreen(
                         Surface(shape = RoundedCornerShape(14.dp), color = SovereignColors.SurfaceNavy) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                if (desc.isNotBlank()) Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                                if (desc.isNotBlank()) Text(desc, fontSize = 13.sp, color = Color.Gray, maxLines = 2)
                                 Text("$count عضو " + if (approval) "بموافقة الإدارة" else "انضمام فوري",
                                     fontSize = 12.sp, color = AqyalGold)
                             }
@@ -388,6 +387,6 @@ private fun GroupsEmptyState(icon: androidx.compose.ui.graphics.vector.ImageVect
     ) {
         Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp))
         Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(detail, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+        Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp))
     }
 }

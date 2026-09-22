@@ -636,7 +636,7 @@ private fun HeroLiveBanner(
                 Text("👁 ${formatLiveViewers(viewers)} • $category" + if (recording) " • ●REC" else "", color = Color.White.copy(0.85f), fontSize = 12.sp)
             }
             Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text("بواسطة $host — الأعلى ترنداً الآن", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1)
+            Text("بواسطة $host — الأعلى ترنداً الآن", color = Color.LightGray, fontSize = 12.sp, maxLines = 1)
         }
     }
 }
@@ -669,7 +669,7 @@ private fun ExploreCard(
             Box(Modifier.size(12.dp).clip(CircleShape).background(accent))
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(title, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("بواسطة $host · $count", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("بواسطة $host · $count", fontSize = 12.sp, color = Color.LightGray)
             }
             Button(
                 onClick = onClick,

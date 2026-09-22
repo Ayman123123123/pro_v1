@@ -232,7 +232,6 @@ fun PostComposerSheet(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(visibility == "PUBLIC", { visibility = "PUBLIC" }, { Text("عام") })
                 FilterChip(visibility == "FRIENDS", { visibility = "FRIENDS" }, { Text("الأصدقاء") })
-                FilterChip(visibility == "PRIVATE", { visibility = "PRIVATE" }, { Text("خاص (أنا فقط)") })
                 Spacer(Modifier.weight(1f))
                 FilterChip(isPoll, { isPoll = !isPoll }, { Text("استطلاع") })
             }
@@ -342,7 +341,7 @@ private fun PostLivePreview(
                 SovereignAvatarThemed(username.take(1), size = 36.dp)
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                     Text(username, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
-                    Text(if (visibility == "FRIENDS") "الأصدقاء" else if (visibility == "PRIVATE") "خاص" else "عام", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (visibility == "FRIENDS") "الأصدقاء" else "عام", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(if (isPoll) "استطلاع" else "منشور", fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
             }

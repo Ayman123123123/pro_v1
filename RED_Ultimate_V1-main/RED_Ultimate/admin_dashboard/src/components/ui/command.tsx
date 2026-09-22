@@ -1,15 +1,24 @@
 'use client';
 
-import * as CommandPrimitives from 'cmdk';
+// ✅ FIX 2026-09-22: cmdk@1.1.1 exports CommandRoot/Input/... directly (not pkg/Input)
+import {
+  CommandRoot,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandSeparator,
+} from 'cmdk';
 import { cn } from '@/utils/cn';
+import type { HTMLAttributes } from 'react';
 
-const Command = CommandPrimitives.Command;
-const CommandInput = CommandPrimitives.Input;
-const CommandList = CommandPrimitives.List;
-const CommandEmpty = CommandPrimitives.Empty;
-const CommandGroup = CommandPrimitives.Group;
-const CommandItem = CommandPrimitives.Item;
-const CommandSeparator = CommandPrimitives.Separator;
-const CommandShortcut = CommandPrimitives.Shortcut;
+const Command = CommandRoot;
+/** Shortcut غير موجود في cmdk@1.1.1 — fallback بسيط */
+function CommandShortcut({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span className={cn('ml-auto text-xs tracking-widest text-muted-foreground', className)} {...props} />
+  );
+}
 
 export { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, CommandSeparator, CommandShortcut };

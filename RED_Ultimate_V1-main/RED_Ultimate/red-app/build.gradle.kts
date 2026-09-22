@@ -8,9 +8,9 @@ plugins {
 // The only safe generic default is the Android-emulator alias.  A private LAN
 // address from one developer's network makes every other installation fail
 // before discovery or the server settings screen can help.
-val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://127.0.0.1:8088")
+val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://10.0.2.2:8088")
 val redServerCandidates = providers.gradleProperty("RED_SERVER_CANDIDATES")
-    .orElse("http://127.0.0.1:8088,http://192.168.1.192:8088,http://10.0.2.2:8088")
+    .orElse("http://10.0.2.2:8088,http://127.0.0.1:8088")
 val redTlsPins = providers.gradleProperty("RED_TLS_PINS").orElse("")
 val redTargetAbi = providers.gradleProperty("RED_TARGET_ABI").orElse("arm64-v8a")
 require(redTargetAbi.get() in setOf("arm64-v8a", "armeabi-v7a", "x86_64")) { "Unsupported RED_TARGET_ABI" }
@@ -152,10 +152,6 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material3.windowsizeclass)
-    implementation(libs.androidx.compose.material3.adaptive)
-    implementation(libs.androidx.compose.material3.adaptive.layout)
-    implementation(libs.androidx.compose.material3.adaptive.navigation)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling.core)
@@ -230,23 +226,13 @@ dependencies {
 
     // ───── Biometric — قفل التطبيق بالبصمة/الوجه ─────
     implementation(libs.androidx.biometric)
-    implementation(libs.androidx.security.crypto)
-
-    // Tink single-source (CI-proven): tink-android AAR *bundles* core classes at every
-    // version (1.8.0 AND 1.23.0 both duplicate tink-core), so the graph must carry exactly
-    // one of them. The android AAR is the superset (core + AndroidKeystore), pinned modern.
-    implementation("com.google.crypto.tink:tink-android:1.23.0")
-
-    // ───── New: Compression, Search, Sync, ML ─────
-    // Unpublished/phantom coordinates removed (no source references them):
-    //   org.brotli:brotli:1.10.2, org.apache.lucene:lucene-analyzers-common:9.11.0,
-    //   io.automerge:automerge:2.0.0, com.github.rnnoise:rnnoise-android:0.1.0
-    implementation(libs.zstd)
-    implementation(libs.lucene.core)
-    implementation(libs.lucene.queryparser)
-
-    // ───── ML Kit Translation (On-device, 100+ languages) ─────
-    implementation(libs.mlkit.translate)
+    implementation(libs.androidx.security.crypto)
+    // Tink single-source (CI-proven): tink-android AAR *bundles* core classes at every
+    // version (1.8.0 AND 1.23.0 both duplicate tink-core), so the graph must carry exactly
+    // one of them. The android AAR is the superset (core + AndroidKeystore), pinned modern.
+    implementation("com.google.crypto.tink:tink-android:1.23.0")
 
     testImplementation("junit:junit:4.13.2")
 }
+
+

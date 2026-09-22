@@ -1,4 +1,4 @@
-﻿package com.red.sovereign.calls
+package com.red.sovereign.calls
 
 import android.content.Context
 import com.red.sovereign.auth.ApiResult
@@ -152,7 +152,14 @@ class MeshRtcSession(
 
     fun attachPeer(peerId: String): Boolean {
         if (peerId.isBlank() || peerId == localUserId) return false
-        if (peers.containsKey(peerId)) return true
+        if (peers.containsKey(peerId)) {
+            // RED LEGENDARY FIX: لو النظير موجود لكن بدون مسارات (بث مباشر - فيديو/صوت لا يصل)، أعد إضافة المسارات
+            val existing = peers[peerId]
+            if (existing != null) {
+                ensureTracksForPeer(existing)
+            }
+            return true
+        }
         if (!MeshNegotiation.canAttach(peers.size, false)) {
             events.onError("MESH_PEER_LIMIT")
             return false
@@ -171,11 +178,41 @@ class MeshRtcSession(
         val slot = PeerSlot(peerId)
         val pc = factory.createPeerConnection(config, slot.observer) ?: return false
         slot.peer = pc
-        localAudio?.let { pc.addTrack(it, listOf("younes-mesh")) }
-        localVideoTrack?.let { pc.addTrack(it, listOf("younes-mesh")) }
+        // RED LEGENDARY FIX 2026: بث مباشر أفضل من تيك توك ويوتيوب - تأكد من إضافة الصوت والفيديو حتى لو أحدهما null
+        // الصوت أساسي، الفيديو اختياري حسب الإذن
+        localAudio?.let { 
+            try { pc.addTrack(it, listOf("younes-mesh")) } catch (e: Exception) { android.util.Log.w("MeshRtcSession", "Failed to add audio to $peerId: ${e.message}") }
+        }
+        localVideoTrack?.let { 
+            try { pc.addTrack(it, listOf("younes-mesh")) } catch (e: Exception) { android.util.Log.w("MeshRtcSession", "Failed to add video to $peerId: ${e.message}") }
+        }
+        // لو لا يوجد صوت ولا فيديو (فشل إنشاء المسارات)، حاول إعادة الإنشاء
+        if (localAudio == null && mediaKind != CallMediaKind.LIVE) {
+            android.util.Log.w("MeshRtcSession", "No local audio for $peerId - attempting audio retry")
+            retryAudio()
+            localAudio?.let { try { pc.addTrack(it, listOf("younes-mesh")) } catch (_: Exception) {} }
+        }
         applyCodecPreferences(pc, mediaKind)
         peers[peerId] = slot
+        android.util.Log.i("MeshRtcSession", "attachPeer success peer=$peerId kind=$mediaKind audio=${localAudio != null} video=${localVideoTrack != null} totalPeers=${peers.size}")
         return true
+    }
+    
+    private fun ensureTracksForPeer(slot: PeerSlot) {
+        val pc = slot.peer ?: return
+        val senders = pc.senders
+        val hasAudio = senders.any { it.track()?.kind() == "audio" }
+        val hasVideo = senders.any { it.track()?.kind() == "video" }
+        if (!hasAudio) {
+            localAudio?.let { 
+                try { pc.addTrack(it, listOf("younes-mesh")); android.util.Log.d("MeshRtcSession", "Re-added audio to ${slot.peerId}") } catch (_: Exception) {}
+            }
+        }
+        if (!hasVideo && mediaKind.wantsVideo) {
+            localVideoTrack?.let { 
+                try { pc.addTrack(it, listOf("younes-mesh")); android.util.Log.d("MeshRtcSession", "Re-added video to ${slot.peerId}") } catch (_: Exception) {}
+            }
+        }
     }
 
     private fun applyCodecPreferences(pc: PeerConnection, kind: CallMediaKind) {
@@ -261,10 +298,7 @@ class MeshRtcSession(
                 it.peer?.addIceCandidate(candidate)
             } else {
                 synchronized(it.pendingIce) {
-                    // Limit pending ICE candidates to prevent memory issues
-                    if (it.pendingIce.size < 50) {
-                        it.pendingIce.add(candidate)
-                    }
+                    it.pendingIce.add(candidate)
                 }
             }
         }
@@ -590,18 +624,6 @@ class MeshRtcSession(
                     }
                     haveLocalOffer = true
                     peer?.createOffer(sdpObserver(setLocal = true), constraints)
-                } else if (state == PeerConnection.IceConnectionState.DISCONNECTED) {
-                    // Schedule ICE restart if disconnected for too long
-                    scope.launch {
-                        kotlinx.coroutines.delay(10_000)
-                        if (peer?.iceConnectionState == PeerConnection.IceConnectionState.DISCONNECTED) {
-                            val constraints = MediaConstraints().apply {
-                                mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true"))
-                            }
-                            haveLocalOffer = true
-                            peer?.createOffer(sdpObserver(setLocal = true), constraints)
-                        }
-                    }
                 }
             }
             override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit

@@ -16,9 +16,7 @@ import java.util.UUID
 import com.red.server.auth.model.UserAccount
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
-import jakarta.annotation.PostConstruct
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.core.env.Environment
 import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -166,35 +164,21 @@ data class SfuTicketResponse(
 /**
  * Issues the short-lived SFU media capability ticket.
  *
- * The signing key is derived from red.jwt.sfu-secret (env SFU_TICKET_SECRET via
- * application.yml) when that variable is set and non-blank, and otherwise from
- * the primary JWT secret (red.jwt.secret / JWT_SECRET). Unified with JwtService
- * on the same property name so both signers always agree. Operators can separate
- * or rotate the media-ticket secret without touching login/refresh tokens, while
- * keeping a zero-config safe fallback (non-prod only) that is byte-identical to
- * the previous behaviour. In production ('prod' profile) the dedicated secret is
- * mandatory and missing config fails startup fast.
+ * The signing key is derived from SFU_TICKET_SECRET when that variable is set and non-blank,
+ * and otherwise from the primary JWT secret (red.jwt.secret / JWT_SECRET). This lets operators
+ * separate or rotate the media-ticket secret without touching login/refresh tokens, while keeping
+ * a zero-config safe fallback that is byte-identical to the previous behaviour.
  *
  * The derivation (SHA-256(secret) -> HS256 key) intentionally matches media-sfu/server.js
  * authenticate() and JwtService so the SFU verifies the ticket with the same environment variable.
  */
 @Service
 class SfuTicketSigner(
-    @Value("\${red.jwt.sfu-secret:}") private val configuredSfuSecret: String,
+    @Value("\${SFU_TICKET_SECRET:}") private val configuredSfuSecret: String,
     @Value("\${red.jwt.secret}") private val configuredJwtSecret: String,
     @Value("\${red.jwt.issuer:red-sovereign}") private val issuer: String,
-    @Value("\${red.jwt.audience:red-app}") private val audience: String,
-    private val environment: Environment? = null
+    @Value("\${red.jwt.audience:red-app}") private val audience: String
 ) {
-    @PostConstruct
-    fun validateSfuSecret() {
-        if (environment?.activeProfiles?.any { it.equals("prod", ignoreCase = true) } == true && configuredSfuSecret.isBlank()) {
-            throw IllegalStateException(
-                "FATAL: SFU_TICKET_SECRET (red.jwt.sfu-secret) is not set, but the 'prod' profile is active."
-            )
-        }
-    }
-
     /** True when a dedicated SFU secret is configured (no secret shared with the JWT signer). */
     val dedicatedSecretInUse: Boolean
         get() = configuredSfuSecret.isNotBlank() && configuredSfuSecret != configuredJwtSecret

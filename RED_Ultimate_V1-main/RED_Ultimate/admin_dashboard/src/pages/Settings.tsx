@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 export function SettingsPage() {
   const { t } = useTranslation();
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'appearance' | 'notifications' | 'security' | 'data' | 'advanced'>('appearance');
+  const [activeTab, setActiveTab] = useState<string>('appearance');
   const [language, setLanguage] = useState('ar');
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
@@ -263,4 +263,3 @@ export function SettingsPage() {
   );
 }
 
-import { Label } from '@/components/ui/label';

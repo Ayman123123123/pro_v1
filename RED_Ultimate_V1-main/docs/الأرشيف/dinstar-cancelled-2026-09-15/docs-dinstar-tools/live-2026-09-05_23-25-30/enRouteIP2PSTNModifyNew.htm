@@ -1,0 +1,798 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>RouteIP2PSTNModifyNew</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+</head>
+
+<script language="JavaScript" type="text/JavaScript">
+	
+var quickLoadFlag = 0;
+var url = decodeURI(window.location.href);
+var argsIndex = url .split("?flag=");
+quickLoadFlag = argsIndex[1]
+
+var g_RoutingObj = new Object();
+var g_RouteTblIndex  = 0;
+var g_MouseClickType = 1;  // default value : 1
+var g_MenuClickFlag  = 0;
+	
+
+var SRC_MODE_PORT		 		= 0;
+var SRC_MODE_PORT_GROUP = 1;
+var SRC_MODE_IP 				= 2;
+var SRC_MODE_IP_GROUP	 	= 3;
+var SRC_MODE_SIP_SERVER = 4;
+var SRC_MODE_ANY			  = 255;
+
+var g_RouteDestRecord = 256;//默认值为<port-group-0>
+	
+function MM_callJS()
+{		
+	//get Json String from Web Server.
+	JsonStringGet();
+}
+
+
+
+function form_check()
+{
+	var permit = 1;
+	if(permit == 0)
+	{
+		window.alert("You have no permission.\n Please visit the Access Control page.");
+		return false;
+	}
+	
+	var license = 1;
+	if(license == 0)
+	{
+		window.alert("You are not authorized.\n");
+		return false;
+	}
+	
+	var mux = 0;
+  if (document.forms[0].RouteDesc.value.length == 0
+	|| document.forms[0].RouteDesc.value.length > 31)
+	{
+	   alert("'Description' is incorrect, input length must be less than 31!"); 
+	   document.forms[0].RouteDesc.select();
+	   return false;
+	}
+	
+	if(document.forms[0].RouteDesc.value.search("/") != -1)
+	{
+	   alert("'/' is not allowed in 'Description'"); 
+	   document.forms[0].RouteDesc.select();
+	   return false;
+	}
+
+	if(1 == parseInt(document.getElementById("RouteEnable").value))
+	{
+		var src_prefix = document.getElementById("RouteSrcPrefix").value;
+		if(false == isCorrectRexChar(src_prefix))
+		{
+		   alert("'Source Prefix' is incorrect!");
+		   document.forms[0].RouteSrcPrefix.select();
+		   return false;			
+		}
+		if (document.forms[0].RouteSrcPrefix.value.length > 127)
+		{
+		   alert("'Source Prefix' is incorrect, input length must be less than 127!");
+		   document.forms[0].RouteSrcPrefix.select();
+		   return false;
+		}
+		
+		var dest_prefix = document.getElementById("RouteDestPrefix").value;
+		if(false == isCorrectRexChar(dest_prefix))
+		{
+		   alert("'Destination Prefix' is incorrect!");
+		   document.forms[0].RouteDestPrefix.select();
+		   return false;			
+		}
+		if (document.forms[0].RouteDestPrefix.value.length > 127)
+		{
+		   alert("'Destination Prefix' is incorrect, input length must be less than 127!");
+		   document.forms[0].RouteDestPrefix.select();
+		   return false;
+		}
+
+		if(1 == g_MouseClickType)		//允许呼叫
+		{
+			var called_prefix = document.getElementById("CalledPrefix").value;
+			if(false == isRegDigitPrefixV2(called_prefix))
+			{
+			   alert("'Prefix to Add' is only allowed to fill in digit and '*' '#' '+', or contain a ${caller} string!");
+			   document.forms[0].CalledPrefix.select();
+			   return false;			
+			}			
+			if (document.forms[0].CalledPrefix.value.length > 15)
+			{
+			   alert("'Prefix to Add' is incorrect, input length must be less than 15!");
+			   document.forms[0].CalledPrefix.select();
+			   return false;
+			}
+			
+			var called_suffix = document.getElementById("CalledSuffix").value;
+			if(false == isRegDigitPrefixV2(called_suffix))
+			{
+			   alert("'Suffix to Add' is only allowed to fill in digit and '*' '#' '+', or contain a ${caller} string!");
+			   document.forms[0].CalledSuffix.select();
+			   return false;			
+			}												
+			if (document.forms[0].CalledSuffix.value.length > 15)
+			{
+			   alert("'Suffix to Add' is incorrect, input length must be less than 15!");
+			   document.forms[0].CalledSuffix.select();
+			   return false;			
+			}
+			
+			if (document.forms[0].CalledRmFrom1Left.value.length  != 0)
+			{
+				document.getElementById("CalledLevFromRight").value = "";
+				var call_left = document.getElementById("CalledRmFrom1Left").value;
+				if(false == isRegDigit(call_left))
+				{
+				   alert("'Digits to be Deleted' is incorrect!");
+				   document.forms[0].CalledRmFrom1Left.select();
+				   return false;			
+				}							
+				if(isNaN(parseInt(document.getElementById("CalledRmFrom1Left").value)))
+				{
+   				alert("'Digits to be Deleted' is incorrect!");
+					document.forms[0].CalledRmFrom1Left.select();
+					return false;	
+				}
+								
+				if(parseInt(document.getElementById("CalledRmFrom1Left").value) > 31)
+				{
+					alert("'Digits to be Deleted' is incorrect, input value must be less than 32!");
+					document.forms[0].CalledRmFrom1Left.select();
+					return false;
+				}
+			}
+			else if (document.forms[0].CalledLevFromRight.value.length != 0)
+			{
+				var call_right = document.getElementById("CalledLevFromRight").value;
+				if(false == isRegDigit(call_right))
+				{
+				   alert("'Number of Digits Reserved' is incorrect!");
+				   document.forms[0].CalledLevFromRight.select();
+				   return false;			
+				}					
+				if(isNaN(parseInt(document.getElementById("CalledLevFromRight").value)))
+				{
+   				alert("'Number of Digits Reserved' is incorrect!");
+					document.forms[0].CalledLevFromRight.select();
+					return false;	
+				}
+				
+				if(parseInt(document.getElementById("CalledLevFromRight").value) > 31)
+				{
+					alert("'Number of Digits Reserved' is incorrect, input value must be less than 32!");
+					document.forms[0].CalledLevFromRight.select();
+					return false;
+				}
+			}
+		}
+	}
+
+	//do something.
+	RouteObjSetting();
+	JsonStringPost();
+
+	return true;
+}
+
+function callimit_click()
+{
+	//set value to xml
+	g_MouseClickType = parseInt(document.getElementById("id_OperationSelect").value);
+	if(1 == g_MouseClickType)  //允许呼叫
+	{
+		SelectOptionControl("RouteDest",false);
+	}
+	else
+	{
+		SelectOptionControl("RouteDest",true);
+	}
+	mouse_click();
+}
+
+function move_left_onblur()
+{
+	//Mutually exclusive options
+	if (document.forms[0].CalledRmFrom1Left.value.length == 0 
+	||  0 == parseInt(document.forms[0].CalledRmFrom1Left.value))    		//删除前缀位数
+	{
+		document.getElementById("id_LevFromRight").style.display = "";	//保留号码位数
+	}
+	else
+	{
+		document.getElementById("id_LevFromRight").style.display = "none";	
+	}
+}
+
+function remain_right_onblur()
+{
+	if (document.forms[0].CalledLevFromRight.value.length == 0
+	||  255 == parseInt(document.forms[0].CalledLevFromRight.value))			//保留号码位数
+	{
+		document.getElementById("id_RmFrom1Left").style.display = "";	
+	}
+	else if(document.getElementById("id_LevFromRight").style.display == "")
+	{
+		document.getElementById("id_RmFrom1Left").style.display = "none";
+	}
+}
+
+function mouse_click()
+{
+	g_MouseClickType = parseInt(document.getElementById("id_OperationSelect").value);
+	
+	if(1 == g_MouseClickType)  //允许呼叫
+	{
+		SelectOptionControl("RouteDest",false);
+		if(g_MenuClickFlag == 1)  //advanced mode
+		{
+		  //"主叫号码前缀","被叫号码前缀","添加前缀号码" , "删除前缀位数" , "保留号码位数"  全部显示
+			document.getElementById("id_SrcPrefix").style.display = "";
+			document.getElementById("id_DestPrefix").style.display = "";
+			document.getElementById("id_Prefix").style.display = "";	
+			document.getElementById("id_Suffix").style.display = "";
+			document.getElementById("id_RmFrom1Left").style.display = "";	
+			document.getElementById("id_LevFromRight").style.display = "";					
+					
+			//Mutually exclusive options
+			move_left_onblur();
+			remain_right_onblur();					
+		}
+	}
+	else		//禁止呼叫
+	{
+		SelectOptionControl("RouteDest",true);
+		if(g_MenuClickFlag == 1)  //advanced mode
+		{
+			//"添加前缀号码" , "删除前缀位数" , "保留号码位数"  全部隐藏
+			document.getElementById("id_Prefix").style.display = "none";	
+			document.getElementById("id_Suffix").style.display = "none";
+			document.getElementById("id_RmFrom1Left").style.display = "none";	
+			document.getElementById("id_LevFromRight").style.display = "none";					
+		}			
+	}	
+
+}
+
+function menu_click(triangle)
+{
+	if(document.getElementById(triangle).value == 1)
+	{
+		g_MenuClickFlag = 0;
+		document.getElementById(triangle).src = "image/triangle3.gif";
+		document.getElementById(triangle).value = 0;
+		
+		//高级路由规则部分的配置隐藏
+		document.getElementById("id_SrcPrefix").style.display = "none";
+		//add by leon.
+		document.getElementById("id_DestPrefix").style.display   = "none";
+		document.getElementById("id_RmFrom1Left").style.display  = "none";
+		document.getElementById("id_Prefix").style.display       = "none";
+		document.getElementById("id_Suffix").style.display       = "none";
+		document.getElementById("id_LevFromRight").style.display = "none";
+//		document.getElementById("id_Operation").style.display    = "none";
+		
+	}
+	else
+	{
+		g_MenuClickFlag = 1;
+		document.getElementById(triangle).src = "image/triangle4.gif";
+		document.getElementById(triangle).value = 1;
+		
+		//高级路由规则部分的配置隐藏
+		document.getElementById("id_SrcPrefix").style.display = "";
+		//add by leon.
+		document.getElementById("id_DestPrefix").style.display   = "";
+		if(1 == g_MouseClickType)
+		{
+			if(document.getElementById('CalledRmFrom1Left').value.length > 0)
+				document.getElementById("id_RmFrom1Left").style.display  = "";
+			document.getElementById("id_Prefix").style.display       = "";
+			document.getElementById("id_Suffix").style.display       = "";
+			if(document.getElementById('CalledLevFromRight').value.length > 0)
+				document.getElementById("id_LevFromRight").style.display = "";	
+			if(document.getElementById('CalledRmFrom1Left').value.length == 0
+				&& document.getElementById('CalledLevFromRight').value.length == 0)
+			{
+				document.getElementById("id_RmFrom1Left").style.display  = "";
+				document.getElementById("id_LevFromRight").style.display = "";
+			}				
+		}
+//		document.getElementById("id_Operation").style.display    = "";
+	}
+}
+
+
+function handleStatePost()
+{
+		if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+		{
+			location.href = "enRouteIP2PSTNList.htm?flag="+quickLoadFlag;
+		}	
+		else if(xmlHttp.status == 404)
+		{
+			location.href = "enNoAuthority.htm";
+		}
+}
+
+function handleStateGet()
+{
+	var text = "";
+
+	if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+	{    
+		  text = xmlHttp.responseText;
+		  g_RoutingObj = eval('('+text+')'); 	 
+			//alert(text);
+			//显示默认值
+			DefaultSetting_Display();	  
+	}
+	
+}
+
+function JsonStringPost()
+{
+    var para;
+		var url;
+    para = JSON.stringify(g_RoutingObj);
+	  url = "/SetRoutingIp2PstnList";
+//	  alert("JsonStringPost = " + para);
+	  doRequestUsingPost(url, para, handleStatePost);
+    return true;
+}
+
+function JsonStringGet()
+{
+    var para;
+		var url;
+		index = "0";
+		//alert("index " + index);
+    para = "index="+index;//"event=" + event.toString() + "&port=" + port.toString() + "&imsi=" + imsi + "&page=" + currentPage; 
+	  url = "/GetRoutingList";
+	  doRequestUsingGet(url, para, handleStateGet);
+    return true;
+}
+
+function RouteObjSetting()
+{
+	var index = 0;
+
+	g_RoutingObj.routing[index].enable 	= 1;
+	g_RoutingObj.routing[index].desc 		= document.getElementById("RouteDesc").value;
+	
+	g_RoutingObj.routing[index].src 		= parseInt(document.getElementById("RouteSrc").value);
+	//src_mode 0:ip , 1:ip_group , 2:sip_server
+	if(g_RoutingObj.routing[index].src < parseInt("ff",16))  // 0~255
+	{
+		g_RoutingObj.routing[index].src_mode = SRC_MODE_IP;  //ip trunk mode		
+	}
+	else if(g_RoutingObj.routing[index].src < parseInt("1ff",16) && g_RoutingObj.routing[index].src > parseInt("ff",16))  // 256~511
+	{
+		g_RoutingObj.routing[index].src_mode = SRC_MODE_IP_GROUP;  //ip group mode  
+		g_RoutingObj.routing[index].src     -= parseInt("100",16);
+	}		
+	else if(g_RoutingObj.routing[index].src < parseInt("2ff",16) && g_RoutingObj.routing[index].src > parseInt("1ff",16))  // 512~767
+	{
+		g_RoutingObj.routing[index].src_mode = SRC_MODE_SIP_SERVER;  //sip server mode	
+		g_RoutingObj.routing[index].src     -= parseInt("200",16);	
+	}
+	else if(g_RoutingObj.routing[index].src == 255)	// 255
+	{
+		g_RoutingObj.routing[index].src_mode = SRC_MODE_ANY;  //any mode	, defualt value :255
+	}
+	else
+		g_RoutingObj.routing[index].src_mode = SRC_MODE_ANY;  //undefined mode	, defualt value :255
+
+		
+	g_RoutingObj.routing[index].dest 		 = parseInt(document.getElementById("RouteDest").value);	
+
+	//dest ip:0-31 and 255 ,  port_group:0-31
+	if(g_RoutingObj.routing[index].dest < parseInt("ff",16))  
+		g_RoutingObj.routing[index].dest_mode = SRC_MODE_PORT;  //port mode
+	else if(g_RoutingObj.routing[index].dest < parseInt("1ff",16) && g_RoutingObj.routing[index].dest > parseInt("ff",16))
+	{
+		g_RoutingObj.routing[index].dest_mode = SRC_MODE_PORT_GROUP;  //port group mode	
+		g_RoutingObj.routing[index].dest     -= parseInt("100",16);
+	}
+	else
+	{
+		g_RoutingObj.routing[index].dest_mode = SRC_MODE_ANY;  
+		g_RoutingObj.routing[index].dest      = 255;
+	}
+	
+
+	g_RoutingObj.routing[index].operation    	= g_MouseClickType;	
+	g_RoutingObj.routing[index].advanced_mode = parseInt(document.getElementById("RouteEnable").value);	
+	
+	if(1 == g_RoutingObj.routing[index].advanced_mode)
+	{
+		
+		g_RoutingObj.routing[index].src_prefix  = document.getElementById("RouteSrcPrefix").value;
+		g_RoutingObj.routing[index].dest_prefix = document.getElementById("RouteDestPrefix").value;
+			
+		//清除某些数据
+		if(2 == g_RoutingObj.routing[index].operation )
+		{
+			g_RoutingObj.routing[index].del_prefix = NaN;
+			g_RoutingObj.routing[index].add_prefix = NaN;	
+			g_RoutingObj.routing[index].add_suffix = NaN;
+			g_RoutingObj.routing[index].reserved_number = NaN;		
+		}
+		else
+		{
+			g_RoutingObj.routing[index].del_prefix = parseInt(document.getElementById("CalledRmFrom1Left").value);
+			g_RoutingObj.routing[index].add_prefix = document.getElementById("CalledPrefix").value; 
+			g_RoutingObj.routing[index].add_suffix = document.getElementById("CalledSuffix").value; 			
+			g_RoutingObj.routing[index].reserved_number = parseInt(document.getElementById("CalledLevFromRight").value);			
+		}
+	}
+	else  //恢复默认值
+	{
+		g_RoutingObj.routing[index].src_prefix  = NaN;
+		g_RoutingObj.routing[index].dest_prefix = NaN;
+		
+		g_RoutingObj.routing[index].del_prefix = NaN;
+		g_RoutingObj.routing[index].add_prefix = NaN;	
+		g_RoutingObj.routing[index].add_suffix = NaN;
+		g_RoutingObj.routing[index].reserved_number = NaN;		
+	}
+	//debug
+	RouteObjSetting_Debug();
+
+}
+
+function RouteObjSetting_Debug()
+{
+	var enable,desc,src,srcmode,dest,destmode,advancemode,src_prefix,dest_prefix,delprefix,addprefix,addsuffix,resernum,opera,idx;
+	var text = "";
+	var index = 0;
+	
+	enable = g_RoutingObj.routing[index].enable;
+	desc   = g_RoutingObj.routing[index].desc;
+	src    = g_RoutingObj.routing[index].src;
+	srcmode = g_RoutingObj.routing[index].src_mode;
+	dest    = g_RoutingObj.routing[index].dest;
+	destmode = g_RoutingObj.routing[index].dest_mode;
+	advancemode = g_RoutingObj.routing[index].advanced_mode;
+	src_prefix  = g_RoutingObj.routing[index].src_prefix;
+	dest_prefix = g_RoutingObj.routing[index].dest_prefix;
+	delprefix   = g_RoutingObj.routing[index].del_prefix;
+	addprefix   = g_RoutingObj.routing[index].add_prefix;
+	addsuffix   = g_RoutingObj.routing[index].add_suffix;
+	resernum    = g_RoutingObj.routing[index].reserved_number;
+	opera       = g_RoutingObj.routing[index].operation;
+	idx					= g_RoutingObj.routing[index].index;
+	text += "[Debug] : " + " ,enable=" + enable;
+	text += " ,desc=" + desc;
+	text += " ,src=" + src;
+	text += " ,srcmode=" + srcmode;
+	text += " ,dest=" + dest;
+	text += " ,destmode=" + destmode;
+	text += " ,advancemode=" + advancemode;	
+	text += " ,src_prefix=" + src_prefix;
+	text += " ,dest_prefix=" + dest_prefix;
+	text += " ,delprefix=" + delprefix;	
+	text += " ,addprefix=" + addprefix;
+	text += " ,addsuffix=" + addsuffix;
+	text += " ,resernum=" + resernum;
+	text += " ,opera=" + opera;	
+	text += " ,index=" + idx;	
+//	alert(text);
+}
+
+
+function DisplayOldContext()
+{
+	var index = 0;
+	//get the index
+
+	//display
+	document.forms[0].RouteDesc.value = g_RoutingObj.routing[index].desc;
+	
+	
+	if(SRC_MODE_IP == g_RoutingObj.routing[index].src_mode)				//ip
+	{
+		document.forms[0].RouteSrc.value  = g_RoutingObj.routing[index].src;
+	}
+	else if(SRC_MODE_IP_GROUP == g_RoutingObj.routing[index].src_mode)  //ip group
+	{
+		document.forms[0].RouteSrc.value = g_RoutingObj.routing[index].src + parseInt("100",16);
+	}
+	else if(SRC_MODE_SIP_SERVER == g_RoutingObj.routing[index].src_mode)	//sip server
+	{
+		document.forms[0].RouteSrc.value =  parseInt("200",16); // 512 == sip server
+	}
+	else if(SRC_MODE_ANY == g_RoutingObj.routing[index].src_mode)
+	{
+		document.forms[0].RouteSrc.value = 255;
+	}
+	else
+	{
+		document.forms[0].RouteSrc.value = g_RoutingObj.routing[index].src + parseInt("200",16);
+	}
+	
+	if(SRC_MODE_PORT == g_RoutingObj.routing[index].dest_mode)	//port
+	{
+		document.forms[0].RouteDest.value = g_RoutingObj.routing[index].dest;
+		g_RouteDestRecord = g_RoutingObj.routing[index].dest; 
+	}
+	else if(SRC_MODE_PORT_GROUP == g_RoutingObj.routing[index].dest_mode)	//port group
+	{
+		document.forms[0].RouteDest.value = g_RoutingObj.routing[index].dest + parseInt("100",16);
+		g_RouteDestRecord = g_RoutingObj.routing[index].dest + parseInt("100",16); 
+	}
+	else
+	{
+		document.forms[0].RouteDest.value = 255;
+		g_RouteDestRecord = 255;
+	}
+	
+	
+	//advance mode
+//	document.forms[0].RouteEnable.value = 0;
+	
+	if(0 != g_RoutingObj.routing[index].src_prefix.length)
+	{
+		document.forms[0].RouteSrcPrefix.value  = g_RoutingObj.routing[index].src_prefix;	
+	}
+	
+	if(0 != g_RoutingObj.routing[index].dest_prefix.length)
+	{
+		document.forms[0].RouteDestPrefix.value = g_RoutingObj.routing[index].dest_prefix;
+	}
+	
+				
+//	document.forms[0].id_Operation.value = g_RoutingObj.routing[index].operation;		
+	if(0 != parseInt(g_RoutingObj.routing[index].del_prefix) && 255 != parseInt(g_RoutingObj.routing[index].del_prefix))
+	{
+		document.forms[0].CalledRmFrom1Left.value    = g_RoutingObj.routing[index].del_prefix;
+	}	
+	if(0 != g_RoutingObj.routing[index].add_prefix.length)
+	{
+		document.forms[0].CalledPrefix.value    = g_RoutingObj.routing[index].add_prefix;
+	}
+	if(0 != g_RoutingObj.routing[index].add_suffix.length)
+	{
+		document.forms[0].CalledSuffix.value    = g_RoutingObj.routing[index].add_suffix;
+	}
+	if(255 != g_RoutingObj.routing[index].reserved_number)
+	{
+		document.forms[0].CalledLevFromRight.value    = g_RoutingObj.routing[index].reserved_number;
+	}
+	if(1 == g_RoutingObj.routing[index].operation)
+	{
+		//document.getElementById("OperationTypeAllowOption").checked = true;
+		document.forms[0].id_OperationSelect.value = 1;
+		g_MouseClickType = 1;
+		
+		callimit_click();
+	}
+	else if (2 == g_RoutingObj.routing[index].operation)
+	{
+		//document.getElementById("OperationTypeForbid").checked = true;
+		document.forms[0].id_OperationSelect.value = 2;
+		g_MouseClickType = 2;	
+		
+		callimit_click();
+	}
+}
+
+//显示默认值(之前页面设置好的状态)
+function DefaultSetting_Display()
+{
+	//高级规则设置
+	//get the index
+	var index = 0;
+	// show/hide advanced mode.
+	document.getElementById("RouteEnable").value = !(g_RoutingObj.routing[index].advanced_mode);
+	menu_click('RouteEnable');
+	
+	//其他设置
+	//Display the old Context.
+	DisplayOldContext(); 
+}
+
+
+//Select 属性控制函数
+function SelectOptionControl(id_name,flag)
+{
+	if(true == flag)
+	{
+		document.getElementById(id_name).disabled = true;
+		document.getElementById(id_name).style.color = "gray";	
+		document.getElementById(id_name).value = 255; //任意
+	}
+	else
+	{
+		document.getElementById(id_name).disabled = false;
+		document.getElementById(id_name).style.color = "black";		
+		document.getElementById("idRouteDestAny").disabled = true;	
+		if(255 == g_RouteDestRecord)//任意
+		{
+			document.getElementById(id_name).value = 256; // 默认为 port-group-0
+		}
+		else
+		{
+			document.getElementById(id_name).value = g_RouteDestRecord;//默认值
+		}
+	}	
+}
+
+</script>
+<body onLoad="MM_callJS();">
+<form action="/goform/RouteIP2PSTN" method="post" name="RouteIP2PSTN" id="RouteIP2PSTN">
+<input type="hidden" name="RouteIP2PSTNMode" id="RouteIP2PSTNMode">
+<!-------------------------------------------------------------------------------->
+<table width="600px" border=0 align="center" cellpadding=0 cellspacing=0>
+	<tr class="title">
+		<td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+		<td>IP->Tel Routing Modify</td>
+		<td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+	</tr>
+</table>
+<!-------------------------------------------------------------------------------->
+<table width="600px" align="center" class="TB" cellping=0 cellspacing=0>
+ <tr>
+  <td class="swidth">&nbsp;</td>
+  <td>
+    <table width="100%" cellping=1 cellspacing=0>
+	  <tr>
+		 <td width="50%">&nbsp;</td>
+		 <td width="50%">&nbsp;</td>
+	  </tr>
+	  <tr>
+	  	<td>Index</td>
+	  	<td><input class="atext" id="ModRouteIP2PSTNIndex" name="ModRouteIP2PSTNIndex" style="width:75%;" size="20" value="0" readonly ></td>
+	  </tr>        
+          
+	  <tr>
+		 <td>Description</td>
+		 <td><input class="atext" id="RouteDesc" name="RouteDesc" style="width:75%;" maxlength="31" size="20" value=""></td>
+	  </tr>
+	  <tr>
+		 <td valign="top">Source</td>
+				<td>
+					<table width="400px" align="center"  cellping=0 cellspacing=0>
+						<tr>
+							<td>                     
+								<div>
+									<select name='RouteSrc' class='alist' id='RouteSrc' style='width:38%;'>
+												<optgroup label="SIP Trunk">
+													<option value='31' id='idSrcIpTrunk31'>sip-trunk-31 &lt;Asterisk&gt;</option>
+												</optgroup>
+												<optgroup label="SIP Trunk Group">
+																										
+												</optgroup>
+												<optgroup label="SIP Server">
+													<option value="512">SIP Server</option>
+												</optgroup>
+									</select>                      
+								</div>
+							</td>
+						</tr>                               
+					</table>
+				</td>
+	  </tr>            
+	  <tr>
+		 <td valign="top">Destination</td>
+       	<td>
+          <table width="400px" align="center"  cellping=0 cellspacing=0>
+             <tr>
+               <td>                     
+                 <div>
+   									<select name='RouteDest' class='alist' id='RouteDest' style='width:38%;'>
+   										<option value="255" id='idRouteDestAny'>Any</option>
+												<optgroup label="Port">
+													<script language="JavaScript" type="text/JavaScript">
+														var i;
+														for(i=0; i< "8"; i++)
+														{
+																document.write("<option value='"+i+"' id='idIndex"+i+"'>"+"port-"+i+"</option>");
+														}		
+										
+													</script>   
+												</optgroup>
+												<optgroup label="Port Group">
+													<option value='256' id='idDestPortGroup256'>port-group-0 &lt;default&gt;</option>
+												</optgroup>
+                 		</select>                     
+                 </div>
+               </td>
+            </tr>                  
+          </table>
+        </td>
+	  </tr>  
+      <tr id="id_Operation" >  
+          <td valign="top">Call Restriction</td>
+						<td>
+							<table width="400px" align="center"  cellping=0 cellspacing=0>
+								<tr>
+									<td>                     
+										<div>
+											<select name='id_OperationSelect' id='id_OperationSelect'  type="radio" onchange="callimit_click()">
+		                      	<option  name="OperationTypeRadio" type="radio" value="1"  id="OperationTypeAllowOption"  >Allow Call</option>
+														<option  name="OperationTypeRadio" type="radio" value="2"  id="OperationTypeForbid" >Forbid Call</option>
+											</select>                      
+										</div>
+									</td>
+								</tr>                               
+							</table>
+						</td> 
+      </tr>                              
+	  <tr>
+		 <td>&nbsp;</td>
+		 <td>&nbsp;</td>
+	  </tr>
+      <tr>
+		 <td>Advanced Rules</td>
+		 <td><img id="RouteEnable" name="RouteEnable" src="image/triangle4.gif" align="left"  value="0"  onClick="menu_click('RouteEnable');" /></td>
+	  </tr>
+      <tr id="id_SrcPrefix" style="display:none">
+		 <td>Source Prefix</td>
+		 <td><input class="atext" id="RouteSrcPrefix" name="RouteSrcPrefix" style="width:75%;" maxlength="127" size="20" value="" ></td>
+	  </tr>
+      <tr id="id_DestPrefix" style="display:none">
+		 <td>Destination Prefix</td>
+		 <td><input class="atext" id="RouteDestPrefix" name="RouteDestPrefix" style="width:75%;" maxlength="127" size="20" value="" ></td>
+	  </tr>
+    <tr id="id_Prefix" style="display:none">
+		 <td>Prefix to Add</td>
+		 <td><input class="atext" id="CalledPrefix" name="CalledPrefix" style="width:75%;" maxlength="15" size="20" value=""></td>
+	  </tr>
+	<tr id="id_Suffix" style="display:none">
+		 <td>Suffix to Add</td>
+		 <td><input class="atext" id="CalledSuffix" name="CalledSuffix" style="width:75%;" maxlength="15" size="20" value="" ></td>
+	  </tr>
+    <tr id="id_RmFrom1Left" style="display:none">
+		 <td>Digits to be Deleted</td>
+		 <td><input class="atext" id="CalledRmFrom1Left" name="CalledRmFromLeft" style="width:75%;" maxlength="2" size="20" value="" onblur="move_left_onblur();"></td>
+	  </tr>	  
+      <tr id="id_LevFromRight" style="display:none">
+		 <td>Number of Digits Reserved</td>
+		 <td><input class="atext" id="CalledLevFromRight" name="CalledLevFromRight" style="width:75%;" maxlength="2" size="20" value="" onblur="remain_right_onblur();"></td>
+	  </tr> 
+
+                        
+     <tr id="id_nbsp" style="display:none">
+		 <td>&nbsp;</td>
+		 <td>&nbsp;</td>
+	  </tr>  
+	  </table>
+  </td>
+  <td class="swidth">&nbsp;</td>
+ </tr>
+</table>
+<!--------------------------------------------------------------------------------> 
+<table width="600px" align="center" cellping="0" cellspacing="0">
+<tr>
+ <td width="15%"> </td>
+ <td>&nbsp;</td>
+</tr>
+<tr>
+ <td align="right" class="notes">Notes:&nbsp;</td>
+ <td class="notes">1.${caller} can be used in the "Prefix to Add" and "Suffix to Add" settings, and the call replacement number will be replaced with the calling number of the current call in the same location.</td>
+</tr>
+</table>
+<!-------------------------------------------------------------------------------->
+<p align="center">
+<input name="Ok"  class="button" type="button" id="Ok" value="Save" onClick="return form_check();">
+&nbsp;&nbsp;&nbsp;&nbsp;
+<input name="Reset"  class="button" type="reset" id="Reset" value="Reset">
+&nbsp;&nbsp;&nbsp;&nbsp;
+<input name="Cancel"  class="button" type="button" id="Cancel" value="Cancel" onClick="javascript:window.history.go(-1);">
+</p>
+</form>
+</body>
+</html>

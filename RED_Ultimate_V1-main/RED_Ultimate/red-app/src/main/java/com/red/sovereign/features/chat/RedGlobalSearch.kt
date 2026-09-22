@@ -1,6 +1,5 @@
 package com.red.sovereign.features.chat
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -222,14 +221,14 @@ fun RedGlobalSearch(
                 }
             }
         }
-        Text("تلميح: استخدم from:@user type:image before:2024-01-01 has:media", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp))
+        Text("تلميح: استخدم from:@user type:image before:2024-01-01 has:media", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp))
 
         Spacer(modifier = Modifier.height(10.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("نتائج البحث السيادي", style = MaterialTheme.typography.labelMedium, color = SovereignColors.Cyan)
             if (isSearching) androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = SovereignColors.Cyan)
-            else if (filters.baseQuery.length >= 2 || filters.type != null || filters.hasMedia || filters.hasLink) Text("(${results.size})", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+            else if (filters.baseQuery.length >= 2 || filters.type != null || filters.hasMedia || filters.hasLink) Text("(${results.size})", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
         }
         
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp).weight(1f)) {
@@ -239,14 +238,14 @@ fun RedGlobalSearch(
                         Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.Search, null, tint = Color.Gray, modifier = Modifier.size(32.dp))
                             Text("اكتب حرفين على الأقل", color = Color.White, style = MaterialTheme.typography.titleSmall)
-                            Text("البحث يتم على جهازك فقط — الخادم لا يرى النص", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                            Text("البحث يتم على جهازك فقط — الخادم لا يرى النص", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             } else if (results.isEmpty() && !isSearching) {
                 item { 
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)), modifier = Modifier.fillMaxWidth()) {
-                        Text("لا توجد نتائج لـ '$searchQuery' — جرب كلمة أخرى", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
+                        Text("لا توجد نتائج لـ '$searchQuery' — جرب كلمة أخرى", color = Color.LightGray, modifier = Modifier.padding(16.dp))
                     }
                 }
             } else {
@@ -289,7 +288,7 @@ fun RedGlobalSearch(
                                 }
                                 Text(
                                     "${msg.senderId.take(12)} • ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(msg.createdAt))}",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = Color.Gray,
                                     style = MaterialTheme.typography.labelSmall
                                 )
                             }

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>معرض أيقونات تطبيق يونس</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Segoe UI',Tahoma,sans-serif; background:#0d1b2a; color:#e0e0e0; padding:20px; }
+  h1 { text-align:center; color:#f5c842; font-size:26px; margin-bottom:6px; }
+  p.sub { text-align:center; color:#9db4c8; margin-top:0; margin-bottom:28px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:18px; max-width:1100px; margin:0 auto; }
+  .card { background:#16263b; border:1px solid #2a3f57; border-radius:14px; padding:14px; text-align:center; cursor:pointer; transition:.15s; }
+  .card:hover { border-color:#f5c842; transform:translateY(-3px); }
+  .card img { width:150px; height:150px; object-fit:contain; border-radius:12px; background:#000; margin-bottom:10px; }
+  .card .name { font-weight:600; color:#fff; font-size:14px; }
+  .card .full { display:block; color:#7f9bb8; font-size:11px; margin-top:4px; word-break:break-all; }
+  .lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:50; align-items:center; justify-content:center; flex-direction:column; padding:20px; }
+  .lightbox img { max-width:88vw; max-height:80vh; border-radius:12px; background:#000; }
+  .lightbox .cap { color:#f5c842; margin-top:14px; font-size:18px; }
+  .lightbox .close { position:absolute; top:20px; left:26px; color:#fff; font-size:40px; cursor:pointer; }
+</style>
+</head>
+<body>
+<h1>🎨 معرض أيقونات تطبيق «يونس»</h1>
+<p class="sub">اضغط على أي أيقونة لعرضها بالحجم الكامل — وأخبرني أي واحدة تريدها لأيقونة التطبيق</p>
+<div class="grid" id="grid"></div>
+
+<div class="lightbox" id="lb" onclick="this.style.display='none'">
+  <div class="close">&times;</div>
+  <img id="lbImg" alt="icon">
+  <div class="cap" id="lbCap"></div>
+</div>
+
+<script>
+const icons = [
+  ["01_img1_darkblue.png", "img1_darkblue (image-search)"],
+  ["02_img5_darkblue.png", "img5_darkblue (image-search)"],
+  ["03_clean_pro.png", "clean_pro"],
+  ["04_hybrid_pro.png", "hybrid_pro"],
+  ["05_master.png", "master"],
+  ["06_pro.png", "pro"],
+  ["07_ultimate.png", "ultimate"],
+  ["08_ultimate_v2.png", "ultimate_v2"],
+  ["09_8k_new.png", "8k_new"],
+  ["10_aqyal_legacy.png", "aqyal_legacy"],
+  ["11_launcher_pro.png", "launcher_pro"],
+  ["12_aqyal_concept.png", "aqyal_concept"]
+];
+const grid = document.getElementById('grid');
+icons.forEach(([file,label])=>{
+  const card=document.createElement('div');
+  card.className='card';
+  card.innerHTML=`<img src="imgs/${file}.thumb.jpg" alt="${label}">
+    <div class="name">${label}</div>
+    <span class="full">${file}</span>`;
+  card.onclick=()=>{document.getElementById('lbImg').src='imgs/'+file;document.getElementById('lbCap').textContent=label;document.getElementById('lb').style.display='flex';};
+  grid.appendChild(card);
+});
+</script>
+</body>
+</html>

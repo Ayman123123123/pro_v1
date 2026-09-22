@@ -419,67 +419,7 @@ class LiveStreamController(
         liveSignaling.broadcastToRoom(stored, "CHAT_DELETED", mapOf("chatId" to chatId), authentication.name)
         return ResponseEntity.ok(mapOf("status" to "deleted", "chatId" to chatId))
     }
-
-    @PostMapping("/{streamId}/gifts")
-    fun sendGift(
-        @PathVariable streamId: String,
-        @Valid @RequestBody request: GiftRequest,
-        authentication: Authentication
-    ): ResponseEntity<Map<String, Any>> {
-        val userId = UUID.fromString(authentication.name)
-        val user = users.findById(userId)
-            .orElseThrow { NoSuchElementException("User not found") }
-        
-        val record = findStream(streamId)
-            ?: throw NoSuchElementException("Live stream not found or ended")
-        val storedId = record.streamId
-        
-        // Verify viewer is in the stream
-        val isViewer = liveStreamService.isViewerAny(storedId, user.redId, authentication.name)
-        require(isViewer) { "JOIN_REQUIRED" }
-        
-        // Process gift (deduct credits, update leaderboard, etc.)
-        val giftResult = liveStreamService.processGift(
-            streamId = storedId,
-            senderRedId = user.redId,
-            giftId = request.giftId,
-            quantity = request.quantity
-        )
-        
-        // Broadcast gift animation to room
-        liveSignaling.broadcastToRoom(storedId, "GIFT_RECEIVED", mapOf(
-            "senderId" to user.redId,
-            "senderName" to user.displayName,
-            "giftId" to request.giftId,
-            "quantity" to request.quantity,
-            "totalValue" to giftResult.totalValue
-        ), authentication.name)
-        
-        return ResponseEntity.ok(mapOf(
-            "success" to true,
-            "giftId" to request.giftId,
-            "quantity" to request.quantity,
-            "senderCreditsRemaining" to giftResult.senderCreditsRemaining
-        ))
-    }
-
-    @GetMapping("/{streamId}/gifts/leaderboard")
-    fun getGiftLeaderboard(
-        @PathVariable streamId: String,
-        @RequestParam(defaultValue = "10") limit: Int
-    ): ResponseEntity<List<Map<String, Any>>> {
-        val record = findStream(streamId)
-            ?: throw NoSuchElementException("Live stream not found or ended")
-        
-        val leaderboard = liveStreamService.getGiftLeaderboard(record.streamId, limit)
-        return ResponseEntity.ok(leaderboard)
-    }
 }
-
-data class GiftRequest(
-    val giftId: String,
-    val quantity: Int = 1
-)
 
 data class CreateStreamRequest(
     val streamId: String = "",

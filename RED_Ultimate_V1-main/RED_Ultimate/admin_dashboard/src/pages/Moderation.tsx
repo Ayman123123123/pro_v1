@@ -33,10 +33,10 @@ const mockData: ModerationItem[] = [
 
 export function ModerationPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'queue' | 'rules' | 'analytics' | 'broadcast'>('queue');
+  const [activeTab, setActiveTab] = useState<string>('queue');
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'reported' | 'spam' | 'illegal'>('all');
-  const [filterPriority, setFilterPriority] = useState<'all' | 'P0' | 'P1' | 'P2'>('all');
+  const [filterType, setFilterType] = useState<string>('all');
+  const [filterPriority, setFilterPriority] = useState<string>('all');
 
   const filteredData = mockData.filter(item => {
     if (filterType !== 'all' && item.type !== filterType) return false;

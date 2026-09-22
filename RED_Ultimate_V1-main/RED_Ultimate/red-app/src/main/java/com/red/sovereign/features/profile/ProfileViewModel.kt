@@ -52,9 +52,6 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     var loadError by mutableStateOf<String?>(null)
         private set
 
-    var statusText by mutableStateOf("")
-        private set
-
     /** يحمّل بيانات البروفايل الحالية من TokenStore. */
     fun load(currentRedId: String, currentUsername: String, currentDisplayName: String) {
         redId = currentRedId
@@ -79,49 +76,25 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                     loadError = "تعذر تحميل البروفايل: ${result.message}"
                 }
             }
-            
-            // Load status
-            when (val statusResult = client.request("GET", "/api/social/status/$currentRedId")) {
-                is ApiResult.Success -> {
-                    try {
-                        val statusObj = json.decodeFromString<StatusResponse>(statusResult.value)
-                        statusText = statusObj.customText ?: ""
-                    } catch (_: Exception) {}
-                }
-                is ApiResult.Error -> {}
-            }
         }
     }
 
     fun clearLoadError() { loadError = null }
 
     /** يحدّث الاسم المعروض والبايو عبر PATCH /api/auth/profile. */
-    fun updateProfile(newDisplayName: String, newBio: String, newStatusText: String, done: () -> Unit) = viewModelScope.launch {
+    fun updateProfile(newDisplayName: String, newBio: String, done: () -> Unit) = viewModelScope.launch {
         if (isSaving) return@launch
         isSaving = true
         message = null
         val body = json.encodeToString(UpdateProfileRequest(newDisplayName.trim(), avatarUrl, newBio.trim().takeIf { it.isNotBlank() }))
-        var profileOk = false
         when (val result = client.request("PATCH", "/api/auth/profile", body)) {
             is ApiResult.Success -> {
                 displayName = newDisplayName.trim()
                 bio = newBio.trim()
-                profileOk = true
+                message = "تم حفظ البروفايل"
+                done()
             }
             is ApiResult.Error -> message = "تعذر حفظ البروفايل: ${result.message}"
-        }
-        
-        // Save status
-        if (profileOk) {
-            val statusReq = json.encodeToString(UpdateStatusRequest(type = "ONLINE", customText = newStatusText.trim(), visibleTo = "EVERYONE"))
-            when (val statusRes = client.request("PUT", "/api/social/status", statusReq)) {
-                is ApiResult.Success -> {
-                    statusText = newStatusText.trim()
-                    message = "تم حفظ البروفايل والحالة"
-                    done()
-                }
-                is ApiResult.Error -> message = "تم حفظ البروفايل لكن تعذر حفظ الحالة: ${statusRes.message}"
-            }
         }
         isSaving = false
     }
@@ -220,19 +193,4 @@ data class ProfileResponse(
     val displayName: String? = null,
     val bio: String? = null,
     val avatarUrl: String? = null
-)
-
-@kotlinx.serialization.Serializable
-data class StatusResponse(
-    val userId: String,
-    val type: String,
-    val customText: String? = null,
-    val updatedAt: String? = null
-)
-
-@kotlinx.serialization.Serializable
-data class UpdateStatusRequest(
-    val type: String,
-    val customText: String? = null,
-    val visibleTo: String = "EVERYONE"
 )

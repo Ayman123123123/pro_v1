@@ -1,0 +1,324 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>Management Config</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript" src="common/tzdata.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+function MM_callJS()
+{
+    var curr = "Etc/GMT-3";
+    var tz = document.getElementById("TimeZone");
+    for(i = 0; i < TZ_VALUE.length; i++)
+    {
+        var opt = document.createElement('option');
+        opt.value = TZ_VALUE[i];
+        opt.text = TZ_NAME_EN[i];
+        tz.add(opt, null);
+        if(curr == opt.value)
+        {
+            opt.selected = true;
+        }
+    }
+	mouse_click();
+    RefreshLocalTime();
+    window.setInterval("RefreshLocalTime()",1000);
+}
+
+function RefreshLocalTime()
+{
+    var d = new Date();
+    document.getElementById("localtime").innerHTML = d.toLocaleString();
+}
+
+function syncTimeCallback()
+{
+	if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+	{
+		alert("Set time successfully!");
+	}
+	else if(xmlHttp.status == 404)
+	{
+		alert("You are not authorized!");
+	}
+	else if(xmlHttp.status == 400)
+	{
+		alert("Failed to set the time!");
+	}
+}
+function clickSyncTime()
+{
+    var d = new Date();
+    var date_obj;
+    var para;
+        
+    date_obj = {time: Math.floor(d.getTime()/1000), year: d.getFullYear(), month:d.getMonth(), date: d.getDate(),
+                hour: d.getHours(), minute: d.getMinutes(), second: d.getSeconds(), millisecond: d.getMilliseconds()};
+    para = JSON.stringify(date_obj);
+	doRequestUsingPost("/SyncTime", para, syncTimeCallback);
+}
+
+function mouse_click()
+{			
+	if (document.forms[0].NTPEnable[0].checked)
+	{
+		document.getElementById("idPrimNTPSrvAddr").style.display = "";
+		document.getElementById("idSecondNTPSrvAddr").style.display = "";	
+		document.getElementById("idTimeZone").style.display = "";		
+	}
+	
+	if (document.forms[0].NTPEnable[1].checked)
+	{
+		document.getElementById("idPrimNTPSrvAddr").style.display = "none";
+		document.getElementById("idSecondNTPSrvAddr").style.display = "none";
+		document.getElementById("idTimeZone").style.display = "none";		
+	}	
+	return true;	
+}
+
+function form_check()
+{		
+	var permit = 1;
+	if(permit == 0)
+	{
+		window.alert("You have no permission.\n Please visit the Access Control page.");
+		return false;
+	}
+	
+	if (document.forms[0].NTPEnable[0].checked)
+	{
+		if (document.forms[0].PrimNTPServAddr.value.length == 0 || document.forms[0].PrimNTPServAddr.value.length > 31)
+		{
+			alert("'Primary NTP Server Address' is incorrect, and input length must be less than 32!");
+			document.forms[0].PrimNTPServAddr.select();
+			return false;
+		}
+				
+		if (document.forms[0].SecondNTPServAddr.value.length > 31)
+		{
+			alert("'Secondary NTP Server Address' is incorrect, and input length must be less than 32!");
+			document.forms[0].SecondNTPServAddr.select();
+			return false;
+		}
+		
+	}
+	
+	if (document.forms[0].WebPort.value != 80 
+		&& !is_number(document.forms[0].WebPort.value,1024,65534))
+	{
+		alert("HTTP port is incorrect, please enter 80 or 1024-65534!");
+		document.forms[0].WebPort.select();
+		return false;
+	}
+	
+	if (document.forms[0].TelnetPort.value != 23 
+		&& !is_number(document.forms[0].TelnetPort.value,1024,65535))
+	{
+		alert("Telnet port is incorrect, please 23 or 1024-65535!");
+		document.forms[0].TelnetPort.select();
+		return false;
+	}
+	
+	if(document.forms[0].TelnetPort.value == 
+		document.forms[0].WebPort.value)
+	{
+		alert("Telnet port can't be the same as Web port,please input again!");
+		return false;
+	}
+
+    if (document.forms[0].WebPortSSL.value != 443
+        && !is_number(document.forms[0].WebPortSSL.value,1024,65535))
+    {
+        alert("HTTPS port is incorrect?please 443 or 1024-65535!");
+        document.forms[0].WebPortSSL.select();
+        return false;
+    }
+
+    if(document.forms[0].TelnetPort.value == document.forms[0].WebPort.value
+        || document.forms[0].TelnetPort.value == document.forms[0].WebPortSSL.value
+        || document.forms[0].WebPort.value == document.forms[0].WebPortSSL.value)
+    {
+        alert(" Telnet port and HTTP port and HTTPS port are repetition,please input again!");
+        return false;
+    }
+	return true;
+}
+</script>
+</head>
+<body onLoad="MM_callJS()">
+<form action="/goform/ManageCfg" method="post" name="ManageCfg" id="ManageCfg">
+ <table width="650px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+   <td>Management Parameter</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+ <table width="650px" align="center" class="TB">
+  <tr>
+   <td width="5%">&nbsp;</td>
+   <td>
+    <table width="100%"  cellspacing="0" cellpadding="0">
+     <tr>
+      <td width="5%">&nbsp;</td>
+      <td width="40%">&nbsp;</td>
+      <td width="55%">&nbsp;</td>
+     </tr>
+     <tr>
+      <td colspan="3">&nbsp;</td>
+     </tr>
+
+     <tr>
+      <td colspan="3" class="td_title">NTP Parameter</td>
+     </tr>     
+       <tr>
+        <td>&nbsp;</td>
+        <td>NTP Enable</td>
+        <td>
+         <input name="NTPEnable" type="radio" value="1" onClick="mouse_click();" checked>
+         Yes
+         <input name="NTPEnable" type="radio" value="0" onClick="mouse_click();" >
+         No
+	    </td>		 
+       </tr>
+       <tr id="idPrimNTPSrvAddr" style="display:none">
+        <td>&nbsp;</td>
+        <td>Primary NTP Server Address</td>
+        <td>
+          <input class="text" id="PrimNTPServAddr" maxlength="31" name="PrimNTPServAddr" size="18" value="0.pool.ntp.org">
+        </td>
+       </tr>   
+       <tr id="idSecondNTPSrvAddr" style="display:none">
+        <td>&nbsp;</td>
+        <td>Secondary NTP Server Address</td>
+        <td>
+          <input class="text" id="SecondNTPServAddr" maxlength="31" name="SecondNTPServAddr" size="18" value="1.pool.ntp.org">
+        </td>
+       </tr>
+	   <tr id="idTimeZone" style="display:none">
+         <td>&nbsp;</td>
+	     <td>Time Zone</td>
+         <td><select name="TimeZone" class="alist" id="TimeZone" style="width:100%;">	   
+         </select>		 
+         </td>
+       </tr>   
+       <tr>
+        <td>&nbsp;</td>
+        <td>Local Time</td>
+        <td><label  id="localtime"></label >&nbsp;&nbsp;<input class="button" id="sync" name="sync" type="button" value="Set" onClick="clickSyncTime()" /></td>
+       </tr>    
+     <tr>
+      <td colspan="3">&nbsp;</td>
+     </tr>
+     
+     
+        <tr>
+          <td colspan="3" class="td_title">WEB Parameter</td>
+        </tr>
+        <tr>
+          <td>&nbsp;</td>
+          <td>HTTP Port</td>
+          <td>
+            <input class="text" id="WebPort" maxlength="5" name="WebPort" size="18" value="80" oninput="value=value.replace(/[^0-9]/g,'')">
+          </td>
+        </tr>
+        <tr>
+            <td>&nbsp;</td>
+            <td>HTTPS port</td>
+            <td>
+                <input class="text" id="WebPortSSL" maxlength="5" name="WebPortSSL" size="18" value="443" oninput="value=value.replace(/[^0-9]/g,'')">
+            </td>
+        </tr>
+        <tr>
+            <td>&nbsp;</td>
+            <td>HTTP Enable</td>
+            <td>
+                <input name="HTTPState" value="1" type="radio" >
+                Yes
+                <input name="HTTPState" value="0" type="radio" checked>
+                No
+            </td>
+        </tr>
+		<tr>
+            <td>  </td>
+            <td>WEB Auto Logout Time</td>
+            <td>
+                <select name="WEBLogoutTime" style="width: 143px;" class="list">
+                    <option value="0" >Off</option>
+                    <option value="1" >1 min</option>
+                    <option value="3" >3 min</option>
+                    <option value="5" >5 min</option>
+                    <option value="10" selected>10 min</option>
+                </select>
+            </td>
+        </tr>
+        
+        <tr>
+          <td colspan="3" class="td_title">&nbsp;</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="td_title">Telnet Parameter</td>
+        </tr>
+        <tr>
+          <td>&nbsp;</td>
+          <td>Telnet Port</td>
+          <td>
+            <input class="text" id="TelnetPort" maxlength="5" name="TelnetPort" size="18" value="23" oninput="value=value.replace(/[^0-9]/g,'')">
+          </td>
+        </tr>
+		<tr>
+            <td>&nbsp;</td>
+            <td>Telnet Enable</td>
+            <td>
+                <input name="TelnetEnable" type="radio" value="1" onClick="mouse_click();" >
+                Yes
+                <input name="TelnetEnable" type="radio" value="0" onClick="mouse_click();" checked>
+                No
+            </td>
+        </tr> 
+
+        <tr>
+          <td colspan="3" class="td_title">SSH</td>
+        </tr>
+        <tr>
+          <td>&nbsp;</td>
+          <td>SSH Enable</td>
+          <td>
+              <input name="SSHEnable" type="radio" value="1"  checked>
+              Yes
+              <input name="SSHEnable" type="radio" value="0"  >
+              No
+          </td>
+        </tr> 
+        
+     <tr>
+      <td colspan="3">&nbsp;</td>
+     </tr>
+          
+    </table>
+   </td>
+   <td width="5%">&nbsp;</td>
+  </tr>
+ </table>
+ 
+ <p align="center">
+  <input class="button" id="ok" name="ok" type="submit" value="Save" onClick="return form_check();">
+ </p>
+  <table width="600px" align="center" cellpadding="0" cellspacing="0">
+    <tr>
+      <td width="35%"> </td>
+      <td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td align="right" class="notes">Notes:</td>
+      <td class="notes">The device must restart to take effect.</td>
+    </tr>
+  </table>
+</form>
+</body>
+</html>
+

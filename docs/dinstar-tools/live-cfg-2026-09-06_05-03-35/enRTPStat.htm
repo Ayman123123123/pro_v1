@@ -1,0 +1,74 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>Statistics</title><link href="css/main.css" rel="stylesheet" type="text/css">
+<style type="text/css">
+INPUT.button1{	BACKGROUND-COLOR: #ddddff; COLOR: #000000; FONT-SIZE: 12px; FONT-WEIGHT: lighter; border: 1px solid #183ead;}
+</style>
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+var xmlHttp;
+function MM_CalllJS()
+{
+	//refresh RTP Info
+	AutoRefreshRTPInfo();
+	window.setInterval("AutoRefreshRTPInfo()", 5000);		
+}
+
+function handleStateChange()
+{
+	if(xmlHttp.readyState==4 && xmlHttp.status == 200)
+	{
+		document.getElementById("RTPInfo").innerHTML = xmlHttp.responseText;
+	}
+}
+
+function AutoRefreshRTPInfo()
+{
+	para = "";
+	url = "enRTPInfo.htm";
+	doRequestUsingGet(url,para,handleStateChange);
+}
+
+function doRefresh()
+{
+	location.href="enRTPStat.htm";
+	return true;	
+}
+</script>
+</head>
+
+<body onLoad="MM_CalllJS();">
+<table width="900px" border=0 align="center" cellpadding=0 cellspacing=0>
+ <tr class="title">
+  <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+  <td>RTP</td>
+  <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+ </tr>
+</table>
+<div id="RTPInfo">
+<table width="900px" align="center" class="content">
+	 <tr class="thead" align="center">
+	    <td width="5%">Port</td>
+		<td width="8%">Payload Type</td>
+		<td width="8%">Packet Period</td>
+		<td width="8%">Local Port</td>
+		<td width="17%">Peer IP</td>
+		<td width="8%">Peer Port</td>
+		<td width="10%">Send Packet</td>
+		<td width="10%">Recv Packet</td>
+		<td width="10%">Loss Packet</td>
+		<td width="8%">Jitter</td>
+		<td width="8%">Duration Time(s)</td>
+	 </tr>     
+</table>
+</div>
+<p></p>
+<p align="center">
+ <input name="Refresh"  class="button" type="button" id="Refresh" value="Refresh" onClick="return doRefresh();">
+</p>
+<p>&nbsp;</p>
+</body>
+</html>

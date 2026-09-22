@@ -116,7 +116,22 @@ const ROLE_LABELS: Record<string, string> = {
   USER: 'User',
 };
 
-const columns: ColumnDef<User>[] = [
+// ✅ FIX 2026-09-22: columns كانت ثابت module-level يسترعي handle* (معرّفة داخل
+// UsersPage) → "Cannot find name". الآن دالة تستقبل الـ handlers من المكوّن.
+interface UserActions {
+  handleView: (u: User) => void;
+  handleEdit: (u: User) => void;
+  handleApprove: (u: User) => void;
+  handleReject: (u: User) => void;
+  handleBan: (u: User) => void;
+  handleUnban: (u: User) => void;
+  handleImpersonate: (u: User) => void;
+  handleDelete: (u: User) => void;
+}
+
+function buildColumns(a: UserActions): ColumnDef<User>[] {
+  const { handleView, handleEdit, handleApprove, handleReject, handleBan, handleUnban, handleImpersonate, handleDelete } = a;
+  return [
   {
     id: 'select',
     header: ({ table }) => (
@@ -265,6 +280,7 @@ const columns: ColumnDef<User>[] = [
     size: 60,
   },
 ];
+}
 
 export function UsersPage() {
   const { t } = useTranslation();
@@ -368,10 +384,10 @@ export function UsersPage() {
     let durationDays: number | undefined;
 
     if (action === 'reject') {
-      reason = prompt('Reason for rejection:');
+      reason = prompt('Reason for rejection:') ?? undefined;
       if (!reason) return;
     } else if (action === 'ban') {
-      reason = prompt('Reason for ban:');
+      reason = prompt('Reason for ban:') ?? undefined;
       if (!reason) return;
       const duration = prompt('Duration in days (optional):');
       if (duration) durationDays = parseInt(duration);
@@ -381,6 +397,8 @@ export function UsersPage() {
 
     bulkActionMutation.mutate({ action, ids: selectedIds, reason, durationDays });
   };
+
+  const columns = buildColumns({ handleView, handleEdit, handleApprove, handleReject, handleBan, handleUnban, handleImpersonate, handleDelete });
 
   const table = useReactTable({
     data: data?.content || [],
@@ -414,7 +432,7 @@ export function UsersPage() {
   const parentRef = useRef<HTMLTableSectionElement>(null);
   const virtualizer = useVirtualizer({
     count: table.getRowModel().rows.length,
-    getScrollElement: () => parentRef.current?.parentElement,
+    getScrollElement: () => parentRef.current?.parentElement ?? null,
     estimateSize: () => 56,
     overscan: 5,
   });

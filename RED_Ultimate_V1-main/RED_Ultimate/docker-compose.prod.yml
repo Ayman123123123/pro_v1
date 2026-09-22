@@ -1,234 +1,98 @@
-﻿# RED Sovereign — Docker Compose Production Override
+# RED Sovereign — Docker Compose Production Override
 # Extends base docker-compose.yml with production settings
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-#
-# Production settings:
-# - Full replicas and resources
-# - 30d Prometheus retention
-# - Alertmanager for alerting
-# - Node Exporter, cAdvisor, Exporters
-# - All services with production resource limits
-
-x-logging: &default-logging
-  driver: "json-file"
-  options:
-    max-size: "10m"
-    max-file: "3"
-
-x-healthcheck-defaults: &healthcheck-defaults
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 30s
-
-x-resource-limits-small: &resource-limits-small
-  deploy:
-    resources:
-      limits:
-        memory: 256M
-        cpus: "0.5"
-      reservations:
-        memory: 128M
-        cpus: "0.25"
-
-x-resource-limits-medium: &resource-limits-medium
-  deploy:
-    resources:
-      limits:
-        memory: 512M
-        cpus: "1.0"
-      reservations:
-        memory: 256M
-        cpus: "0.5"
-
-x-resource-limits-large: &resource-limits-large
-  deploy:
-    resources:
-      limits:
-        memory: 1G
-        cpus: "1.5"
-      reservations:
-        memory: 512M
-        cpus: "0.75"
-
-x-resource-limits-xlarge: &resource-limits-xlarge
-  deploy:
-    resources:
-      limits:
-        memory: 2G
-        cpus: "2.0"
-      reservations:
-        memory: 1G
-        cpus: "1.0"
 
 services:
-  postgres:
-    <<: *resource-limits-xlarge
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: "4.0"
-        reservations:
-          memory: 2G
-          cpus: "2.0"
-
-  mongo:
-    <<: *resource-limits-xlarge
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: "4.0"
-        reservations:
-          memory: 2G
-          cpus: "2.0"
-
-  redis:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: "2.0"
-        reservations:
-          memory: 1G
-          cpus: "1.0"
-    command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --requirepass
-      - "${REDIS_PASSWORD}"
-      - --maxmemory
-      - "2gb"
-      - --maxmemory-policy
-      - "allkeys-lru"
-
-  minio:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: "2.0"
-        reservations:
-          memory: 1G
-          cpus: "1.0"
-
-  backend:
-    deploy:
-      replicas: 3
-      resources:
-        limits:
-          memory: 3G
-          cpus: "3.0"
-        reservations:
-          memory: 1G
-          cpus: "1.0"
-    environment:
-      SPRING_PROFILES_ACTIVE: "prod"
-      RED_ADMIN_COOKIE_SECURE: "true"
-      JAVA_TOOL_OPTIONS: "-Xms1g -Xmx2g -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
-
-  media-sfu:
-    <<: *resource-limits-xlarge
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-          cpus: "8.0"
-        reservations:
-          memory: 4G
-          cpus: "4.0"
-    environment:
-      MEDIASOUP_WORKERS: "8"
-
-  admin-dashboard:
-    deploy:
-      replicas: 3
-      resources:
-        limits:
-          memory: 1G
-          cpus: "1.0"
-        reservations:
-          memory: 512M
-          cpus: "0.5"
-
-  nginx:
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: "1.0"
-        reservations:
-          memory: 512M
-          cpus: "0.5"
-
+  # coturn TURN/STUN
   coturn:
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: "1.0"
-        reservations:
-          memory: 512M
-          cpus: "0.5"
+    image: coturn/coturn:4.6.2-r10
+    container_name: red-coturn
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: '0.5'
+    environment:
+      - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST}
+      - TURN_USERNAME=${TURN_USERNAME}
+      - TURN_PASSWORD=${TURN_PASSWORD}
+      - TURN_REALM=${SIP_REALM}
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "45000-45050:45000-45050/udp"
+    networks:
+      - red-net
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/3478' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    command: >
+      -n
+      --no-dtls
+      --no-tls
+      --lt-cred-mech
+      --realm=${SIP_REALM}
+      --user=${TURN_USERNAME}:${TURN_PASSWORD}
+      --external-ip=${TURN_PUBLIC_HOST}
+      --min-port=45000
+      --max-port=45050
+      --verbose
 
+  # Prometheus
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v2.52.0
     container_name: red-prometheus
     restart: unless-stopped
-    <<: *resource-limits-xlarge
+    mem_limit: 1g
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=30d"
-      - "--web.enable-lifecycle"
-      - "--web.enable-admin-api"
-    volumes:
-      - ./infrastructure/observability/prometheus:/etc/prometheus
-      - prometheus-data:/prometheus
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
     ports:
       - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
     networks:
       - red-net
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
+  # Alertmanager
   alertmanager:
-    image: prom/alertmanager:v0.28.0
+    image: prom/alertmanager:v0.26.0
     container_name: red-alertmanager
     restart: unless-stopped
-    <<: *resource-limits-small
+    mem_limit: 256m
     ports:
       - "9093:9093"
     volumes:
-      - ./infrastructure/observability/alertmanager:/etc/alertmanager
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
     networks:
       - red-net
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
 
+  # Grafana
   grafana:
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:10.4.0
     container_name: red-grafana
     restart: unless-stopped
-    <<: *resource-limits-large
+    mem_limit: 512m
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_admin_password
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-clock-panel
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
     ports:
       - "3000:3000"
     volumes:
-      - ./infrastructure/observability/grafana:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - grafana-data:/var/lib/grafana
     networks:
       - red-net
@@ -236,16 +100,16 @@ services:
       - prometheus
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-    secrets:
-      - grafana_admin_password
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
+  # Node Exporter
   node-exporter:
-    image: prom/node-exporter:v1.8.2
+    image: prom/node-exporter:v1.7.0
     container_name: red-node-exporter
     restart: unless-stopped
-    <<: *resource-limits-small
+    mem_limit: 128m
     pid: host
     network_mode: host
     volumes:
@@ -253,16 +117,18 @@ services:
       - /proc:/host/proc:ro,rslave
       - /sys:/host/sys:ro,rslave
     command:
-      - "--path.procfs=/host/proc"
-      - "--path.sysfs=/host/sys"
-      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
-    logging: *default-logging
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    # LEGENDARY FIX: network_mode:host يتعارض مع networks (compose يرفض المشروع كله)
+    # node-exporter بهوست الشبكة يرى red-net عبر المضيف — نحذف networks ونبقي host.
 
+  # cAdvisor
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: red-cadvisor
     restart: unless-stopped
-    <<: *resource-limits-medium
+    mem_limit: 512m
     privileged: true
     pid: host
     volumes:
@@ -275,47 +141,42 @@ services:
       - "8080:8080"
     networks:
       - red-net
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
 
+  # Exporters
   postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: red-postgres-exporter
     restart: unless-stopped
-    <<: *resource-limits-small
+    mem_limit: 128m
     environment:
-      - DATA_SOURCE_NAME=postgresql://admin:${DB_PASSWORD}@postgres:5432/red_sovereign?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://admin:${DB_PASSWORD}@db-postgres:5432/red_sovereign?sslmode=disable
     ports:
       - "9187:9187"
     networks:
       - red-net
     depends_on:
-      - postgres
-    logging: *default-logging
+      - db-postgres
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.66.0
+    image: oliver006/redis_exporter:v1.58.0
     container_name: red-redis-exporter
     restart: unless-stopped
-    <<: *resource-limits-small
+    mem_limit: 128m
     environment:
-      - REDIS_ADDR=redis:6379
+      - REDIS_ADDR=cache-redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     ports:
       - "9121:9121"
     networks:
       - red-net
     depends_on:
-      - redis
-    logging: *default-logging
+      - cache-redis
 
   nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:1.4.2
+    image: nginx/nginx-prometheus-exporter:1.4.0
     container_name: red-nginx-exporter
     restart: unless-stopped
-    <<: *resource-limits-small
+    mem_limit: 64m
     environment:
       - NGINX_SCRAPE_URI=http://nginx:8088/stub_status
     ports:
@@ -324,77 +185,6 @@ services:
       - red-net
     depends_on:
       - nginx
-    logging: *default-logging
-
-  loki:
-    image: grafana/loki:3.7.7
-    container_name: red-loki
-    restart: unless-stopped
-    <<: *resource-limits-medium
-    command: -config.file=/etc/loki/loki.yml
-    volumes:
-      - loki-data:/loki
-      - ./infrastructure/observability/loki/loki.yml:/etc/loki/loki.yml:ro
-    ports:
-      - "3100:3100"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3100/ready"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-    networks: ["red-net"]
-
-  tempo:
-    image: grafana/tempo:2.6.0
-    container_name: red-tempo
-    restart: unless-stopped
-    <<: *resource-limits-medium
-    command: -config.file=/etc/tempo/tempo.yml
-    volumes:
-      - tempo-data:/var/tempo
-      - ./infrastructure/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
-    ports:
-      - "3200:3200"
-      - "4317:4317"
-      - "4318:4318"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3200/ready"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-    networks: ["red-net"]
-
-  pyroscope:
-    image: grafana/pyroscope:1.10.0
-    container_name: red-pyroscope
-    restart: unless-stopped
-    <<: *resource-limits-medium
-    volumes:
-      - pyroscope-data:/var/lib/pyroscope
-    ports:
-      - "4040:4040"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4040/ready"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-    networks: ["red-net"]
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.122.0
-    container_name: red-otel-collector
-    restart: unless-stopped
-    <<: *resource-limits-small
-    command: --config=/etc/otelcol-contrib/config.yml
-    volumes:
-      - ./infrastructure/observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
-    ports:
-      - "4317:4317"
-      - "4318:4318"
-      - "8888:8888"
-      - "13133:13133"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:13133"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-    networks: ["red-net"]
 
 volumes:
   prometheus-data:
@@ -402,12 +192,6 @@ volumes:
   alertmanager-data:
     driver: local
   grafana-data:
-    driver: local
-  loki-data:
-    driver: local
-  tempo-data:
-    driver: local
-  pyroscope-data:
     driver: local
 
 networks:

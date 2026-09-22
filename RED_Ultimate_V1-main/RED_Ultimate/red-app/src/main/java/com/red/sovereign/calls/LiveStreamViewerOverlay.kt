@@ -1,6 +1,5 @@
 package com.red.sovereign.calls
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -124,8 +123,6 @@ fun YounesLiveStreamOverlay() {
     // الآن بطاقة عربية صريحة بأزرار فعل (إعادة/صوت فقط/مغادرة/نسخ التفاصيل).
     if (state is LiveStreamUiState.Error) {
         val arabic = when {
-            // قبل فحص TIMEOUT العام: رسالة وسائط لا اتصال — النص العام يقول "خلال 15 ثانية" وهو غير دقيق هنا
-            state.message.contains("NO_MEDIA") -> "لم يصل أي فيديو أو صوت من المذيع — قد يكون البث صوتياً فقط أو الشبكة ضعيفة"
             state.message.contains("TIMEOUT") -> "تعذر الاتصال بالبث خلال 15 ثانية — تحقق من الشبكة"
             state.message.contains("PERMISSION") -> "إذن الكاميرا/الميكروفون مطلوب للبث"
             state.message.contains("REGISTRATION") -> "تعذر تسجيل البث في الخادم"
@@ -200,15 +197,12 @@ fun YounesLiveStreamOverlay() {
                             Text("🎙", fontSize = 48.sp)
                         }
                         Text("بث صوتي مباشر", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("🎞 الجودة: صوت فقط — وفّر البيانات", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                        Text("🎞 الجودة: صوت فقط — وفّر البيانات", color = Color.Gray, fontSize = 12.sp)
                     }
                 }
             } else if (isBroadcaster && localVideo != null) {
                 LiveStreamVideoRenderer(track = localVideo, mirror = true, modifier = Modifier.fillMaxSize())
             } else if (!isBroadcaster && remoteVideo != null) {
-                LaunchedEffect(remoteVideo) {
-                    // Re-init or just trigger recomposition
-                }
                 LiveStreamVideoRenderer(track = remoteVideo, mirror = false, modifier = Modifier.fillMaxSize())
             } else {
                 // بطاقة انتظار قابلة للفعل — لا spinner صامت ولا شاشة سوداء
@@ -234,7 +228,7 @@ fun YounesLiveStreamOverlay() {
                         }
                         if (camErr == "PERMISSION" && isBroadcaster) {
                             Text("📷 إذن الكاميرا مرفوض", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("البث يعمل صوت فقط الآن. امنح الإذن لتشغيل الفيديو.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                            Text("البث يعمل صوت فقط الآن. امنح الإذن لتشغيل الفيديو.", color = Color.Gray, fontSize = 13.sp)
                             Button(
                                 onClick = { requestMediaPermissions() },
                                 colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.LiveContainer),
@@ -243,7 +237,7 @@ fun YounesLiveStreamOverlay() {
                             ) { Text("منح إذن الكاميرا والميكروفون") }
                         } else if (camErr == "UNAVAILABLE" && isBroadcaster) {
                             Text("📷 الكاميرا غير متاحة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("قد تكون مشغولة بتطبيق آخر أو غير مدعومة — أنت تبث صوت فقط.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                            Text("قد تكون مشغولة بتطبيق آخر أو غير مدعومة — أنت تبث صوت فقط.", color = Color.Gray, fontSize = 13.sp)
                             Button(
                                 onClick = { LiveStreamService.retryMedia(context) },
                                 colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.Cyan),
@@ -271,7 +265,7 @@ fun YounesLiveStreamOverlay() {
                                     shape = RoundedCornerShape(12.dp)
                                 ) { Text("🎞 صوت فقط", color = Color.White, fontSize = 12.sp) }
                             }
-                            TextButton(onClick = { LiveStreamService.stop(context) }) { Text("مغادرة", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            TextButton(onClick = { LiveStreamService.stop(context) }) { Text("مغادرة", color = Color.Gray) }
                         }
                         if (!hasCam() && isBroadcaster && camErr == null) {
                             TextButton(onClick = { requestMediaPermissions() }) { Text("طلب صلاحيات الكاميرا/الصوت", color = SovereignColors.Cyan, fontSize = 12.sp) }
@@ -380,8 +374,7 @@ fun YounesLiveStreamOverlay() {
                         LiveStreamVideoRenderer(
                             track = coHosts[0].second,
                             mirror = false,
-                            modifier = Modifier.size(110.dp, 150.dp).clip(RoundedCornerShape(10.dp)),
-                            overlay = true
+                            modifier = Modifier.size(110.dp, 150.dp).clip(RoundedCornerShape(10.dp))
                         )
                         if (isBroadcaster) {
                             Text(
@@ -412,8 +405,7 @@ fun YounesLiveStreamOverlay() {
                                         LiveStreamVideoRenderer(
                                             track = track,
                                             mirror = false,
-                                            modifier = Modifier.size(84.dp, 110.dp).clip(RoundedCornerShape(10.dp)),
-                                            overlay = true
+                                            modifier = Modifier.size(84.dp, 110.dp).clip(RoundedCornerShape(10.dp))
                                         )
                                         if (isBroadcaster) {
                                             Text(
@@ -703,7 +695,7 @@ fun YounesLiveStreamOverlay() {
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp),
-                        placeholder = { Text(if (replyTo != null) "رد..." else "أضف تعليقاً...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) },
+                        placeholder = { Text(if (replyTo != null) "رد..." else "أضف تعليقاً...", color = Color.White.copy(0.7f), fontSize = 13.sp) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = Color.White.copy(alpha = 0.2f),
@@ -984,7 +976,7 @@ private fun ViewersSheet(
                             Text(
                                 if (viewerCount == 0) "لا يوجد مشاهدون بعد — ادعُ أصدقاءك!"
                                 else "انضم $viewerCount مشاهِد — تظهر الأسماء فور تفاعلهم أو إضافتهم كأصدقاء",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp
+                                color = Color.Gray, fontSize = 13.sp
                             )
                         }
                     } else {
@@ -996,7 +988,7 @@ private fun ViewersSheet(
                             value = viewerQuery,
                             onValueChange = { viewerQuery = it },
                             modifier = Modifier.fillMaxWidth().height(48.dp),
-                            placeholder = { Text("بحث عن مشاهد...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) },
+                            placeholder = { Text("بحث عن مشاهد...", color = Color.Gray, fontSize = 12.sp) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -1031,7 +1023,7 @@ private fun ViewersSheet(
                                     }
                                     Column(Modifier.weight(1f)) {
                                         Text(name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(id, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(id, color = Color.Gray, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                     if (isBroadcaster) {
                                         // إدارة المذيع: كتم + طرد (كان عرض فقط بأيقونة Person)
@@ -1054,7 +1046,7 @@ private fun ViewersSheet(
                         if (viewerCount > viewerIds.size) {
                             Text(
                                 "+${viewerCount - viewerIds.size} مشاهِد آخر لم تصل بياناته بعد",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp
+                                color = Color.Gray, fontSize = 12.sp
                             )
                         }
                     }
@@ -1091,7 +1083,7 @@ private fun RaisedHandsSheet(
                     }
                     if (hands.isEmpty()) {
                         Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                            Text("لا توجد طلبات — سيظهر هنا من يرفع يده للصعود كمضيف مشارك", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                            Text("لا توجد طلبات — سيظهر هنا من يرفع يده للصعود كمضيف مشارك", color = Color.Gray, fontSize = 13.sp)
                         }
                     } else {
                         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1106,18 +1098,18 @@ private fun RaisedHandsSheet(
                                     }
                                     Column(Modifier.weight(1f)) {
                                         Text(h.userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(h.userId, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(h.userId, color = Color.Gray, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                     Button(
                                         onClick = { onApprove(h.userId) },
                                         colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.Cyan),
                                         shape = RoundedCornerShape(12.dp)
                                     ) { Text("قبول", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
-                                    TextButton(onClick = { onReject(h.userId) }) { Text("رفض", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+                                    TextButton(onClick = { onReject(h.userId) }) { Text("رفض", color = Color.Gray, fontSize = 12.sp) }
                                 }
                             }
                         }
-                        Text("الحد الأقصى 4 مضيفين مشاركين في نفس الوقت", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                        Text("الحد الأقصى 4 مضيفين مشاركين في نفس الوقت", color = Color.Gray, fontSize = 11.sp)
                     }
                 }
             }
@@ -1139,7 +1131,7 @@ private fun QualitySheet(
             ) {
                 Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("🎞 جودة المشاهدة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("التلقائي يختار الأفضل حسب شبكتك. اختر جودة منخفضة لتوفير البيانات وتقليل التقطيع.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text("التلقائي يختار الأفضل حسب شبكتك. اختر جودة منخفضة لتوفير البيانات وتقليل التقطيع.", color = Color.Gray, fontSize = 12.sp)
                     LiveQuality.entries.forEach { q ->
                         val selected = q == current
                         Row(
@@ -1215,14 +1207,14 @@ private fun HostControlsSheet(
                         onClick = onUnpin,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text("📌 إلغاء تثبيت التعليق", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    ) { Text("📌 إلغاء تثبيت التعليق", color = Color.Gray) }
                     HorizontalDivider(color = Color.White.copy(0.08f))
                     Text("🚫 الكلمات المحظورة (افصل بفاصلة)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     OutlinedTextField(
                         value = blockedWords,
                         onValueChange = onBlockedWordsChange,
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("مثال: spam, إعلان, xxx", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) },
+                        placeholder = { Text("مثال: spam, إعلان, xxx", color = Color.Gray, fontSize = 12.sp) },
                         singleLine = false,
                         minLines = 1,
                         maxLines = 3,
@@ -1260,7 +1252,7 @@ private fun InviteFromLiveSheet(
             ) {
                 Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("دعوة إلى البث", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("شارك الرابط أو ادعُ صديقاً عبر معرّف يونس", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text("شارك الرابط أو ادعُ صديقاً عبر معرّف يونس", color = Color.Gray, fontSize = 12.sp)
                     // رابط
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(0.08f)).clickable { onCopyLink() }.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("younes://livestream/$streamId", color = SovereignColors.Cyan, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -1295,7 +1287,7 @@ private fun InviteFromLiveSheet(
                         value = inviteRedId,
                         onValueChange = onRedIdChange,
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("مثال: 12345", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        placeholder = { Text("مثال: 12345", color = Color.Gray) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color.White.copy(0.06f), unfocusedContainerColor = Color.White.copy(0.04f), focusedBorderColor = SovereignColors.LiveContainer, unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White),
                         shape = RoundedCornerShape(12.dp)
@@ -1386,7 +1378,7 @@ private fun FloatingHeart(emoji: String) {
 }
 
 @Composable
-private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifier: Modifier, overlay: Boolean = false) {
+private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifier: Modifier) {
     // FIX: إصلاح الشاشة السوداء عند egl null + fallback + حماية init(null)
     val eglLive = LiveStreamRuntime.eglContext
     val egl = eglLive
@@ -1403,19 +1395,19 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
         return
     }
 
-    val context = LocalContext.current
-    val viewRef = remember(egl) {
-        SurfaceViewRenderer(context).apply {
-            init(egl, null)
-            setMirror(mirror)
-            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
-            setEnableHardwareScaler(true)
-            setZOrderMediaOverlay(overlay)
-        }
-    }
+    var viewRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
 
     AndroidView(
-        factory = { viewRef },
+        factory = { context ->
+            SurfaceViewRenderer(context).apply {
+                init(egl, null)
+                setMirror(mirror)
+                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                setEnableHardwareScaler(true)
+                setZOrderMediaOverlay(true)
+                viewRef = this
+            }
+        },
         update = { view ->
             view.setMirror(mirror)
         },
@@ -1423,11 +1415,11 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
     )
 
     DisposableEffect(track, viewRef) {
-        if (track != null) {
+        if (track != null && viewRef != null) {
             track.addSink(viewRef)
         }
         onDispose {
-            if (track != null) {
+            if (track != null && viewRef != null) {
                 track.removeSink(viewRef)
             }
         }
@@ -1435,7 +1427,7 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
 
     DisposableEffect(viewRef) {
         onDispose {
-            viewRef.release()
+            viewRef?.release()
         }
     }
 }
@@ -1475,7 +1467,7 @@ private fun LiveIncomingCard(state: LiveStreamUiState.Incoming) {
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text("انضم لمشاهدة البث المباشر والتفاعل", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                    Text("انضم لمشاهدة البث المباشر والتفاعل", color = Color.Gray, fontSize = 14.sp)
                 }
                 Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(

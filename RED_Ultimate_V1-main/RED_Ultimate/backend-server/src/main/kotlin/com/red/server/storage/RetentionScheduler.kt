@@ -14,10 +14,6 @@ import java.time.temporal.ChronoUnit
  * Bounded, observable data lifecycle cleanup. This is safer than one massive
  * DELETE: each run removes a capped batch, preserving database responsiveness.
  * Legal-hold exports must be performed before changing retention values.
- *
- * Config source of truth: application.yml `red.retention.*` (see `red.retention`
- * block). Legacy `system_settings` keys (`retention.*_days`) are deprecated —
- * COMMENT only, do not read them here and do not change production values.
  */
 @Component
 class RetentionScheduler(
@@ -26,9 +22,6 @@ class RetentionScheduler(
     @Value("\${red.retention.audit-days:365}") private val auditDays: Long,
     @Value("\${red.retention.health-days:90}") private val healthDays: Long,
     @Value("\${red.retention.telemetry-days:90}") private val telemetryDays: Long,
-    @Value("\${red.retention.notifications-days:90}") private val notificationsDays: Long,
-    @Value("\${red.retention.call-history-days:365}") private val callHistoryDays: Long,
-    @Value("\${red.retention.backup-days:180}") private val backupDays: Long,
     @Value("\${red.retention.batch-size:10000}") private val batchSize: Int
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -40,12 +33,9 @@ class RetentionScheduler(
         val audit = deleteBatch("admin_audit_log", "created_at", Instant.now().minus(auditDays.coerceAtLeast(30), ChronoUnit.DAYS), safeBatch)
         val health = deleteBatch("system_health", "last_check_at", Instant.now().minus(healthDays.coerceAtLeast(7), ChronoUnit.DAYS), safeBatch)
         val telemetryDeleted = telemetry.deleteByReceivedAtBefore(Instant.now().minus(telemetryDays.coerceAtLeast(7), ChronoUnit.DAYS))
-        val notifications = deleteBatch("user_notifications", "created_at", Instant.now().minus(notificationsDays.coerceAtLeast(7), ChronoUnit.DAYS), safeBatch)
-        val callHistory = deleteBatch("call_history", "started_at", Instant.now().minus(callHistoryDays.coerceAtLeast(30), ChronoUnit.DAYS), safeBatch)
-        val backups = deleteBatch("backup_history", "started_at", Instant.now().minus(backupDays.coerceAtLeast(30), ChronoUnit.DAYS), safeBatch)
         log.info(
-            "Retention completed: adminAudit={}, health={}, telemetry={}, notifications={}, callHistory={}, backups={}",
-            audit, health, telemetryDeleted, notifications, callHistory, backups
+            "Retention completed: adminAudit={}, health={}, telemetry={}",
+            audit, health, telemetryDeleted
         )
     }
 

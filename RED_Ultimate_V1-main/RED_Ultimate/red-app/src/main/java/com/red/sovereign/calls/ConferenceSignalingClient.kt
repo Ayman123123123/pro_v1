@@ -17,7 +17,7 @@ import okhttp3.WebSocketListener
 /**
  * رسالة إشارات المؤتمر — تُرسل وتُستقبل عبر WebSocket مع media-sfu.
  * النوع "JOIN", "PRODUCE", "CONSUME", "ICE", "LEAVE", "ROOM_STATE", "PARTICIPANT_LEFT",
- * "PRODUCER_READY", "CONSUMER_READY", "LIVE_START", "LIVE_STOP"
+ * "PRODUCER_READY", "CONSUMER_READY", "LIVE_START", "LIVE_STOP", "LOBBY"
  */
 @Serializable
 data class ConferenceSignal(
@@ -97,18 +97,6 @@ class ConferenceSignalingClient(
     @Volatile
     private var activeRoomId: String = ""
 
-    // Exponential backoff reconnection
-    private var reconnectAttempt = 0
-    private var reconnectJob: kotlinx.coroutines.Job? = null
-    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-
-    companion object {
-        private const val TAG = "ConferenceSignaling"
-        private const val MAX_RECONNECT_ATTEMPTS = 10
-        private const val BASE_RECONNECT_DELAY_MS = 1000L
-        private const val MAX_RECONNECT_DELAY_MS = 30000L
-    }
-
     val isConnected: Boolean get() = connected && socket != null
 
     fun reconnect(roomId: String) {
@@ -118,9 +106,6 @@ class ConferenceSignalingClient(
         val oldSocket = socket
         socket = null
         runCatching { oldSocket?.cancel() }
-        reconnectAttempt = 0
-        reconnectJob?.cancel()
-        reconnectJob = null
         connect(roomId)
     }
 
@@ -161,9 +146,6 @@ class ConferenceSignalingClient(
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
                     connected = true
-                    reconnectAttempt = 0
-                    reconnectJob?.cancel()
-                    reconnectJob = null
                     Log.d(TAG, "onOpen: conference signaling connected, flushing queued signals")
                     pendingSignals.flush { signalJson ->
                         runCatching { webSocket.send(signalJson) }.getOrDefault(false)
@@ -200,6 +182,12 @@ class ConferenceSignalingClient(
                                 val waiting = (0 until waitingCount).mapNotNull { signal.payload["waiting_user_$it"] }.sorted()
                                 listener.onLobbyState(signal.payload["lobby"] == "true", waiting)
                             }
+                            "LOBBY" -> {
+                                val lobbyState = signal.payload["state"].orEmpty()
+                                listener.onLobbyState(lobbyState, signal.payload["waiting"]?.toIntOrNull() ?: 0)
+                                // الإطار يُمرَّر أيضًا كما كان: بعض الواجهات تقرأ onSignal مباشرة.
+                                listener.onSignal(signal)
+                            }
                             "PARTICIPANT_LEFT" -> {
                                 signal.payload["userId"]?.let { listener.onParticipantLeft(it) }
                             }
@@ -232,7 +220,6 @@ class ConferenceSignalingClient(
                     socket = null
                     Log.w(TAG, "onClosed code=$code reason=$reason")
                     listener.onDisconnected()
-                    scheduleReconnect(roomId)
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -241,28 +228,9 @@ class ConferenceSignalingClient(
                     socket = null
                     Log.e(TAG, "onFailure ${t.javaClass.simpleName}: ${t.message}")
                     listener.onDisconnected()
-                    scheduleReconnect(roomId)
                 }
             }
         )
-    }
-
-    private fun scheduleReconnect(roomId: String) {
-        reconnectJob?.cancel()
-        if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-            Log.e(TAG, "Max reconnect attempts reached for room $roomId, giving up")
-            listener.onError("MAX_RECONNECT_ATTEMPTS_REACHED")
-            return
-        }
-        reconnectAttempt++
-        val delay = minOf(BASE_RECONNECT_DELAY_MS * (1L shl (reconnectAttempt - 1)), MAX_RECONNECT_DELAY_MS)
-        val jitter = (delay * 0.1 * (0..100).random()).toLong()
-        val totalDelay = delay + jitter
-        Log.d(TAG, "Scheduling reconnect attempt $reconnectAttempt for room $roomId in ${totalDelay}ms")
-        reconnectJob = scope.launch {
-            kotlinx.coroutines.delay(totalDelay)
-            if (!connected) connect(roomId)
-        }
     }
 
     fun send(signal: ConferenceSignal) {
@@ -475,124 +443,6 @@ class ConferenceSignalingClient(
             roomId = roomId,
             userId = userId,
             payload = mapOf("emoji" to emoji)
-        )
-    )
-
-    // ───────────── Reactions / Polls ─────────────
-
-    /** إرسال رد فعل (إيموجي) */
-    fun sendConferenceReaction(roomId: String, userId: String, emoji: String) = send(
-        ConferenceSignal(
-            type = "REACTION",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("emoji" to emoji)
-        )
-    )
-
-    /** إنشاء استطلاع رأي */
-    fun createPoll(roomId: String, userId: String, question: String, options: List<String>, durationSeconds: Int = 60) = send(
-        ConferenceSignal(
-            type = "POLL_CREATE",
-            roomId = roomId,
-            userId = userId,
-            payload = buildMap {
-                put("question", question)
-                put("options", options.joinToString(","))
-                put("duration", durationSeconds.toString())
-            }
-        )
-    )
-
-    /** التصويت في استطلاع رأي */
-    fun votePoll(roomId: String, userId: String, pollId: String, optionIndex: Int) = send(
-        ConferenceSignal(
-            type = "POLL_VOTE",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("pollId" to pollId, "optionIndex" to optionIndex.toString())
-        )
-    )
-
-    /** إنهاء استطلاع رأي */
-    fun endPoll(roomId: String, userId: String, pollId: String) = send(
-        ConferenceSignal(
-            type = "POLL_END",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("pollId" to pollId)
-        )
-    )
-
-    // ───────────── Breakout Rooms ─────────────
-    
-    /** إنشاء غرفة انقسام جديدة */
-    fun createBreakoutRoom(roomId: String, userId: String, name: String) = send(
-        ConferenceSignal(
-            type = "BREAKOUT_CREATE",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("name" to name)
-        )
-    )
-    
-    /** تعيين مشارك لغرفة انقسام */
-    fun assignBreakoutRoom(roomId: String, userId: String, breakoutRoomId: String, targetUserId: String) = send(
-        ConferenceSignal(
-            type = "BREAKOUT_ASSIGN",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("breakoutRoomId" to breakoutRoomId, "targetUserId" to targetUserId)
-        )
-    )
-    
-    /** إزالة مشارك من غرفة انقسام */
-    fun removeFromBreakoutRoom(roomId: String, userId: String, breakoutRoomId: String, targetUserId: String) = send(
-        ConferenceSignal(
-            type = "BREAKOUT_REMOVE",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("breakoutRoomId" to breakoutRoomId, "targetUserId" to targetUserId)
-        )
-    )
-    
-    /** حذف غرفة انقسام */
-    fun deleteBreakoutRoom(roomId: String, userId: String, breakoutRoomId: String) = send(
-        ConferenceSignal(
-            type = "BREAKOUT_DELETE",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("breakoutRoomId" to breakoutRoomId)
-        )
-    )
-    
-    /** تعيين مؤقت لغرفة انقسام */
-    fun setBreakoutTimer(roomId: String, userId: String, breakoutRoomId: String, minutes: Int) = send(
-        ConferenceSignal(
-            type = "BREAKOUT_TIMER",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("breakoutRoomId" to breakoutRoomId, "minutes" to minutes.toString())
-        )
-    )
-    
-    /** فتح جميع غرف الانقسام (إعادة المشاركين للغرفة الرئيسية) */
-    fun openAllBreakoutRooms(roomId: String, userId: String) = send(
-        ConferenceSignal(
-            type = "BREAKOUT_OPEN_ALL",
-            roomId = roomId,
-            userId = userId,
-            payload = emptyMap()
-        )
-    )
-    
-    /** طلب قائمة غرف الانقسام */
-    fun requestBreakoutRooms(roomId: String, userId: String) = send(
-        ConferenceSignal(
-            type = "BREAKOUT_LIST",
-            roomId = roomId,
-            userId = userId,
-            payload = emptyMap()
         )
     )
 

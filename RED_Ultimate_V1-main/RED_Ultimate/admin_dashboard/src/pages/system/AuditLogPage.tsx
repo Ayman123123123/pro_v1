@@ -3,13 +3,13 @@ import { Download, Search, Eye } from 'lucide-react';
 import { useAuditLog } from '@/api/queries';
 import { formatRelativeTime } from '@/utils';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/Button';
-import { SearchInput } from '@/components/ui/SearchInput';
-import { Select } from '@/components/ui/Select';
-import { DateRangePicker } from '@/components/ui/DateRangePicker';
-import { DataTable } from '@/components/ui/DataTable';
-import { Pagination } from '@/components/ui/Pagination';
-import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/button';
+import { SearchInput } from '@/components/ui/search-input';
+import { Select } from '@/components/ui/select';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { DataTable } from '@/components/ui/data-table';
+import { Pagination } from '@/components/ui/pagination';
+import { Badge } from '@/components/ui/badge';
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All Categories' },

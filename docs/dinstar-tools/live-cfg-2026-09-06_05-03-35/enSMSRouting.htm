@@ -1,0 +1,396 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>SMS Routing Rule</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="javascript" type="text/javascript">
+var totalRuleCount = 32;
+
+function MM_callJS()
+{
+	var obj,i,index;
+	var totalRule = new Array(totalRuleCount);
+	var text = '{"SMSRouteList":[{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""},{"enable":0,"dest_num":"","src_mode":0,"dest_value":255,"prefix_to_add":"","digit_delete":""}]}';
+	obj = eval('('+text+')');
+	totalRule = obj.SMSRouteList;
+	for(i=0; i<totalRuleCount; i++)
+	{
+		if(totalRule[i].enable == true)
+		{
+			document.getElementById("Index"+i).checked = true;
+		}
+		document.getElementById("DestNum"+i).value =totalRule[i].dest_num;
+		document.getElementById("RuleList"+i).value = totalRule[i].src_mode;
+		document.getElementById("RouteDest"+i).value = totalRule[i].dest_value;
+		document.getElementById("Prefix"+i).value = totalRule[i].prefix_to_add;
+		document.getElementById("Delete"+i).value = totalRule[i].digit_delete;
+	}
+	
+	for(i=0; i<totalRuleCount; i++)
+	{
+		check_box(i);
+	}
+}
+
+function check_box(index)
+{
+	if(document.getElementById("Index"+index).checked == false)
+	{
+		document.getElementById("DestNum"+index).disabled = true;
+		document.getElementById("Prefix"+index).disabled = true;
+		document.getElementById("Delete"+index).disabled = true;
+	}
+	else
+	{	
+		document.getElementById("DestNum"+index).disabled = false;
+		document.getElementById("Prefix"+index).disabled = false;
+		document.getElementById("Delete"+index).disabled = false;
+	}
+}
+
+function SelectAll()
+{
+	var i=0;
+	
+	if(document.getElementById("IndexAll").checked == true)
+	{
+		for(i=0; i<totalRuleCount; i++)
+		{
+			document.getElementById("Index"+i).checked = true;
+		}
+	}
+	else
+	{
+		for(i=0; i<totalRuleCount; i++)
+		{
+			document.getElementById("Index"+i).checked = false;
+		}		
+	}
+	
+	for(i=0; i<totalRuleCount; i++)
+	{
+		check_box(i);
+	}
+}
+
+function SelectCheck()
+{
+	var i;
+	var mark = 0;
+
+	for (i = 0; i <totalRuleCount;i++)
+	{
+		if(true == document.getElementById("Index" + i).checked)
+		{
+			mark=1;
+			break;
+		}
+	}
+	
+	if(0==mark)
+	{
+		alert("Please Select Port!");
+		return false;
+	}
+}
+
+function CopyDestNum()
+{
+	var i;
+	
+	if(SelectCheck() == false)
+	{
+		return;
+	}
+	
+	for(i=0; i<totalRuleCount; i++)
+	{
+		if(document.getElementById("Index"+i).checked == true
+		&& document.getElementById("DestNumAll").value.length != 0)
+		{
+			document.getElementById("DestNum"+i).value = document.getElementById("DestNumAll").value;
+		}
+	}
+}
+
+function CopySource()
+{
+	var i;
+	
+	if(SelectCheck() == false)
+	{
+		return;
+	}
+	
+	for(i=0; i<totalRuleCount; i++)
+	{
+		if(document.getElementById("Index"+i).checked == true)
+		{
+			document.getElementById("RuleList"+i).value = document.getElementById("RuleListAll").value;
+		}
+	}
+}
+
+function CopyDest()
+{
+	var i;
+	
+	if(SelectCheck() == false)
+	{
+		return;
+	}
+	
+	for(i=0; i<totalRuleCount; i++)
+	{
+		if(document.getElementById("Index"+i).checked == true)
+		{
+			document.getElementById("RouteDest"+i).value = document.getElementById("RouteDestAll").value;
+		}
+	}
+}
+
+function CopyPrefixAdd()
+{
+	var i;
+	
+	if(SelectCheck() == false)
+	{
+		return;
+	}
+	
+	for(i=0; i<totalRuleCount; i++)
+	{
+		if(document.getElementById("Index"+i).checked == true
+		&& document.getElementById("PrefixAll").value.length != 0)
+		{
+			document.getElementById("Prefix"+i).value = document.getElementById("PrefixAll").value;
+		}
+	}
+}
+
+function CopyDigitDel()
+{
+	var i;
+	
+	if(SelectCheck() == false)
+	{
+		return;
+	}
+	
+	for(i=0; i<totalRuleCount; i++)
+	{
+		if(document.getElementById("Index"+i).checked == true
+		&& document.getElementById("DeleteAll").value.length != 0)
+		{
+			document.getElementById("Delete"+i).value = document.getElementById("DeleteAll").value;
+		}
+	}
+}
+
+function form_check()
+{	
+	var i=0;
+	var re1 = /^\d{0,2}$/, re2 = /^((\+\d{0,14})|(\d{0,15}))$/;
+	var str, pos, temp;
+	for(i=0; i<totalRuleCount; i++)
+	{
+		if(document.getElementById("Index"+i).checked == true)
+		{
+			//å¤æ­ç®æ å·ç æ ¼å¼
+			if(document.getElementById("DestNum"+i).value.length == 0
+			|| document.getElementById("DestNum"+i).value.length >31)
+			{
+				alert("'Dest Num' is incorrect, input length must be less than 31!"); 
+				document.getElementById("DestNum"+i).select();
+				return false;
+			}
+			
+			if(document.getElementById("Delete"+i).value > 31)
+			{
+				alert("'Digits to be Deleted' is incorrect, input value must be less than 31!"); 				
+				return false;
+			}
+			
+			if(document.getElementById("Prefix"+i).value.length  > 15)
+			{
+				alert("'Prefix to Add' is incorrect, input length must be less than 15!"); 				
+				return false;
+			}
+			
+			//å¤æ­å é¤å·ç ä½æ°
+			if(re1.test(document.getElementById("Delete"+i).value) == false)
+			{
+				alert("Digits to be deleted' is incorrect!");
+				document.getElementById("Delete"+i).select();
+				return false;
+			}
+			
+			if(document.getElementById("DestNum"+i).value.length < document.getElementById("Delete"+i).value)
+			{
+				alert("Digits to be deleted should be less than length of Destination Number!");
+				return false;
+			}
+			
+			//å¤æ­æ·»å å·ç åç¼
+			if(re2.test(document.getElementById("Prefix"+i).value) == false)
+			{
+				alert("Prefix to Add' is incorrect!");
+				document.getElementById("Prefix"+i).select();
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+function check_callNumber(obj) {
+    obj.value = obj.value.replace(/[\u4E00-\u9FA5]/g,"")
+}
+
+</script>
+</head>
+<body onLoad="MM_callJS()">
+<form action="/goform/WIASMSRouteCfg" method="post" name="WIAIMSIRule" id="WIAIMSIRule">
+ <table width="1000px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left" width="7" height="24"></td>
+   <td>SMS Routing Rule</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+  <table width="1000px" align="center" class="content" >
+ <tr class="thead" align="center" >
+	<td width="7%"></td>
+	<td width="10%">Source</td>
+	<td width="30%">Destination Number</td>
+	<td width="22%">Destination Port</td>
+	<td width="15%">Digits to be Deleted</td>
+	<td width="15%">Prefix to Add</td>
+ </tr>
+ <script language="javascript" type="text/javascript">
+	var i,j;
+	for(i=0; i<totalRuleCount; i++)
+	{
+		document.write("<tr id='trRule"+i+"' align='center' style=font-size:13px;>"
+		+"<td>"
+        +"<input name='Index"+i+"' type='checkbox' id='Index"+i+"'  onClick='check_box("+i+")'>"
+        +"</td>");
+		
+		document.write("<td>"
+        +"<select name='RuleList"+i+"' class='list' id='RuleList"+i+"' >"
+			+"<option id='SourceMode"+i+"' value='0'>SMPP</option>"
+			+"<option id='SourceMode"+i+"' value='1'>API</option>"
+		+"</select>"
+        +"</td>");
+		
+		document.write("<td>"
+		+"<input type='text' class='text' id='DestNum"+i+"' name='DestNum"+i+"' maxlength='31' size='25' value='' oninput='check_callNumber(this)'>"
+		+"</td>");
+		
+		document.write("<td>"
+		 +"<select name='RouteDest"+i+"' class='alist' id='RouteDest"+i+"'>"	
+   		 +"<option value='255' id='idRouteDestAny'>Any</option>"											
+		 +"<optgroup label='Port'>");
+		
+		for(j=0; j< 8; j++)
+		{
+			document.write("<option value='"+j+"' id='idIndex"+j+"'>"+"port-"+j+"</option>");
+		}
+		
+		document.write("</optgroup>"
+		+"<optgroup label='Port group'>"
+		+"<option value='256' id='idDestPortGroup256'>port-group-0 &lt;default&gt;</option>"
+		+"</optgroup></select>");
+		
+		document.write("</td>"
+		+"<td>"
+		+"<input type='text' class='text' id='Delete"+i+"' name='Delete"+i+"' maxlength='2' size='8' value=''/>"
+		+"</td>"
+        +"<td>"
+		+"<input type='text' class='text' id='Prefix"+i+"' name='Prefix"+i+"' maxlength='15' size='8' value=''/>"
+        +"</td>"
+		+"</tr>");
+	}
+ </script>
+	<tr align="center">
+		<td>
+			<input name="IndexAll" type="checkbox" id="IndexAll" onClick="SelectAll()"/>all
+		</td>
+		<td>
+			<input name="SourceCpy" id="SourceCpy"  class="button" type="button" value="copy" onClick="CopySource()"/>
+		</td>
+		<td>
+			<input name="DestNumCpy" id="DestNumCpy"  class="button" type="button" value="copy" onClick="CopyDestNum()"/>
+		</td>
+		<td>
+			<input name="DestCpy" id="DestCpy"  class="button" type="button" value="copy" onClick="CopyDest()"/>
+		</td>
+		<td>
+			<input name="DigitDelCpy" id="DigitDelCpy"  class="button" type="button" value="copy" onClick="CopyDigitDel()"/>
+		</td>
+		<td>
+			<input name="PrefixAddCpy" id="PrefixAddCpy"  class="button" type="button" value="copy" onClick="CopyPrefixAdd()"/>
+		</td>
+	</tr>
+	<tr align="center">
+		<td></td>
+		<td>
+			<select name='RuleListAll' class='list' id='RuleListAll' >
+			  <option id='SourceModeAll' value='0'>SMPP</option>
+			  <option id='SourceModeAll' value='1'>API</option>
+			</select>
+		</td>
+		<td>
+			<input type='text' class='text' id='DestNumAll' name='DestNumAll' maxlength='36' size='25' value='' oninput="check_callNumber(this)">
+		</td>
+		<td>
+			<select name='RouteDestAll' class='alist' id='RouteDestAll' >
+				<option value="255" id='idRouteDestAny'>Any</option>		
+					<optgroup label="Port">
+						<script language="JavaScript" type="text/JavaScript">
+							var i;
+							for(i=0; i< "8"; i++)
+							{
+									document.write("<option value='"+i+"' id='idIndex"+i+"'>"+"port-"+i+"</option>");
+							}		
+			
+						</script>   
+					</optgroup>
+					<optgroup label="Port Group">
+						<option value='256' id='idDestPortGroup256'>port-group-0 &lt;default&gt;</option>
+					</optgroup>
+			</select>
+		</td>
+		<td>
+			<input type='text' class='text' id='DeleteAll' size='8' value=''/>
+		</td>
+		<td>
+			<input type='text' class='text' id='PrefixAll' size='8' value=''/>
+		</td>
+	</tr>
+ </table>
+  
+ <p align="center">
+  <input class="button" id="ok" name="ok" type="submit" value="Save" onClick="return form_check();">
+ </p>
+ <p>
+<table  width="540px" align="center" cellpadding="0" cellspacing="0" style=font-size:12px;>
+	<tr>
+		<td width="30%"> </td>
+		<td>&nbsp;</td>
+	</tr>
+	<tr>
+		<td align="right" class="notes">NOTE:&nbsp;</td>
+		<td class="notes">1.Use '|'separates the destination number.</td>
+	</tr>
+</table>
+</p>
+
+</form>
+</body>
+</html>
+

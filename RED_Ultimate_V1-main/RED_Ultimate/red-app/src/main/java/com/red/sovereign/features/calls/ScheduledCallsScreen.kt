@@ -1,6 +1,5 @@
 package com.red.sovereign.features.calls
 
-import androidx.compose.material3.MaterialTheme
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
@@ -120,7 +119,7 @@ fun ScheduledCallsScreen(
                     }
                 }
                 if (past.isNotEmpty()) {
-                    Text("منتهية (${past.size})", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp))
+                    Text("منتهية (${past.size})", color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp))
                     LazyColumn(
                         modifier = Modifier.fillMaxSize().padding(padding),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -223,7 +222,7 @@ private fun ScheduledCallRow(
                 Spacer(Modifier.height(4.dp))
                 Text("$dateStr • $timeStr$recurrenceStr", color = if (isPast) Color.Gray else Color.LightGray, fontSize = 12.sp)
                 if (call.invitees.isNotEmpty()) {
-                    Text("${call.invitees.size} مشارك", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    Text("${call.invitees.size} مشارك", color = Color.Gray, fontSize = 11.sp)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -329,6 +328,6 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Icon(icon, null, tint = Color.Gray, modifier = Modifier.size(64.dp))
         Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White)
-        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(horizontal = 32.dp))
+        Text(subtitle, color = Color.Gray, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(horizontal = 32.dp))
     }
 }

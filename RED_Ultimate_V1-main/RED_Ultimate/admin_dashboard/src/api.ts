@@ -241,9 +241,13 @@ export function loginFailureMessage(status: number | undefined, body: Record<str
   if (status === 502 || status === 503 || status === 504) {
     return 'Nginx لا يجد الباك اند بعد. انتظر حتى يصبح /health أخضر ثم أعد المحاولة.';
   }
+  if (status === 500) {
+    // ✅ 2026-09-23: رسالة 500 التشخيصية — 500 هنا يعني بروكسي بلا باكد
+    return 'لا يوجد خادم خلفي على المنفذ 8088. حدّث الصفحة قسرياً (Ctrl+Shift+R)؛ وإن كنت تشغّل المشروع محلياً فاسحب آخر تحديث للمستودع ثم: npm run dev (أو npm run mock).';
+  }
   const code = String(body?.error || body?.message || '');
   if (status === 401 || /INVALID_CREDENTIALS/i.test(code)) {
-    return 'بيانات الدخول مرفوضة. استخدم RED_ADMIN_USERNAME و RED_ADMIN_PASSWORD من ملف RED_Ultimate/.env';
+    return 'بيانات الدخول مرفوضة. استخدم admin / admin123 (أو RED_ADMIN_USERNAME من ملف .env)';
   }
   if (status === 403 || status === 423) {
     return 'الحساب موجود لكنه غير معتمد أو محظور. ادخل بحساب المسؤول من .env';
@@ -1118,4 +1122,38 @@ export async function deleteAdminPost(postId: string) {
 }
 export async function restoreAdminPost(postId: string) {
   return writeJson(await apiFetch(`/api/admin/social/posts/${postId}/restore`, { method: 'POST' }));
+}
+
+// ✅ 2026-09-23: أُعيد تنفيذ عقد الحضور اللحظي (استُعيد مع OnlinePresenceCard من
+// الفرع الأضخم وكان تعريفه ضاع مع نسخة api.ts القديمة). أساسي: /api/admin/presence/online
+// — وإن فشل: مشتق من قائمة المستخدمين (isOnline) بمصدر fallback موثق.
+export interface PresenceUser {
+  id: string;
+  displayName?: string;
+  username?: string;
+  avatarUrl?: string;
+  lastSeen?: number;
+}
+export interface PresenceSnapshot {
+  users: PresenceUser[];
+  count: number;
+  source: 'presence' | 'fallback';
+  note: string;
+}
+export async function getPresenceOnlineWithFallback(): Promise<PresenceSnapshot> {
+  try {
+    const data = await writeJson(await apiFetch('/api/admin/presence/online'));
+    const users = Array.isArray((data as { users?: PresenceUser[] }).users)
+      ? (data as { users: PresenceUser[] }).users
+      : [];
+    return { users, count: typeof (data as { count?: number }).count === 'number' ? (data as { count: number }).count : users.length, source: 'presence', note: '' };
+  } catch {
+    try {
+      const page = await getUsers({ page: 0, size: 50, status: 'APPROVED' });
+      const online = (page.content || []).filter((u) => (u as unknown as { isOnline?: boolean }).isOnline).slice(0, 12);
+      return { users: online as PresenceUser[], count: online.length, source: 'fallback', note: 'مصدر بديل: قائمة المستخدمين (خدمة الحضور غير متاحة)' };
+    } catch {
+      return { users: [], count: 0, source: 'fallback', note: 'تعذّر جلب الحضور — الخادم غير متصل' };
+    }
+  }
 }

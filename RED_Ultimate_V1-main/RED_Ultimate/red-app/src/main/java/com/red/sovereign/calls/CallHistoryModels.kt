@@ -30,47 +30,7 @@ data class CallHistoryItem(
     /** هل كانت هناك مشاركة شاشة */
     val hadScreenShare: Boolean = false,
     /** هل تم تسجيل المكالمة */
-    val wasRecorded: Boolean = false,
-    /** مسار التسجيل إن وجد */
-    val recordingPath: String? = null,
-    /** مقاييس الجودة التفصيلية */
-    val avgRttMs: Long = 0L,
-    val avgPacketLossPct: Float = 0f,
-    val avgBitrateKbps: Long = 0L,
-    /** حذف ناعم (hide for me/everyone) */
-    val deletedForMe: Boolean = false,
-    val deletedForEveryone: Boolean = false,
-    /** إصدار للتزامن */
-    val version: Long = 1,
-    val updatedAt: String? = null
-)
-
-/** استجابة التزامن مع الترقيم القائم على المؤشر */
-@Serializable
-data class CallHistorySyncResponse(
-    val items: List<CallHistoryItem>,
-    val nextCursor: String?,
-    val hasMore: Boolean,
-    val serverVersion: Long
-)
-
-/** طلب التزامن */
-@Serializable
-data class CallHistorySyncRequest(
-    val cursor: String? = null,
-    val limit: Int = 50,
-    val sinceVersion: Long = 0,
-    val filter: CallHistoryFilter = CallHistoryFilter()
-)
-
-@Serializable
-data class CallHistoryFilter(
-    val types: List<String> = emptyList(),           // VOICE, VIDEO, GROUP, CONFERENCE, LIVE, SPACE
-    val directions: List<String> = emptyList(),      // OUTGOING, INCOMING
-    val statuses: List<String> = emptyList(),        // ANSWERED, MISSED, REJECTED, FAILED
-    val dateFrom: String? = null,                    // ISO-8601
-    val dateTo: String? = null,                      // ISO-8601
-    val includeDeleted: Boolean = false
+    val wasRecorded: Boolean = false
 )
 
 /** Accepts epoch millis, epoch seconds, or ISO-8601 from the backend Instant serializer. */

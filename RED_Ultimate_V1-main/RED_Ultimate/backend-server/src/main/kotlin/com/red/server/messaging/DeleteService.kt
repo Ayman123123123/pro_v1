@@ -12,17 +12,10 @@ import java.time.Instant
 
 @Service
 class DeleteService(private val mongo: MongoTemplate) {
-    fun deleteForEveryone(userRedId: String, messageId: String): Boolean {
-        val query = Query(Criteria.where("uuid").`is`(messageId).and("senderId").`is`(userRedId).and("deletedForEveryoneAt").`is`(null))
-        val message = mongo.findOne(query, MessageDocument::class.java) ?: return false
+    fun deleteForEveryone(messageId: String, senderId: String): MessageDocument? {
+        val query = Query(Criteria.where("uuid").`is`(messageId).and("senderId").`is`(senderId).and("deletedForEveryoneAt").`is`(null))
+        val message = mongo.findOne(query, MessageDocument::class.java) ?: return null
         mongo.updateFirst(query, Update().set("deletedForEveryoneAt", Instant.now()).set("payload", byteArrayOf()), MessageDocument::class.java)
-        return true
-    }
-
-    fun deleteForMe(userRedId: String, messageId: String): Boolean {
-        val query = Query(Criteria.where("uuid").`is`(messageId).and("receiverId").`is`(userRedId).and("deletedForMeAt").`is`(null))
-        val message = mongo.findOne(query, MessageDocument::class.java) ?: return false
-        mongo.updateFirst(query, Update().set("deletedForMeAt", Instant.now()), MessageDocument::class.java)
-        return true
+        return message.copy(deletedForEveryoneAt = Instant.now())
     }
 }

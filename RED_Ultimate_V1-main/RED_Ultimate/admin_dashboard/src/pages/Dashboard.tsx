@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+// ✅ FIX 2026-09-22: المسارات كانت lowercase (card/badge/button/select) —
+// على Linux (حساس للحالة) تفشل الـ resolution في وقت التشغيل → الصفحة تنهار.
 import {
   Card,
   CardContent,
@@ -98,7 +100,7 @@ function MetricCard({ title, value, change, icon, iconColor, trend = 'neutral', 
             <p className="text-3xl font-bold tracking-tight">{value}</p>
             {change !== undefined && (
               <div className={cn('flex items-center gap-1 text-sm', trendColor)}>
-                <TrendIcon className="h-4 w-4" />
+                {TrendIcon && <TrendIcon className="h-4 w-4" />}
                 <span>{change >= 0 ? '+' : ''}{change.toFixed(1)}%</span>
                 <span className="text-muted-foreground">vs last period</span>
               </div>
@@ -250,7 +252,7 @@ export function Dashboard() {
           <p className="text-muted-foreground">{t('dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
-          <Select value={timeRange} onValueChange={setTimeRange}>
+          <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder={t('common.select')} />
               <ChevronDown className="h-4 w-4 opacity-50" />
@@ -654,14 +656,37 @@ async function fetchChartData(timeRange: string) {
   return response.json();
 }
 
-async function fetchSystemHealth() {
+async function fetchSystemHealth(): Promise<SystemHealthData[]> {
   const response = await fetch('/api/admin/system/health');
   if (!response.ok) throw new Error('Failed to fetch system health');
-  return response.json();
+  const json: unknown = await response.json();
+  // ✅ FIX: الخادم يرجع كائن (Map) وليس مصفوفة — .map() كان سيعطي TypeError وقت التشغيل
+  if (Array.isArray(json)) return json as SystemHealthData[];
+  if (json && typeof json === 'object') {
+    const obj = json as Record<string, unknown>;
+    for (const key of ['components', 'systems', 'health', 'data']) {
+      if (Array.isArray(obj[key])) return obj[key] as SystemHealthData[];
+    }
+    // كائن مسطح: { database: {...}, redis: {...} } → نحوله لمصفوفة
+    return Object.entries(obj).map(([name, val]) => ({
+      component: name,
+      status: (val as Record<string, unknown>)?.status === 'UP' || (val as Record<string, unknown>)?.healthy === true ? 'healthy' : 'degraded',
+    }));
+  }
+  return [];
 }
 
-async function fetchAlerts() {
+async function fetchAlerts(): Promise<AlertData[]> {
   const response = await fetch('/api/admin/alerts?limit=50');
   if (!response.ok) throw new Error('Failed to fetch alerts');
-  return response.json();
+  const json: unknown = await response.json();
+  // ✅ FIX: نفس الحماية — نقبل مصفوفة أو كائن مغلف { alerts: [...] }
+  if (Array.isArray(json)) return json as AlertData[];
+  if (json && typeof json === 'object') {
+    const obj = json as Record<string, unknown>;
+    if (Array.isArray(obj['alerts'])) return obj['alerts'] as AlertData[];
+    if (Array.isArray(obj['data'])) return obj['data'] as AlertData[];
+  }
+  return [];
 }
+export default Dashboard;

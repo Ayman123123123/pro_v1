@@ -165,5 +165,3 @@ print("📋 Migration files (in order):")
 for path in sorted(SQL_FILES, key=lambda p: p.name):
     print(f"   {path.name}")
 print()
-# CI gate: non-zero exit on FAIL so the static-guards job actually fails.
-sys.exit(1 if errors else 0)

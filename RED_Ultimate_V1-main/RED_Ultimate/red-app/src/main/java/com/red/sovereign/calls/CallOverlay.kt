@@ -1,6 +1,5 @@
 package com.red.sovereign.calls
 
-import androidx.compose.material3.MaterialTheme
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -8,7 +7,6 @@ import android.os.Build
 import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,19 +15,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -43,7 +37,6 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PhoneInTalk
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
@@ -65,7 +58,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-
+import com.red.sovereign.ui.theme.YounesEmerald
+import com.red.sovereign.ui.theme.YounesVoid
 import android.widget.Toast
 
 /**
@@ -143,27 +137,10 @@ fun YounesCallOverlay() {
         permissions.launch(needed.toTypedArray())
     }
 
-    // الرجوع أثناء المكالمة النشطة يصغّر للشريط العائم بدل حبس المستخدم.
-    BackHandler {
-        if (state is CallUiState.Active || state is CallUiState.Connecting ||
-            state is CallUiState.Reconnecting || state is CallUiState.ActiveWithIncoming
-        ) CallRuntime.isMinimized = true
-    }
-    // وضع مصغّر — شريط عائم موحّد (WCAG: أزرار 48dp ونص YounesMuted).
-    if (CallRuntime.isMinimized && (state is CallUiState.Active || state is CallUiState.Connecting ||
-            state is CallUiState.Reconnecting || state is CallUiState.ActiveWithIncoming)
-    ) {
-        MinimizedCallBar(peer = peer, video = video)
-        return
-    }
-
     // حوار تأكيد التسجيل — موافقة صريحة قبل بدء التسجيل (لا تُفترض)
     if (showRecordConsent) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showRecordConsent = false },
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             title = { Text("تسجيل المكالمة", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
@@ -191,9 +168,6 @@ fun YounesCallOverlay() {
     if (showKeypad) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showKeypad = false },
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             title = { Text("لوحة الأرقام", fontWeight = FontWeight.Bold) },
             text = {
                 Column(
@@ -387,7 +361,6 @@ fun YounesCallOverlay() {
                 }
             },
                                 onFlip = { YounesCallService.action(context, YounesCallService.ACTION_SWITCH_CAMERA) },
-                                onAddParticipant = { Toast.makeText(context, "إضافة مشارك", Toast.LENGTH_SHORT).show() },
                                 onEnd = { YounesCallService.action(context, YounesCallService.ACTION_END) }
                             )
                         }
@@ -465,7 +438,7 @@ private fun CallHeader(peer: String, state: CallUiState, video: Boolean) {
 private fun IncomingBody(peer: String, video: Boolean, onAccept: () -> Unit, onAcceptPrivate: () -> Unit, onReject: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
         PulseAvatar(letter = peer, pulsing = true)
-        Text(if (video) "يرن فيديو يونس" else "يرن صوت يونس", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+        Text(if (video) "يرن فيديو يونس" else "يرن صوت يونس", color = Color.White.copy(0.6f), fontSize = 13.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Bottom) {
             EndCallButton("رفض", onReject)
             AcceptCallButton("قبول", onAccept)
@@ -566,7 +539,6 @@ private fun ActiveControls(
     onBluetooth: () -> Unit,
     onCamera: () -> Unit,
     onFlip: () -> Unit,
-    onAddParticipant: () -> Unit,
     onEnd: () -> Unit
 ) {
     // واتساب: صف الأزرار ثم زر الإنهاء معزولاً بفجوة سفلية (منع اللمس العرضي).
@@ -580,83 +552,17 @@ private fun ActiveControls(
                 onRecord,
                 if (isRecording) Color(0xFFB71C1C) else Color(0x33E53935)
             )
-            CallRoundButton(androidx.compose.material.icons.Icons.Default.PersonAdd, "إضافة", onAddParticipant)
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
+            CallRoundButton(Icons.Default.Dialpad, "أرقام", onKeypad)
             if (video) {
                 CallRoundButton(if (camera) Icons.Default.Videocam else Icons.Default.VideocamOff, "كاميرا", onCamera)
                 CallRoundButton(Icons.Default.Cameraswitch, "تدوير", onFlip)
+                // AUTO-FIX (call UI): hold must be available in video mode too (was audio-only).
                 CallRoundButton(if (held) Icons.Default.PlayArrow else Icons.Default.Pause, "تعليق", onHold)
-                CallRoundButton(Icons.Default.Dialpad, "أرقام", onKeypad)
             } else {
                 CallRoundButton(if (held) Icons.Default.PlayArrow else Icons.Default.Pause, if (held) "استئناف" else "تعليق", onHold)
                 CallRoundButton(Icons.Default.Bluetooth, "بلوتوث", onBluetooth)
-                CallRoundButton(Icons.Default.Dialpad, "أرقام", onKeypad)
-                CallRoundButton(if (camera) Icons.Default.Videocam else Icons.Default.VideocamOff, "فيديو", onCamera) // Audio/Video toggle
             }
         }
         EndCallButton(onClick = onEnd)
-    }
-}
-
-/**
- * شريط مصغّر موحّد للمكالمة 1:1 المصغّرة — WCAG AA (نص YounesMuted وأزرار 48dp).
- * يُعرض داخل [YounesCallOverlay] وعبر [UnifiedCallScreens] عند [CallRuntime.isMinimized].
- */
-@Composable
-fun MinimizedCallBar(peer: String, video: Boolean) {
-    val context = LocalContext.current
-    androidx.compose.ui.window.Popup(
-        alignment = Alignment.BottomEnd,
-        offset = androidx.compose.ui.unit.IntOffset(x = 24, y = -160)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = Color(0xFF101B2B).copy(alpha = 0.96f),
-            border = androidx.compose.foundation.BorderStroke(1.dp, YounesEmerald.copy(alpha = 0.5f)),
-            shadowElevation = 8.dp,
-            tonalElevation = 8.dp,
-            modifier = Modifier.width(200.dp).clickable { CallRuntime.isMinimized = false }
-        ) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(YounesEmerald))
-                    Text(
-                        if (video) "فيديو يونس" else "صوت يونس",
-                        color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold
-                    )
-                }
-                Text(
-                    peer.ifBlank { "يونس" }, color = YounesMuted,
-                    fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(0.08f))
-                            .clickable { CallRuntime.isMinimized = false },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("عودة", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Box(
-                        Modifier.height(48.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFE53935))
-                            .clickable {
-                                YounesCallService.action(context, YounesCallService.ACTION_END)
-                                CallRuntime.isMinimized = false
-                            }
-                            .padding(horizontal = 18.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        androidx.compose.material3.Icon(
-                            Icons.Default.CallEnd,
-                            contentDescription = "إنهاء",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            }
-        }
     }
 }

@@ -183,7 +183,7 @@ fun GroupLiveSessionBanner(
         }
         Column(Modifier.weight(1f)) {
             Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            Text("لا ترن الأعضاء — ادخل أو اخرج متى شئت", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            Text("لا ترن الأعضاء — ادخل أو اخرج متى شئت", color = Color.White.copy(0.7f), fontSize = 11.sp)
         }
         TextButton(onJoinOrReturn) { Text(action, color = YounesEmerald, fontWeight = FontWeight.Bold) }
     }

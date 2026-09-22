@@ -1,10 +1,10 @@
 import { GitBranch, AlertTriangle, CheckCircle, XCircle, RefreshCw, Download, MoreVertical, Eye, Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/utils';
-import { Button } from '@/components/ui/Button';
-import { DataTable } from '@/components/ui/DataTable';
-import { Badge } from '@/components/ui/Badge';
-import { DropdownMenu } from '@/components/ui/DropdownMenu';
+import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { Badge } from '@/components/ui/badge';
+import { DropdownMenu } from '@/components/ui/simple-dropdown-menu';
 
 const mockMigrations = Array.from({ length: 15 }, (_, i) => ({
   id: `migration-${i}`,

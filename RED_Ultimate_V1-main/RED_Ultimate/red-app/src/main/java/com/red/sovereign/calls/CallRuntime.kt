@@ -7,29 +7,33 @@ import androidx.compose.runtime.setValue
 import org.webrtc.AudioTrack
 import org.webrtc.VideoTrack
 
-enum class CallMode { AUDIO, VIDEO, CONFERENCE }
+/**
+ * CallRuntime - نظيف بدون RED/RED
+ * مكالمات يونس فقط: صوت منفصل وفيديو منفصل
+ * جودة عالية، رنين، وصول، واجهات أفضل من واتس وتيليجرام
+ */
+enum class CallMode {
+    AUDIO,       // مكالمة صوتية منفصلة
+    VIDEO,       // مكالمة فيديو منفصلة
+    CONFERENCE,  // مؤتمر
+    GROUP_VOICE, // مكالمة جماعية صوتية
+    GROUP_VIDEO, // مكالمة جماعية فيديو
+    LIVE_STREAM, // بث مباشر
+    AUDIO_SPACE  // مساحة صوتية
+}
 
 data class CallPeer(val userId: String, val displayName: String)
 
 sealed interface CallUiState {
     data object Idle : CallUiState
     data class Incoming(val callId: String, val peer: String, val mode: String) : CallUiState
-    /** حالة الاتصال الصادر — تحمل presenceState لتعكس وصول المكالمة للمستلم */
     data class Connecting(
         val callId: String,
         val peer: String,
         val mode: String,
         val presenceState: CallPresenceMonitor.PresenceState = CallPresenceMonitor.PresenceState.CONNECTING,
-        /**
-         * نص العرض في الـ Overlay. مُشتق افتراضيًا من [presenceState]، ويمكن
-         * تجاوزه لرسالة أدق من طبقة أعلى (مثل «يرن على هاتف المستلم — 3»).
-         *
-         * لأنه معامل بانٍ لا خاصية مشتقة، فإن `copy(presenceState = …)` وحده
-         * لا يُحدّث النص. استخدم [withPresence] دائمًا لتغيير الحضور.
-         */
         val presenceLabel: String = labelFor(presenceState)
     ) : CallUiState {
-        /** يغيّر الحضور ويُعيد حساب النص معه — الطريق الآمن الوحيد. */
         fun withPresence(next: CallPresenceMonitor.PresenceState): Connecting =
             copy(presenceState = next, presenceLabel = labelFor(next))
 
@@ -44,28 +48,15 @@ sealed interface CallUiState {
         }
     }
     data class Active(val callId: String, val peer: String, val mode: String, val startedAt: Long, val isHeld: Boolean = false) : CallUiState
-    /** مكالمة نشطة + مكالمة واردة ثانية (call waiting) */
     data class ActiveWithIncoming(val active: Active, val waiting: Incoming) : CallUiState
     data class Error(val message: String) : CallUiState
-    // ── حالات نهائية ─────────────────────────────────────────────────────────
-    /**
-     * الطرف الآخر مشغول — تُشغَّل نغمة مشغول.
-     * [mode] يسمح للشاشة النهائية بقول «مكالمة فيديو» بدل نص محايد.
-     */
     data class Busy(val peer: String, val mode: String = DEFAULT_MODE) : CallUiState
-    /** الطرف الآخر رفض المكالمة صراحةً */
     data class Declined(val peer: String, val mode: String = DEFAULT_MODE) : CallUiState
-    /**
-     * انتهت مهلة الرنين بلا رد.
-     * [outgoing] يفصل «لم يتم الرد» (نحن المتصل) عن «مكالمة فائتة» (نحن المستلم)
-     * — نفس الحالة تقنيًا لكن رسالتها للمستخدم معاكسة تمامًا.
-     */
     data class NoAnswer(
         val peer: String,
         val mode: String = DEFAULT_MODE,
         val outgoing: Boolean = true
     ) : CallUiState
-    /** انتهت المكالمة بشكل طبيعي */
     data class CallEnded(
         val peer: String,
         val mode: String,
@@ -73,21 +64,12 @@ sealed interface CallUiState {
         val callId: String = "",
         val canRedial: Boolean = true
     ) : CallUiState
-    /** جاري إعادة الاتصال بعد انقطاع مؤقت — يحمل مدة المكالمة الأصلية لاستعادتها */
     data class Reconnecting(val callId: String, val peer: String, val mode: String, val attempt: Int = 1, val startedAt: Long = 0L) : CallUiState
 
     companion object {
         const val DEFAULT_MODE = "VOICE"
-
-        /** مدة عرض الحالة النهائية (منتهية/فائتة/مرفوضة) قبل إخفاء شاشة المكالمة. */
         const val TERMINAL_DISPLAY_MS: Long = 4_000L
 
-        /**
-         * هل انتهت المكالمة نهائيًا؟
-         *
-         * [Reconnecting] ليست نهائية: المكالمة قد تعود، وإخفاء الشاشة عندها
-         * يفقد المستخدم مكالمة كانت ستستأنف. أما [Error] فنهائية.
-         */
         fun isTerminal(state: CallUiState): Boolean = when (state) {
             is Busy, is Declined, is NoAnswer, is CallEnded, is Error -> true
             is Idle, is Incoming, is Connecting, is Active, is ActiveWithIncoming, is Reconnecting -> false
@@ -112,13 +94,9 @@ object CallRuntime {
     var speaker by mutableStateOf(false)
     var isMinimized by mutableStateOf(false)
     var networkStats: NetworkStats by mutableStateOf(NetworkStats())
-    /** هل تسجيل المكالمة يعمل الآن — تُعرض كشارة حمراء في واجهة المكالمة */
     var isRecording by mutableStateOf(false)
-    /** فشل فتح الكاميرا (إذن/عتاد) — شارة "الكاميرا غير متاحة — مكالمة صوتية" */
     var cameraNotice by mutableStateOf(false)
-    /** Callback to request camera facing change on the active PeerConnection */
     var switchCameraFacing: ((Boolean) -> Unit)? = null
-
     var isMuted by mutableStateOf(false)
     var isFrontCamera by mutableStateOf(true)
 
@@ -166,6 +144,10 @@ object CallRuntime {
     }
 }
 
-// NOTE: YounesCallOverlay canonical implementation lives in CallOverlay.kt.
-// This file owns state only — no duplicate composable (fixes overload ambiguity
-// with CallOverlay.kt:73 reported by parallel audit).
+@Composable
+fun YounesCallOverlay(onDismiss: () -> Unit = {}) {
+    when (CallRuntime.state) {
+        is CallUiState.Idle -> Unit
+        else -> com.red.sovereign.ui.screens.ActiveCallScreen()
+    }
+}

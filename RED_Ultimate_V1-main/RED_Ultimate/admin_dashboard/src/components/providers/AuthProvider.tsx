@@ -1,8 +1,8 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User } from '@/types';
-import { authStore, adminLogin, adminLogout, getAccessToken } from '@/api';
+import { authStore, adminLogin, adminLogout } from '@/api';
 
 interface AuthContextType {
   user: User | null;
@@ -15,14 +15,32 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * ✅ FIX 2026-09-22:
+ * - useEffect لم يكن مستورداً (TS2304)
+ * - getAccessToken غير موجود في @/api (TS2305)
+ * - authStore.user() يرجع حقول optionals → نحولها إلى User بقيم افتراضية
+ */
+function toUser(raw: ReturnType<typeof authStore.user>): User | null {
+  if (!raw) return null;
+  return {
+    id: raw.id || raw.username || 'unknown',
+    redId: raw.redId || '',
+    username: raw.username || '',
+    displayName: raw.displayName || raw.username || '',
+    status: 'APPROVED',
+    role: (raw.role as User['role']) || 'ADMIN',
+    createdAt: new Date(0).toISOString(),
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(authStore.user());
+  const [user, setUser] = useState<User | null>(toUser(authStore.user()));
   const [isAuthenticated, setIsAuthenticated] = useState(authStore.isAuthenticated());
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    const currentUser = authStore.user();
-    setUser(currentUser);
+    setUser(toUser(authStore.user()));
     setIsAuthenticated(authStore.isAuthenticated());
     setIsLoading(false);
   }, []);
@@ -35,8 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       await adminLogin(username, password);
-      const newUser = authStore.user();
-      setUser(newUser);
+      setUser(toUser(authStore.user()));
       setIsAuthenticated(true);
     } finally {
       setIsLoading(false);

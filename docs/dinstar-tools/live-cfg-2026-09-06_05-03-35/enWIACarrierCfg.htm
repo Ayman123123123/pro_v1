@@ -1,0 +1,402 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<meta http-equiv="pragma" content="no-cache">
+<title>Carrier</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="javascript" type="text/javascript">
+var totalPort = 8;
+var timers = [];
+var CarrerLists = [];
+var intervalTimer = null;
+var intervalTimer2 = null;
+function MM_callJS(TotalPort)
+{
+	totalPort = parseInt(TotalPort);
+	var i;
+	var text = '{"Operator":["","","","","","","",""]}';
+	obj = eval('('+text+')');
+	
+	operator = obj.Operator;
+	
+	for(i=0; i<totalPort; i++)
+	{
+		document.getElementById("operator"+i).value = operator[i];
+		getCarrier(i);
+	}
+}
+
+function ClearList(index)
+{
+	var oSel = document.getElementById("CarrierList"+index);
+	var Count = oSel.options.length;
+	var i;
+	for(i=0; i<Count; i++)
+	{
+		oSel.remove(i);
+	}
+	document.getElementById("CarrierList"+index).options.length=0;
+}
+
+function Searchone(index){
+	var tmpHttp ,url;
+	//Options empty
+	ClearList(index);
+	
+	tmpHttp = createxmlHttpRequest2(tmpHttp);
+	tmpHttp.onreadystatechange = function()
+	{
+		if(tmpHttp.readyState == 4 && tmpHttp.status == 200)
+		{
+			window.clearInterval(timers[index]);
+			var timer = window.setInterval(function()
+			{
+			getCarrier(index)
+			},2000);
+			timers[index] = timer;
+		}
+	}
+	url = "/EiaGetWIACarrierOrder"
+	url += "?" +"Index="+index;
+	tmpHttp.open("GET",url,true);
+	tmpHttp.send();
+}
+
+function Search(index)
+{
+	clearTimeout(intervalTimer);
+	intervalTimer = setTimeout(function()
+	{
+	var tmpHttp ,url;
+	//Options empty
+	ClearList(index);
+
+	tmpHttp = createxmlHttpRequest2(tmpHttp);
+	tmpHttp.onreadystatechange = function()
+	{
+		if(tmpHttp.readyState == 4 && tmpHttp.status == 200)
+		{
+			window.clearInterval(timers[index]);
+			var timer = window.setInterval(function()
+			{
+			getCarrier(index)
+			},2000);
+			timers[index] = timer;
+		}
+	}
+	url = "/EiaGetWIACarrierOrder"
+	url += "?" +"Index="+index;
+	tmpHttp.open("GET",url,true);
+	tmpHttp.send();
+	},500);
+}
+function createxmlHttpRequest2(xmlhttp)
+{
+	if(window.XMLHttpRequest)
+	{
+		xmlhttp = new XMLHttpRequest();
+	}
+	else
+	{
+		xmlhttp = new ActiveXObject("Microsoft.XMLHTTP");
+	}
+	return xmlhttp;
+}
+
+function getCarrier(index)
+{
+	var xmlhttp,url;
+	url = "/EiaGetWIAValidCarrierLists" + "?"+"Index="+index;
+	xmlhttp = createxmlHttpRequest2(xmlhttp);
+	xmlhttp.open("GET",url,true);
+	xmlhttp.onreadystatechange = function()
+	{
+		var i;
+		if(xmlhttp.readyState==4 && xmlhttp.status == 200)
+		{
+			//Options empty
+			ClearList(index);
+
+			tmp = xmlhttp.responseText;
+			obj = eval('('+tmp+')');
+			
+			var CarrerList = obj.carrier_list;
+			port = obj.port;
+			totalCount = CarrerList.length; 
+			CarrerLists[port] = CarrerList;
+			
+			if(totalCount == 0)
+			{
+			return false;
+			}
+			
+			//Auto
+			document.getElementById("CarrierList"+port).add(new Option("Auto",-1),null);
+			document.getElementById("CarrierList"+port).options[0].selected = true;
+			
+			for(i =0; i<totalCount; i++)
+			{
+				if(CarrerList[i].selected == "1")
+				{
+					ObjOption = new Option("*"+CarrerList[i].name+"("+CarrerList[i].number+")",i);
+				}
+				else
+				{
+					ObjOption = new Option(CarrerList[i].name+"("+CarrerList[i].number+")",i);
+				}
+				
+				document.getElementById("CarrierList"+port).add(ObjOption,null);
+				
+				if(parseInt(CarrerList[i].available) == 0)
+				{
+					document.getElementById("CarrierList"+port).options[i+1].disabled = true;
+				}
+			}
+			//var timer = timers.pop();
+			window.clearInterval(timers[port]);
+		}	
+	}
+	xmlhttp.send();
+	return true;
+}
+function Search_All()
+{
+	clearTimeout(intervalTimer2);
+	intervalTimer2 = setTimeout(function()
+	{
+		var i;
+		for(i=0; i<totalPort; i++)
+		{
+			if(true == document.getElementById("Index"+i).checked)
+			{
+				Searchone(i);
+			}
+		}
+	},500);
+
+	return true;
+}
+function nothing()
+{
+	clearTimeout(intervalTimer);
+	return true;
+}
+function nothing2()
+{
+	clearTimeout(intervalTimer2);
+	return true;
+}
+function mouse_click_all()
+{
+	var i;
+	if(true == document.getElementById("Indexall").checked)
+	{
+		for(i=0; i<totalPort; i++)
+		{
+			document.getElementById("Index"+i).checked = true;
+		}
+	}
+	else
+	{
+		for(i=0; i<totalPort; i++)
+		{
+			document.getElementById("Index"+i).checked = false;
+		}
+	}
+}
+function LoadNumber(indexnum)
+{
+	var CarrerList = CarrerLists[indexnum];
+	var index = document.getElementById("CarrierList"+indexnum).selectedIndex - 1;
+	var text = document.getElementById("CarrierList"+indexnum).options[index+1].text;
+	
+	if(text == "Auto")
+	{
+		document.getElementById("operator"+indexnum).value = "";
+	}
+	else
+	{
+		document.getElementById("operator"+indexnum).text = CarrerList[index].number;
+		document.getElementById("operator"+indexnum).value = CarrerList[index].number;
+	}
+	
+	return true;
+}
+function GoCopyOperator()
+{
+	var i;
+	var operator;
+	var re = /(^\d{5,6}$)/;
+        
+	if(false == SelectCheck())
+	{
+	    return;	
+	}
+	
+	operator = document.getElementById("operatorAll").value;
+	if(operator.length != 0 && !re.test(operator))
+	{
+		alert("operator should be 5 to 6 digits!!");
+		document.getElementById("operatorAll").select();
+		return;
+	}
+		
+	for (i = 0; i <totalPort; i++)
+	{
+	    if(true == document.getElementById("Index" + i).checked )
+		{
+		    document.getElementById("operator"+i).value = document.getElementById("operatorAll").value;
+		}
+	}
+}
+
+function SelectCheck()
+{
+	var i;
+	var mark = 0;
+
+	for (i = 0; i <totalPort;i++)
+	{
+		if(true == document.getElementById("Index" + i).checked)
+		{
+			mark=1;
+			break;
+		}
+	}
+	if(0==mark)
+	{
+		alert("Please Select Port");
+		return false;
+	}
+}
+function onRefresh()
+{		
+	document.forms[0].action = "/goform/CarrierGoto";
+	document.forms[0].submit();	
+}
+
+function form_check()
+{	
+	var i=0;
+	var re = /^\d{5,6}$/;
+
+	for(i=0; i<totalPort; i++)
+	{
+		operator = document.getElementById("operator"+i).value;
+        if(operator.length != 0 && re.test(operator) == false)
+        {
+            alert("operator should be 5 to 6 digits!!");
+            document.getElementById("operator"+i).select();
+            return false;
+        }
+	}
+	return true;
+}
+</script>
+</head>
+<body onLoad="MM_callJS('8')" >
+<form action="/goform/WIACarrierCfg" method="post" name="WIACarrierCfg" id="WIACarrierCfg">
+  <table width="520px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left" width="7" height="24"></td>
+   <td>Operator</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+
+ <style type="text/css">
+ table{  
+   border-collapse:collapse;  
+} 
+</style> 
+
+ <table width="520px" align="center" class="content" border='0' cellpadding='0' cellspacing='0' >
+ <tr class="thead" align="center" >
+	<td colspan="2" style="padding-left:4%" width="16%">&nbsp;Port</td>
+	<td width="20%">Operator code</td>
+	<td width="43%">Operator List</td>
+	<td width="21%">Search</td>
+ </tr>
+ <script language="javascript" type="text/javascript">
+	var i;
+	for(i=0; i<totalPort; i++)
+	{
+		document.write("<tr align='center' style=font-size:13px;>"
+		+"<td width='13%' align='right'>&nbsp;"
+        +"<input name='Index"+i+"' type='checkbox' id='Index"+i+"'>"
+        +"</td>");
+		
+		document.write("<td width='3%' align='left'>&nbsp;"+i+"</td>");
+		
+		document.write("<td>"
+		+"<input type='text' class='text' id='operator"+i+"' name='operator"+i+"' maxlength='6' size='6' value='' >"
+		+"</td>");
+		
+		document.write("<td>"
+        +"<select style='width:200px' name='CarrierList"+i+"' class='list' id='CarrierList"+i+"' onChange='LoadNumber("+i+")'>"
+        +"</select>"
+        +"</td>");
+		
+		document.write("<td>"
+        +"<input name ='search"+i+"' id='search"+i+"' class='button' type='button' value='Search' onclick='Search("+i+")'"
+        +"ondblclick='nothing()'>"
+        +"</td>"
+		+"</tr>");
+	}
+ </script>
+ 
+ <tr align="center">
+ <td align="right">
+ <input name='Indexall' type='checkbox' id='Indexall' onclick="mouse_click_all();">
+ </td>
+ <td align="left">&nbsp;all</td>
+ 
+ <td>
+    <input name="CopyOperator"  class="button" type="button" id="CopyOperator" value="Copy" onClick="GoCopyOperator();">
+ </td>
+ 
+ <td></td>
+ <td>
+ <input name ="search" id="search" class="button" type="button" value="Search" onclick="Search_All()" ondblclick="nothing2()">
+ </td>
+ </tr>
+ <tr align="center">
+ <td colspan='2'></td>
+ <td>
+	<input type='text' class='text' id='operatorAll' name='operatorAll' maxlength='6' size='6' value=''>
+ </td>
+ <td></td>
+ <td></td>
+ </tr>
+ </table>
+         
+ <p align="center">
+  <input class="button" id="ok" name="ok" type="submit" value="Save" onClick="return form_check();" >
+ </p>
+ <p>
+<table  width="600px" align="center" cellpadding="0" cellspacing="0">
+	<tr>
+		<td width="30%"> </td>
+		<td>&nbsp;</td>
+	</tr>
+	<tr>
+		<td align="right" class="notes">NOTE:&nbsp;</td>
+		<td class="notes">1.It must restart the module to take effect.</td>
+	</tr>
+	<tr>
+		<td align="right" class="notes">&nbsp;</td>
+		<td class="notes">2.Operator is gray if it's forbidden.</td>
+	</tr>  
+	<tr>
+		<td align="right" class="notes">&nbsp;</td>
+		<td class="notes">3.The operator marked with "*" is the current operator.</td>
+	</tr>
+</table>
+ </p>
+</form>
+</body>
+</html>
+

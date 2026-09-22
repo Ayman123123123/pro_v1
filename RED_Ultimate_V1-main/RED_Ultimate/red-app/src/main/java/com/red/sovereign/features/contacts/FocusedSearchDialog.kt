@@ -1,6 +1,5 @@
 package com.red.sovereign.features.contacts
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -113,7 +112,7 @@ fun FocusedSearchDialog(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.PersonSearch, null, tint = Color.Gray, modifier = Modifier.size(64.dp))
                             Spacer(Modifier.height(12.dp))
-                            Text("اكتب حرفين على الأقل للبحث", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("اكتب حرفين على الأقل للبحث", color = Color.Gray)
                         }
                     }
                 } else if (isFiltering || (results.isEmpty() && debouncedQuery.trim() != query.trim())) {
@@ -126,7 +125,7 @@ fun FocusedSearchDialog(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.SearchOff, null, tint = Color.Gray, modifier = Modifier.size(64.dp))
                             Spacer(Modifier.height(12.dp))
-                            Text("لا توجد نتائج", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("لا توجد نتائج", color = Color.Gray)
                         }
                     }
                 } else {
@@ -157,7 +156,7 @@ fun FocusedSearchDialog(
                                     Text(person.displayName, fontWeight = FontWeight.SemiBold)
                                     Text(
                                         "@${person.username} • ${person.redId}",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = Color.Gray,
                                         fontSize = 12.sp
                                     )
                                 }

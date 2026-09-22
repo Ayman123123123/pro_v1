@@ -1,10 +1,9 @@
-plugins {
-    alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.spring)
-    alias(libs.plugins.kotlin.jpa)
-    alias(libs.plugins.spring.boot)
-    alias(libs.plugins.spring.dependency.management)
-    alias(libs.plugins.protobuf)
+﻿plugins {
+    kotlin("jvm") version "2.3.21"
+    kotlin("plugin.spring") version "2.3.21"
+    kotlin("plugin.jpa") version "2.3.21"
+    id("org.springframework.boot") version "4.0.7"
+    id("io.spring.dependency-management") version "1.1.7"
 }
 
 group = "com.red"
@@ -12,7 +11,6 @@ version = "1.0.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
 }
 
 repositories {
@@ -25,63 +23,54 @@ repositories {
 
 dependencies {
     // Spring Boot Starters
-    implementation(libs.spring.boot.starter.web)
-    implementation(libs.spring.boot.starter.websocket)
-    implementation(libs.spring.boot.starter.data.mongodb)
-    implementation(libs.spring.boot.starter.data.redis)
-    implementation(libs.spring.boot.starter.security)
-    implementation(libs.spring.boot.starter.actuator)
-    implementation(libs.micrometer.prometheus)
-    implementation(libs.spring.boot.starter.validation)
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-websocket")
+    implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
 
     // Database
-    implementation(libs.spring.boot.starter.data.jpa)
-    // Flyway is included in spring-boot-starter-data-jpa (autoconfiguration)
-    implementation(libs.flyway.postgresql)
-    runtimeOnly(libs.postgresql)
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    // Boot 4 moved Flyway autoconfiguration out of spring-boot-autoconfigure into
+    // its own module. With flyway-core alone there is no FlywayAutoConfiguration on
+    // the classpath, so `spring.flyway.*` is read by nobody and NO migration ever
+    // runs — the schema only ever changed when someone applied SQL by hand. This
+    // starter brings spring-boot-flyway (the autoconfiguration) plus flyway-core.
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.flywaydb:flyway-database-postgresql")
+    runtimeOnly("org.postgresql:postgresql")
 
     // Kotlin
     // fasterxml Jackson 2.x pinned explicitly (2.19.2 = catalog choice): Boot 4 BOM
     // manages Jackson 3 only, so unversioned fasterxml never resolves.
     // Jackson 3 (tools.jackson) — الوحيد منذ 2026-09-15 (هاجر الكود كله من fasterxml 2).
     // The module brings databind transitively; both are needed by JacksonConfig.
-    implementation(libs.jackson.module.kotlin)
-    implementation(libs.kotlin.reflect)
-    implementation(libs.kotlinx.coroutines.core)
+    implementation("tools.jackson.module:jackson-module-kotlin")
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 
     // One authoritative RED protocol shared by Android and the backend
     implementation(project(":shared-proto"))
 
     // Argon2id password hashing
-    implementation(libs.bouncycastle)
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
 
     // Local S3-compatible object storage
-    implementation(libs.minio)
-    implementation(libs.jsoup) // LinkCard Open Graph
+    implementation("io.minio:minio:8.6.0")
+    implementation("org.jsoup:jsoup:1.22.2") // LinkCard Open Graph
 
     // JWT
-    implementation(libs.jjwt.api)
-    runtimeOnly(libs.jjwt.impl)
-    runtimeOnly(libs.jjwt.jackson)
-
-    // Protobuf & gRPC
-    implementation(libs.protobuf.java)
-    implementation(libs.protobuf.kotlin)
-    // implementation(libs.grpc.kotlin.stub) // Temporarily disabled - version not found
-    implementation(libs.grpc.protobuf)
-
-    // Observability
-    // implementation(libs.micrometer.tracing.brave) // Temporarily disabled - version not found
-    implementation(libs.opentelemetry.sdk)
-    implementation(libs.opentelemetry.exporter.otlp)
-
-    // OpenAPI 3.1 Documentation
-    implementation(libs.springdoc.openapi.starter.webmvc)
+    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
 
     // Testing
-    testImplementation(libs.spring.boot.starter.test)
-    testImplementation(libs.spring.security.test)
-    testImplementation(libs.mockito.kotlin)
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:6.1.0")
 }
 
 kotlin {
@@ -104,3 +93,4 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
 tasks.named<org.gradle.jvm.tasks.Jar>("jar") {
     enabled = false
 }
+

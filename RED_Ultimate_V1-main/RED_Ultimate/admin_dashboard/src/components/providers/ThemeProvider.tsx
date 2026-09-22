@@ -52,13 +52,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener('change', onChange);
   }, [theme]);
 
-  if (!mounted) {
-    return <div className="min-h-screen">{children}</div>;
-  }
+  // ✅ FIX 2026-09-22: كان العيب القاتل: عند !mounted كانت تُعرض children
+  // بدون ThemeContext.Provider → useTheme() داخل _layout يرمي
+  // "useTheme must be used within a ThemeProvider" عند أول render.
+  // الحل: الـ Provider يُعرض دائماً، وmounted يُستخدم فقط لتجنب وميض الثيم.
+  const value = { theme, resolvedTheme: mounted ? resolvedTheme : (theme === 'dark' ? 'dark' : theme === 'light' ? 'light' : 'dark'), setTheme };
 
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme }}>
-      {children}
+    <ThemeContext.Provider value={value}>
+      <div className="min-h-screen" data-theme={value.resolvedTheme}>
+        {children}
+      </div>
     </ThemeContext.Provider>
   );
 }

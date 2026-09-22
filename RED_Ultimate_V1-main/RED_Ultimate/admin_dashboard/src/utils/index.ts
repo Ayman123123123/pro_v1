@@ -165,10 +165,10 @@ export function groupBy<T>(array: T[], key: keyof T | ((item: T) => string)): Re
   }, {} as Record<string, T[]>);
 }
 
-export function sortBy<T>(array: T[], key: keyof T | ((item: T) => unknown), direction: 'asc' | 'desc' = 'asc'): T[] {
+export function sortBy<T>(array: T[], key: keyof T | ((item: T) => string | number | Date), direction: 'asc' | 'desc' = 'asc'): T[] {
   return [...array].sort((a, b) => {
-    const aVal = typeof key === 'function' ? key(a) : a[key];
-    const bVal = typeof key === 'function' ? key(b) : b[key];
+    const aVal = (typeof key === 'function' ? key(a) : a[key]) as string | number | Date;
+    const bVal = (typeof key === 'function' ? key(b) : b[key]) as string | number | Date;
     if (aVal < bVal) return direction === 'asc' ? -1 : 1;
     if (aVal > bVal) return direction === 'asc' ? 1 : -1;
     return 0;

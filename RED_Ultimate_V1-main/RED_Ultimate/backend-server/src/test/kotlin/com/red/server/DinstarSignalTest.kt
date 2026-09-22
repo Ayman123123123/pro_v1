@@ -1,0 +1,128 @@
+package com.red.server
+
+import com.red.server.services.DinstarSignal
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+
+/**
+ * اختبارات تفسير إشارة بوابات DINSTAR حسب 3GPP TS 27.007 §8.5.
+ *
+ * أهم اختبار هنا هو [rssi99MeansNoNetworkNotFullSignal]: كان الخلل
+ * الذي يجعل شريحة بلا تغطية تبدو ممتازة فيختارها موزّع الأحمال.
+ */
+class DinstarSignalTest {
+
+    @Test
+    @DisplayName("القراءة 99 تعني انعدام الشبكة لا إشارة كاملة")
+    fun rssi99MeansNoNetworkNotFullSignal() {
+        val q = DinstarSignal.interpret(99)
+
+        // السلوك القديم: coerceIn(0,31) ⇒ 31 ⇒ 100%
+        assertNull(q.percent, "القراءة 99 يجب ألا تُنتج نسبة مئوية إطلاقًا")
+        assertNull(q.dbm, "لا يمكن اشتقاق dBm من قراءة غير قابلة للكشف")
+        assertFalse(q.usable, "منفذ بلا قياس إشارة لا يصلح لحمل مكالمة")
+        assertEquals("NO_SIGNAL", q.label)
+        assertEquals(99, q.raw, "تُحفظ القراءة الخام للتشخيص")
+    }
+
+    @Test
+    @DisplayName("القراءة 199 في النطاق الممتد تعني انعدام الشبكة أيضًا")
+    fun extendedUnknownIsAlsoNoSignal() {
+        val q = DinstarSignal.interpret(199)
+        assertNull(q.percent)
+        assertFalse(q.usable)
+        assertEquals("NO_SIGNAL", q.label)
+    }
+
+    @Test
+    @DisplayName("تحويل القراءة الخام إلى dBm يطابق الجدول المعياري")
+    fun rawMapsToStandardDbm() {
+        // 3GPP TS 27.007 §8.5: dBm = 2 × raw − 113
+        assertEquals(-113, DinstarSignal.interpret(0).dbm)
+        assertEquals(-111, DinstarSignal.interpret(1).dbm)
+        assertEquals(-109, DinstarSignal.interpret(2).dbm)
+        assertEquals(-81, DinstarSignal.interpret(16).dbm)
+        assertEquals(-53, DinstarSignal.interpret(30).dbm)
+        assertEquals(-51, DinstarSignal.interpret(31).dbm)
+    }
+
+    @Test
+    @DisplayName("النسبة المئوية تتدرّج ولا تنعكس")
+    fun percentIsMonotonic() {
+        val values = listOf(0, 5, 10, 16, 20, 25, 31).map {
+            requireNotNull(DinstarSignal.interpret(it).percent)
+        }
+        assertEquals(values.sorted(), values, "النسبة يجب أن تزيد مع القراءة")
+        assertEquals(0, values.first(), "‎-113 dBm هو الحد الأدنى")
+        assertEquals(100, values.last(), "‎-51 dBm هو الحد الأعلى")
+    }
+    @Test
+    @DisplayName("الصلاحية تمتد إلى -112 dBm، والتفضيل يتبع عتبة \"جيد\"")
+    fun usabilityThreshold() {
+        // usable = grade != UNUSABLE = dbm >= MIN_VIABLE_DBM: الإشارة الضعيفة
+        // تحمل SMS ومكالمة طوارئ ولا تُقصى — هذا ما أعاد المنافذ الثمانية للعمل.
+        assertTrue(DinstarSignal.interpret(6).usable, "‏-101 dBm ضعيفة لكنها صالحة")
+        assertTrue(DinstarSignal.interpret(7).usable, "‏-99 dBm صالحة")
+        assertTrue(DinstarSignal.interpret(31).usable)
+        assertFalse(DinstarSignal.interpret(99).usable, "‏99 = لا شبكة")
+
+        // preferred = GOOD = dbm >= minGoodDbm (‏-95 افتراضاً): -99 و-101 دونها.
+        assertFalse(DinstarSignal.interpret(6).preferred, "‏-101 dBm دون عتبة المفضّل")
+        assertFalse(DinstarSignal.interpret(7).preferred, "‏-99 dBm دون عتبة المفضّل")
+        assertTrue(DinstarSignal.interpret(12).preferred, "‏-89 dBm فوق العتبة")
+
+        // العتبة قابلة للضبط: بـ-100 يصبح -99 مفضّلاً دون تغيير الصلاحية.
+        assertTrue(DinstarSignal.interpret(7, minGoodDbm = -100).preferred)
+        assertFalse(DinstarSignal.interpret(6, minGoodDbm = -100).preferred)
+    }
+    @Test
+    @DisplayName("التصنيفات النصية تتبع القوة الفعلية")
+    fun labelsFollowStrength()  {
+        assertEquals("EXCELLENT", DinstarSignal.interpret(31).label) // ‏-51
+        assertEquals("GOOD", DinstarSignal.interpret(20).label)      // ‏-73
+        assertEquals("FAIR", DinstarSignal.interpret(12).label)      // ‏-89
+        // FAIR يمتد إلى -95 وهو نفسه DEFAULT_MIN_GOOD_DBM، فرتبة ACCEPTABLE
+        // لا تظهر بالعتبة الافتراضية؛ تحتها مباشرة WEAK حتى -112.
+        assertEquals("WEAK", DinstarSignal.interpret(8).label)       // ‏-97
+        assertEquals("WEAK", DinstarSignal.interpret(2).label)       // ‏-109
+        // ACCEPTABLE تُستعمل عند تمرير عتبة أدنى صراحةً (مثل الطوارئ)
+        assertEquals("ACCEPTABLE", DinstarSignal.interpret(8, minGoodDbm = -100).label)
+    }
+
+    @Test
+    @DisplayName("القيم النصية والغائبة والخارجة عن المدى لا تُسقط الخدمة")
+    fun toleratesMalformedInput() {
+        // بعض إصدارات البرنامج الثابت تُرسل الحقل كسلسلة
+        assertEquals(-81, DinstarSignal.interpret("16").dbm)
+
+        assertNull(DinstarSignal.interpret(null).percent)
+        assertNull(DinstarSignal.interpret("").percent)
+        assertNull(DinstarSignal.interpret("abc").percent)
+        assertFalse(DinstarSignal.interpret(-5).usable)
+        assertEquals("OUT_OF_RANGE", DinstarSignal.interpret(500).label)
+    }
+
+    @Test
+    @DisplayName("النطاق الممتد لـ TD-SCDMA يُفسَّر بمعادلته الخاصة")
+    fun extendedRscpRange() {
+        // 100 ⇒ ‎-116 dBm، 191 ⇒ ‎-25 dBm
+        assertEquals(-116, DinstarSignal.interpret(100).dbm)
+        assertEquals(-25, DinstarSignal.interpret(191).dbm)
+        assertNotNull(DinstarSignal.interpret(150).dbm)
+    }
+
+    @Test
+    @DisplayName("خريطة النتيجة تحمل الحقول التي تعتمدها اللوحة والموزّع")
+    fun mapCarriesContract() {
+        val map = DinstarSignal.interpret(20).toMap()
+        assertEquals(setOf("signalRaw", "signalDbm", "signal", "signalUsable", "signalGrade", "signalLabel"), map.keys)
+        assertEquals(20, map["signalRaw"])
+        assertEquals(-73, map["signalDbm"])
+        assertEquals(true, map["signalUsable"])
+    }
+}

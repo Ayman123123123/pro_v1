@@ -1,6 +1,5 @@
 package com.red.sovereign.ui
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
@@ -38,5 +37,5 @@ internal fun DashboardVoiceWaveform(values: List<Int>, color: Color, modifier: M
 @Composable
 internal fun DashboardRoundCallAction(icon: ImageVector, title: String, color: Color, enabled: Boolean, onClick: () -> Unit = {}) = Column(horizontalAlignment = Alignment.CenterHorizontally) {
     FilledIconButton(onClick, Modifier.size(62.dp), enabled = enabled) { Icon(icon, title, tint = if (enabled) color else Color.Gray, modifier = Modifier.size(30.dp)) }
-    Text(title, fontSize = 11.sp); if (!enabled) Text("قيد الربط", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
+    Text(title, fontSize = 11.sp); if (!enabled) Text("قيد الربط", color = Color.Gray, fontSize = 9.sp)
 }
