@@ -3,10 +3,12 @@
 import * as React from 'react';
 import { cn } from '@/utils/cn';
 
+// ✅ FIX 2026-09-22: دعم comfort-API — الصفحات تمرر title/subtitle مباشرة
+// (مثال: <Card title="X" subtitle="Y">) بدل CardHeader/CardTitle منفصلة
 const Card = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
+  React.HTMLAttributes<HTMLDivElement> & { title?: React.ReactNode; subtitle?: React.ReactNode }
+>(({ className, title, subtitle, children, ...props }, ref) => (
   <div
     ref={ref}
     className={cn(
@@ -14,7 +16,17 @@ const Card = React.forwardRef<
       className
     )}
     {...props}
-  />
+  >
+    {title != null && (
+      <div className="flex flex-col space-y-1.5 p-6 pb-2">
+        {title}
+        {subtitle != null && (
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        )}
+      </div>
+    )}
+    {title == null ? children : <div className="px-6 pb-6">{children}</div>}
+  </div>
 ));
 Card.displayName = 'Card';
 

@@ -3,11 +3,11 @@ import { Save, TestTube, Download, Shield, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/utils';
 import { apiFetch } from '../../api';
-import { Button } from '@/components/ui/Button';
-import { Form, FormField } from '@/components/ui/Form';
-import { Badge } from '@/components/ui/Badge';
-import { Card } from '@/components/ui/Card';
-import { Tabs } from '@/components/ui/Tabs';
+import { Button } from '@/components/ui/button';
+import { Form, FormField } from '@/components/ui/form';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Tabs } from '@/components/ui/tabs';
 
 interface SSOConfig {
   oidc?: { enabled: boolean; issuer?: string; clientId?: string; scopes?: string[]; redirectUri?: string; logoutUri?: string; provider?: string; lastSync?: string };

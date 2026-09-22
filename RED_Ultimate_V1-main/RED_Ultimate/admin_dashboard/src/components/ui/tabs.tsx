@@ -4,7 +4,39 @@ import * as React from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { cn } from '@/utils/cn';
 
-const Tabs = TabsPrimitive.Root;
+// ✅ FIX 2026-09-22: دعم comfort-API — الصفحات تستخدم:
+// <Tabs value onChange tabs={[{value,label}]} /> (بدل TabsList/TabsTrigger)
+// بدون prop `tabs` يبقى سلوك Radix الأصلي (Root فقط + children).
+// ✅ onValueChange يمرر في الوضع الكلاسيكي، وonChange في comfort mode
+type ComfortTabsProps = Omit<
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>,
+  'onChange'
+> & {
+  tabs?: { value: string; label: string }[];
+  onChange?: (value: string) => void;
+};
+
+function Tabs({ tabs, onChange, children, ...rootProps }: ComfortTabsProps) {
+  if (!tabs) {
+    return <TabsPrimitive.Root {...rootProps}>{children}</TabsPrimitive.Root>;
+  }
+  return (
+    <TabsPrimitive.Root {...rootProps} onValueChange={(v) => { rootProps.onValueChange?.(v); onChange?.(v); }}>
+      <TabsPrimitive.List className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground">
+        {tabs.map((tab) => (
+          <TabsPrimitive.Trigger
+            key={tab.value}
+            value={tab.value}
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            {tab.label}
+          </TabsPrimitive.Trigger>
+        ))}
+      </TabsPrimitive.List>
+      {children}
+    </TabsPrimitive.Root>
+  );
+}
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,

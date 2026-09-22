@@ -43,7 +43,7 @@ interface FormFieldProps {
 
 function Field({ name, label, type = 'text', placeholder, required, disabled, options, className, error }: FormFieldProps) {
   const { values, set } = useContext(Ctx);
-  const val = (values[name] as string) ?? '';
+  const val = values[name] ?? '';
   return (
     <div className={cn('space-y-1', className)}>
       <label className="yn-label">{label}{required ? ' *' : ''}</label>
@@ -54,7 +54,7 @@ function Field({ name, label, type = 'text', placeholder, required, disabled, op
           {(options ?? []).map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
       ) : type === 'checkbox' ? (
-        <input type="checkbox" checked={val === true || val === 'true'} disabled={disabled} onChange={(e) => set(name, e.target.checked)} />
+        <input type="checkbox" checked={String(val) === 'true' || val === true} disabled={disabled} onChange={(e) => set(name, e.target.checked)} />
       ) : (
         <input type={type} value={String(val)} placeholder={placeholder} disabled={disabled} onChange={(e) => set(name, e.target.value)} className={cn('yn-input', error && 'border-yn-error')} />
       )}

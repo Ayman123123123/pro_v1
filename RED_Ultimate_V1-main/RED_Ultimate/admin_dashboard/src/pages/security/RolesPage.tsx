@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { Plus, Edit, Trash2, MoreVertical, Key } from 'lucide-react';
 import { useRoles, mutations } from '@/api/queries';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/Button';
-import { SearchInput } from '@/components/ui/SearchInput';
-import { DataTable } from '@/components/ui/DataTable';
-import { Badge } from '@/components/ui/Badge';
-import { DropdownMenu } from '@/components/ui/DropdownMenu';
-import { Dialog } from '@/components/ui/Dialog';
-import { Form, FormField } from '@/components/ui/Form';
+import { Button } from '@/components/ui/button';
+import { SearchInput } from '@/components/ui/search-input';
+import { DataTable } from '@/components/ui/data-table';
+import { Badge } from '@/components/ui/badge';
+import { DropdownMenu } from '@/components/ui/simple-dropdown-menu';
+import { Dialog } from '@/components/ui/dialog';
+import { Form, FormField } from '@/components/ui/form';
 
 const mockRoles = [
   { id: 'role-super-admin', name: 'Super Admin', description: 'Full system access', permissions: ['*'], isSystem: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },

@@ -3,8 +3,10 @@
 import * as React from 'react';
 import { cn } from '@/utils/cn';
 
+// ✅ FIX 2026-09-22: ElementRef<typeof Fragment> كان يرجع FragmentInstance
+// غير متوافق مع ref عنصر div → HTMLDivElement مباشرة
 const Separator = React.forwardRef<
-  React.ElementRef<typeof React.Fragment>,
+  HTMLDivElement,
   React.ComponentPropsWithoutRef<'div'> & { orientation?: 'horizontal' | 'vertical'; decorative?: boolean }
 >(({ className, orientation = 'horizontal', decorative = true, ...props }, ref) => (
   <div

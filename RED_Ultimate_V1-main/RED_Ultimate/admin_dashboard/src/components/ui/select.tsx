@@ -5,7 +5,59 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-const Select = SelectPrimitive.Root;
+// ✅ FIX 2026-09-22: دعم comfort-API — الصفحات تستخدم:
+// <Select value onChange options placeholder className />
+// بدون prop `options` يبقى سلوك Radix الأصلي (Root فقط + children).
+type ComfortSelectProps = Omit<
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>,
+  'onChange'
+> & {
+  options?: { value: string; label: string }[];
+  onChange?: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+};
+
+function Select({ options, onChange, placeholder, className, children, value, defaultValue, ...rootProps }: ComfortSelectProps) {
+  if (!options) {
+    return (
+      <SelectPrimitive.Root value={value} defaultValue={defaultValue} {...rootProps}>
+        {children}
+      </SelectPrimitive.Root>
+    );
+  }
+  return (
+    <SelectPrimitive.Root value={value} defaultValue={defaultValue} onValueChange={(v) => onChange?.(v)} {...rootProps}>
+      <SelectPrimitive.Trigger
+        className={cn(
+          'flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+          className
+        )}
+      >
+        <SelectPrimitive.Value placeholder={placeholder} />
+        <SelectPrimitive.Icon asChild>
+          <ChevronDown className="h-4 w-4 opacity-50" />
+        </SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
+      <SelectPrimitive.Portal>
+        <SelectPrimitive.Content
+          className={cn(
+            'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2'
+          )}
+          position="popper"
+        >
+          <SelectPrimitive.Viewport className="p-1">
+            {options.map((opt) => (
+              <SelectPrimitive.Item key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectPrimitive.Item>
+            ))}
+          </SelectPrimitive.Viewport>
+        </SelectPrimitive.Content>
+      </SelectPrimitive.Portal>
+    </SelectPrimitive.Root>
+  );
+}
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 

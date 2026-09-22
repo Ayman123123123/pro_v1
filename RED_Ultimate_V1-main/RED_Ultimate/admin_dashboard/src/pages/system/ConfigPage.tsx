@@ -2,15 +2,15 @@ import { useState } from 'react';
 import { Plus, Edit, MoreVertical, Eye, Download, RefreshCw } from 'lucide-react';
 import { useConfig, mutations } from '@/api/queries';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/Button';
-import { SearchInput } from '@/components/ui/SearchInput';
-import { Select } from '@/components/ui/Select';
-import { DataTable } from '@/components/ui/DataTable';
-import { Pagination } from '@/components/ui/Pagination';
-import { Badge } from '@/components/ui/Badge';
-import { DropdownMenu } from '@/components/ui/DropdownMenu';
-import { Dialog } from '@/components/ui/Dialog';
-import { Form, FormField } from '@/components/ui/Form';
+import { Button } from '@/components/ui/button';
+import { SearchInput } from '@/components/ui/search-input';
+import { Select } from '@/components/ui/select';
+import { DataTable } from '@/components/ui/data-table';
+import { Pagination } from '@/components/ui/pagination';
+import { Badge } from '@/components/ui/badge';
+import { DropdownMenu } from '@/components/ui/simple-dropdown-menu';
+import { Dialog } from '@/components/ui/dialog';
+import { Form, FormField } from '@/components/ui/form';
 
 const TYPE_OPTIONS = [
   { value: '', label: 'All Types' },

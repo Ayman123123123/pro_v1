@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Fingerprint, Key, Smartphone, Download, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/utils';
-import { Button } from '@/components/ui/Button';
-import { Form, FormField } from '@/components/ui/Form';
-import { Badge } from '@/components/ui/Badge';
-import { Card } from '@/components/ui/Card';
-import { Tabs } from '@/components/ui/Tabs';
+import { Button } from '@/components/ui/button';
+import { Form, FormField } from '@/components/ui/form';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Tabs } from '@/components/ui/tabs';
 
 const mockMFAConfig = {
   enforceForAdmins: true,

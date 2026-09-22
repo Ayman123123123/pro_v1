@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Server, Trash2, RefreshCw, Database, Zap, Trash, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn, formatBytes } from '@/utils';
-import { Button } from '@/components/ui/Button';
-import { SearchInput } from '@/components/ui/SearchInput';
-import { DataTable } from '@/components/ui/DataTable';
-import { Badge } from '@/components/ui/Badge';
-import { Dialog } from '@/components/ui/Dialog';
-import { Tabs } from '@/components/ui/Tabs';
+import { Button } from '@/components/ui/button';
+import { SearchInput } from '@/components/ui/search-input';
+import { DataTable } from '@/components/ui/data-table';
+import { Badge } from '@/components/ui/badge';
+import { Dialog } from '@/components/ui/dialog';
+import { Tabs } from '@/components/ui/tabs';
 
 const TABS = [
   { value: 'keys', label: 'Keys Browser' },

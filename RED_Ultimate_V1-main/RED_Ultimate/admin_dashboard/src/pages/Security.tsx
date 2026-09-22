@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 export function SecurityPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'roles' | 'sso' | 'mfa' | 'sessions' | 'api-keys'>('roles');
+  const [activeTab, setActiveTab] = useState<string>('roles');
 
   return (
     <div className="space-y-6">
@@ -234,4 +234,3 @@ export function SecurityPage() {
   );
 }
 
-import { Shield, Wifi, Fingerprint, Database, Key } from 'lucide-react';

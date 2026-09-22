@@ -16,6 +16,11 @@ const badgeVariants = cva(
         success: 'border-transparent bg-green-500 text-white hover:bg-green-600',
         warning: 'border-transparent bg-yellow-500 text-white hover:bg-yellow-600',
         info: 'border-transparent bg-blue-500 text-white hover:bg-blue-600',
+        // ✅ FIX 2026-09-22: أسماء comfort-API المستخدمة في الصفحات (blue/gold/green/danger)
+        blue: 'border-transparent bg-blue-500 text-white hover:bg-blue-600',
+        gold: 'border-transparent bg-amber-500 text-white hover:bg-amber-600',
+        green: 'border-transparent bg-green-500 text-white hover:bg-green-600',
+        danger: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
       },
     },
     defaultVariants: {
@@ -24,8 +29,9 @@ const badgeVariants = cva(
   }
 );
 
+// ✅ FIX 2026-09-22: HTMLSpanAttributes أُزيل من @types/react (React 19) → HTMLAttributes
 export interface BadgeProps
-  extends React.HTMLSpanAttributes<HTMLSpanElement>,
+  extends React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, children, ...props }: BadgeProps) {

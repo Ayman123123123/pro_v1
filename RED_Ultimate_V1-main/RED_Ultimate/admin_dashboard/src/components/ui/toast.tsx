@@ -1,5 +1,7 @@
 'use client';
 
+// ✅ FIX 2026-09-22: كان يستخدم React كـ UMD global بدون استيراد (TS2686)
+import * as React from 'react';
 import * as ToastPrimitives from '@radix-ui/react-toast';
 import { X } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -21,11 +23,16 @@ const ToastViewport = React.forwardRef<
 ));
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
 
+// ✅ FIX 2026-09-22: حذف type من خصائص Radix (كان يتقاطع مع type المخصص → undefined)
+type ToastProps = Omit<React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root>, 'type'> & {
+  type?: 'default' | 'success' | 'error' | 'warning' | 'info';
+};
+
 const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> & { type?: 'default' | 'success' | 'error' | 'warning' | 'info' }
+  ToastProps
 >(({ className, type = 'default', ...props }, ref) => {
-  const typeClasses = {
+  const typeClasses: Record<string, string> = {
     default: 'bg-background text-foreground',
     success: 'bg-green-500 text-white border-green-600',
     error: 'bg-red-500 text-white border-red-600',
