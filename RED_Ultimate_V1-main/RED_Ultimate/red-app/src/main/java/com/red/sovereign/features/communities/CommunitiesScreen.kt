@@ -1,7 +1,6 @@
 package com.red.sovereign.features.communities
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -56,16 +55,8 @@ data class CommunitiesUiState(
     val communities: List<Community> = emptyList(),
     val error: String? = null,
     val query: String = "",
-    val showCreate: Boolean = false,
-    val showEdit: Community? = null
+    val showCreate: Boolean = false
 )
-
-/** ألوان الأفاتار — تطابق pickRandomColor في الخادم. */
-private val AvatarColors = listOf("#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#FFD93D", "#6BCB77", "#C780FA")
-
-/** تحليل الوسوم: فصل بفواصل/أسطر، تصغير، إزالة تكرار — يطابق تطبيع الخادم. */
-private fun parseTags(raw: String): List<String> =
-    raw.split(',', '،', '\n').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct()
 
 class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
     private val _state = MutableStateFlow(CommunitiesUiState())
@@ -132,17 +123,12 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
 
     fun showCreate() = _state.update { it.copy(showCreate = true) }
     fun hideCreate() = _state.update { it.copy(showCreate = false) }
-    fun showEdit(community: Community) = _state.update { it.copy(showEdit = community) }
-    fun hideEdit() = _state.update { it.copy(showEdit = null) }
 
     fun create(
         name: String,
         description: String,
         category: String,
         isPublic: Boolean,
-        tags: List<String> = emptyList(),
-        rules: String? = null,
-        avatarColor: String? = null,
         onSuccess: () -> Unit
     ) {
         if (name.length < 2) {
@@ -154,55 +140,11 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
                 name = name.trim(),
                 description = description.takeIf { it.isNotBlank() }?.trim(),
                 category = category,
-                tags = tags.takeIf { it.isNotEmpty() },
-                isPublic = isPublic,
-                rules = rules?.takeIf { it.isNotBlank() }?.trim(),
-                avatarColor = avatarColor?.takeIf { it.isNotBlank() }
+                isPublic = isPublic
             )
             when (val result = api.create(body)) {
                 is ApiResult.Success -> {
                     _state.update { it.copy(showCreate = false, communities = listOf(result.value) + it.communities) }
-                    onSuccess()
-                }
-                is ApiResult.Error -> _state.update { it.copy(error = result.message) }
-            }
-        }
-    }
-
-    /** تعديل المجتمع (ADMIN) — PUT /api/communities/{id}؛ تُرسل الفروقات فقط. */
-    fun update(
-        community: Community,
-        name: String,
-        description: String,
-        category: String,
-        isPublic: Boolean,
-        tags: List<String>,
-        rules: String?,
-        avatarColor: String?,
-        onSuccess: () -> Unit = {}
-    ) {
-        if (name.trim().length < 2) {
-            _state.update { it.copy(error = "الاسم يجب أن يكون حرفين على الأقل") }
-            return
-        }
-        viewModelScope.launch {
-            val body = UpdateCommunityBody(
-                name = name.trim().takeIf { it != community.name },
-                description = description.trim().takeIf { it.isNotEmpty() }?.takeIf { it != community.description },
-                category = category.takeIf { it != community.category },
-                tags = tags.takeIf { it != community.tags },
-                isPublic = isPublic.takeIf { it != community.isPublic },
-                rules = rules?.trim()?.takeIf { it.isNotEmpty() }?.takeIf { it != community.rules },
-                avatarColor = avatarColor?.takeIf { it.isNotBlank() }?.takeIf { it != community.avatarColor }
-            )
-            when (val result = api.update(community.id, body)) {
-                is ApiResult.Success -> {
-                    _state.update { current ->
-                        current.copy(
-                            showEdit = null,
-                            communities = current.communities.map { if (it.id == community.id) result.value else it }
-                        )
-                    }
                     onSuccess()
                 }
                 is ApiResult.Error -> _state.update { it.copy(error = result.message) }
@@ -305,7 +247,6 @@ fun CommunitiesScreen(
                             onOpen = { onOpenCommunity(community.id, community.name) },
                             onJoin = { vm.join(community) },
                             onLeave = { vm.leave(community) },
-                            onEdit = { vm.showEdit(community) },
                             onDelete = { vm.delete(community) }
                         )
                     }
@@ -317,19 +258,7 @@ fun CommunitiesScreen(
     if (state.showCreate) {
         CreateCommunityDialog(
             onDismiss = vm::hideCreate,
-            onSubmit = { name, desc, cat, isPublic, tags, rules, avatarColor ->
-                vm.create(name, desc, cat, isPublic, tags, rules, avatarColor) {}
-            }
-        )
-    }
-
-    state.showEdit?.let { editing ->
-        EditCommunityDialog(
-            community = editing,
-            onDismiss = vm::hideEdit,
-            onSubmit = { name, desc, cat, isPublic, tags, rules, avatarColor ->
-                vm.update(editing, name, desc, cat, isPublic, tags, rules, avatarColor)
-            }
+            onSubmit = { name, desc, cat, isPublic -> vm.create(name, desc, cat, isPublic) {} }
         )
     }
 }
@@ -340,7 +269,6 @@ private fun CommunityCard(
     onOpen: () -> Unit,
     onJoin: () -> Unit,
     onLeave: () -> Unit,
-    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -418,14 +346,6 @@ private fun CommunityCard(
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
-                                text = { Text("تعديل المجتمع") },
-                                onClick = {
-                                    menuOpen = false
-                                    onEdit()
-                                },
-                                leadingIcon = { Icon(Icons.Default.Edit, null) }
-                            )
-                            DropdownMenuItem(
                                 text = { Text("حذف المجتمع") },
                                 onClick = {
                                     menuOpen = false
@@ -453,15 +373,12 @@ private fun CommunityCard(
 @Composable
 private fun CreateCommunityDialog(
     onDismiss: () -> Unit,
-    onSubmit: (name: String, description: String, category: String, isPublic: Boolean, tags: List<String>, rules: String?, avatarColor: String?) -> Unit
+    onSubmit: (name: String, description: String, category: String, isPublic: Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("GENERAL") }
     var isPublic by remember { mutableStateOf(true) }
-    var tagsRaw by remember { mutableStateOf("") }
-    var rules by remember { mutableStateOf("") }
-    var avatarColor by remember { mutableStateOf(AvatarColors[2]) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -484,24 +401,6 @@ private fun CreateCommunityDialog(
                     minLines = 2,
                     maxLines = 4
                 )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tagsRaw,
-                    onValueChange = { tagsRaw = it },
-                    label = { Text("الوسوم (افصل بفاصلة)") },
-                    placeholder = { Text("مثال: تقنية، برمجة") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = rules,
-                    onValueChange = { rules = it },
-                    label = { Text("القوانين (اختياري)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4
-                )
                 Spacer(Modifier.height(12.dp))
                 Text("التصنيف", fontSize = 13.sp)
                 Row(
@@ -517,10 +416,6 @@ private fun CreateCommunityDialog(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("لون الأفاتار", fontSize = 13.sp)
-                Spacer(Modifier.height(4.dp))
-                AvatarColorPicker(selected = avatarColor, onSelect = { avatarColor = it })
-                Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(checked = isPublic, onCheckedChange = { isPublic = it })
                     Spacer(Modifier.width(8.dp))
@@ -530,7 +425,7 @@ private fun CreateCommunityDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSubmit(name, description, category, isPublic, parseTags(tagsRaw), rules, avatarColor) },
+                onClick = { onSubmit(name, description, category, isPublic) },
                 enabled = name.trim().length >= 2
             ) { Text("إنشاء", color = YounesEmerald, fontWeight = FontWeight.Bold) }
         },
@@ -538,126 +433,6 @@ private fun CreateCommunityDialog(
             TextButton(onClick = onDismiss) { Text("إلغاء") }
         }
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun EditCommunityDialog(
-    community: Community,
-    onDismiss: () -> Unit,
-    onSubmit: (name: String, description: String, category: String, isPublic: Boolean, tags: List<String>, rules: String?, avatarColor: String?) -> Unit
-) {
-    var name by remember(community.id) { mutableStateOf(community.name) }
-    var description by remember(community.id) { mutableStateOf(community.description.orEmpty()) }
-    var category by remember(community.id) { mutableStateOf(community.category) }
-    var isPublic by remember(community.id) { mutableStateOf(community.isPublic) }
-    var tagsRaw by remember(community.id) { mutableStateOf(community.tags.joinToString("، ")) }
-    var rules by remember(community.id) { mutableStateOf(community.rules.orEmpty()) }
-    var avatarColor by remember(community.id) { mutableStateOf(community.avatarColor) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("تعديل المجتمع") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("اسم المجتمع") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("الوصف") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tagsRaw,
-                    onValueChange = { tagsRaw = it },
-                    label = { Text("الوسوم (افصل بفاصلة)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = rules,
-                    onValueChange = { rules = it },
-                    label = { Text("القوانين") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4
-                )
-                Spacer(Modifier.height(12.dp))
-                Text("التصنيف", fontSize = 13.sp)
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("GENERAL", "TECH", "BUSINESS", "EDUCATION", "CULTURE").forEach { cat ->
-                        FilterChip(
-                            selected = category == cat,
-                            onClick = { category = cat },
-                            label = { Text(categoryLabel(cat), fontSize = 11.sp) }
-                        )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                Text("لون الأفاتار", fontSize = 13.sp)
-                Spacer(Modifier.height(4.dp))
-                AvatarColorPicker(selected = avatarColor, onSelect = { avatarColor = it })
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = isPublic, onCheckedChange = { isPublic = it })
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (isPublic) "عام (الانضمام تلقائي)" else "خاص (يتطلب موافقة)")
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSubmit(name, description, category, isPublic, parseTags(tagsRaw), rules, avatarColor) },
-                enabled = name.trim().length >= 2
-            ) { Text("حفظ", color = YounesEmerald, fontWeight = FontWeight.Bold) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
-        }
-    )
-}
-
-@Composable
-private fun AvatarColorPicker(selected: String?, onSelect: (String) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        AvatarColors.forEach { hex ->
-            val color = parseColorOrDefault(hex)
-            val isSelected = selected.equals(hex, ignoreCase = true)
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(color)
-                    .clickable { onSelect(hex) }
-                    .then(
-                        if (isSelected) Modifier.border(2.dp, Color.White, CircleShape)
-                        else Modifier
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isSelected) {
-                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                }
-            }
-        }
-    }
 }
 
 @Composable

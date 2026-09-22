@@ -45,23 +45,16 @@ import com.red.sovereign.core.database.LocalHistoryEntity
 import com.red.sovereign.features.chat.LuxuryChatBubble
 import com.red.sovereign.settings.ChatFontPolicy
 import com.red.sovereign.settings.SettingsRuntime
-import com.red.sovereign.ui.resolveRichMessages
-import com.red.sovereign.ui.shouldMergeWithPrevious
 import com.red.sovereign.ui.screens.scrollOnce
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.red.sovereign.ui.components.ChatWallpaper
 import com.red.sovereign.ui.components.rememberSovereignHaze
 import com.red.sovereign.ui.components.sovereignHazeEffect
 import com.red.sovereign.ui.components.sovereignHazeSource
-import com.red.sovereign.ui.theme.SovereignGradients
-import com.red.sovereign.ui.theme.RedSemanticColors
-import com.red.sovereign.ui.theme.YounesPrimary
-import com.red.sovereign.ui.theme.YounesEmerald
-import com.red.sovereign.ui.theme.AqyalGold
+import com.red.sovereign.ui.theme.*
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -82,8 +75,6 @@ fun ChatThreadScreen(
     onDeleteClick: (List<DecryptedMessage>) -> Unit = {},
     onForwardClick: (List<DecryptedMessage>) -> Unit = {},
     onStarClick: (List<DecryptedMessage>) -> Unit = {},
-    onReactionClick: (DecryptedMessage, String) -> Unit = { _, _ -> },
-    onMessageInfoClick: (DecryptedMessage) -> Unit = {},
     isTyping: Boolean = false,
     bottomBar: @Composable () -> Unit,
     modifier: Modifier = Modifier,
@@ -113,19 +104,8 @@ fun ChatThreadScreen(
     var multiSelectMode by remember { mutableStateOf(false) }
     val selectedMessageIds = remember { mutableStateSetOf<String>() }
 
-    // ── Reply State (id-based + saveable: لا يضيع عند إعادة البناء/الفلترة) ──
-    var replyToMessageId by rememberSaveable { mutableStateOf<String?>(null) }
-    // الحذف/التحرير/التفاعل/المنتهية تُحسم أولًا عبر resolveRichMessages ثم الفلترة.
-    val resolvedMessages = remember(messages) { resolveRichMessages(messages) }
-    val replyToMessage: DecryptedMessage? = remember(resolvedMessages, replyToMessageId) {
-        replyToMessageId?.let { id -> resolvedMessages.firstOrNull { it.id == id } }
-    }
-    // مسار رد موحد: داخلي (بانر) + خارجي (إرسال فعلي) — يستخدمه السحب والقائمة معًا.
-    fun handleReply(msg: DecryptedMessage) {
-        replyToMessageId = msg.id
-        onReplyClick(msg)
-    }
-    fun clearReply() { replyToMessageId = null }
+    // ── Reply State ──
+    var replyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
 
     // ── P1-A: فلترة Thread حسب الموضوع (محليًا فقط، لا تمس قاعدة البيانات) ──
     // المصدر: RichMessage.topicId أولًا ثم hashtags ثم #topic من النص.
@@ -134,7 +114,7 @@ fun ChatThreadScreen(
     var topicInput by remember { mutableStateOf("") }
     // مواضيع أُنشئت من الزر قبل وصول أي رسالة بها — تظهر كـ chips فورًا.
     val createdTopics = remember { mutableStateSetOf<String>() }
-    val extractedTopics = remember(resolvedMessages) { resolvedMessages.flatMap { it.threadTopics() }.distinct().sorted() }
+    val extractedTopics = remember(messages) { messages.flatMap { it.threadTopics() }.distinct().sorted() }
     val allTopics = remember(extractedTopics, createdTopics.toList()) {
         (extractedTopics + createdTopics.toList()).distinct().sorted()
     }
@@ -142,24 +122,9 @@ fun ChatThreadScreen(
     LaunchedEffect(allTopics) {
         if (selectedTopic != null && selectedTopic !in allTopics) selectedTopic = null
     }
-    val filteredMessages = remember(resolvedMessages, selectedTopic) {
-        if (selectedTopic == null) resolvedMessages
-        else resolvedMessages.filter { it.threadTopics().contains(selectedTopic) }
-    }
-    // إن حُذف/حُرر المردود عليه اختفى البانر تلقائيًا (id لم يعد في القائمة المحسومة).
-    LaunchedEffect(resolvedMessages, replyToMessageId) {
-        if (replyToMessageId != null && resolvedMessages.none { it.id == replyToMessageId }) {
-            replyToMessageId = null
-        }
-    }
-    // دمج الفقاعات المتتالية: تُحسب مرة لكل قائمة بدل كل تركيب.
-    val hideHeaderById = remember(filteredMessages) {
-        val map = HashMap<String, Boolean>(filteredMessages.size)
-        filteredMessages.forEachIndexed { index, cur ->
-            val prev = if (index > 0) filteredMessages[index - 1] else null
-            map[cur.id] = shouldMergeWithPrevious(prev, cur)
-        }
-        map
+    val filteredMessages = remember(messages, selectedTopic) {
+        if (selectedTopic == null) messages
+        else messages.filter { it.threadTopics().contains(selectedTopic) }
     }
 
     // المفتاح معرف آخر رسالة لا الحجم — يمنع عاصفة إعادة التمرير.
@@ -173,7 +138,7 @@ fun ChatThreadScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             if (multiSelectMode && selectedMessageIds.isNotEmpty()) {
                 MultiSelectTopBar(
@@ -187,19 +152,19 @@ fun ChatThreadScreen(
                         multiSelectMode = false
                     },
                     onDelete = {
-                        val selected = filteredMessages.filter { it.id in selectedMessageIds }
+                        val selected = messages.filter { it.id in selectedMessageIds }
                         onDeleteClick(selected)
                         selectedMessageIds.clear()
                         multiSelectMode = false
                     },
                     onForward = {
-                        val selected = filteredMessages.filter { it.id in selectedMessageIds }
+                        val selected = messages.filter { it.id in selectedMessageIds }
                         onForwardClick(selected)
                         selectedMessageIds.clear()
                         multiSelectMode = false
                     },
                     onStar = {
-                        val selected = filteredMessages.filter { it.id in selectedMessageIds }
+                        val selected = messages.filter { it.id in selectedMessageIds }
                         onStarClick(selected)
                         selectedMessageIds.clear()
                         multiSelectMode = false
@@ -224,12 +189,12 @@ fun ChatThreadScreen(
                 .fillMaxSize()
                 .sovereignHazeSource(hazeState)
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.surface)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             // هالة شبكية خافتة فوق الخلفية — لا تمس تباين النص
             Box(
                 Modifier.fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.05f))
+                    .background(SovereignGradients.meshChat)
             )
             // زخرفة المحادثة الهندسية — 4% فقط، خلف الرسائل وفوق الهالة
             ChatWallpaper(
@@ -272,7 +237,7 @@ fun ChatThreadScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            IconButton(onClick = { clearReply() }) {
+                            IconButton(onClick = { replyToMessage = null }) {
                                 Icon(Icons.Default.Close, "إلغاء الرد", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                             }
                         }
@@ -388,15 +353,8 @@ fun ChatThreadScreen(
                 val messageText = remember(message.id, message.timestamp) {
                     runCatching { String(message.plaintext, Charsets.UTF_8) }.getOrDefault("")
                 }
-                // الحمولة الغنية للشارة (محوّلة/كثيرة التحويل) — تُمرر للفقاعة.
-                val richOfMessage = remember(message.id, message.timestamp) {
-                    if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext) else null
-                }
-                // دمج بصري: إخفاء ترويسة المرسل عن المتتالية من نفس المرسل (<دقيقتين).
-                val hideSenderHeader = hideHeaderById[message.id] == true
 
-                var showMenu by remember(message.id) { mutableStateOf(false) }
-                var showQuickReact by remember(message.id) { mutableStateOf(false) }
+                var showMenu by remember { mutableStateOf(false) }
                 val clipCtx = androidx.compose.ui.platform.LocalContext.current
                 val sysClipboard = clipCtx
                     .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
@@ -410,11 +368,14 @@ fun ChatThreadScreen(
                         time = messageTimeText,
                         status = message.status,
                         onLongClick = {
-                            if (multiSelectMode) {
+                            if (!multiSelectMode) {
+                                multiSelectMode = true
+                                selectedMessageIds.add(message.id)
+                            } else {
                                 if (isSelected) selectedMessageIds.remove(message.id)
                                 else selectedMessageIds.add(message.id)
                                 if (selectedMessageIds.isEmpty()) multiSelectMode = false
-                            } else showMenu = true
+                            }
                         },
                         onClick = {
                             if (multiSelectMode) {
@@ -424,17 +385,15 @@ fun ChatThreadScreen(
                             }
                         },
                         onSwipeReply = { msgId ->
-                            filteredMessages.firstOrNull { it.id == msgId }?.let { handleReply(it) }
+                            val repliedMsg = messages.firstOrNull { it.id == msgId }
+                            repliedMsg?.let { replyToMessage = it }
                         },
                         messageId = message.id,
-                        senderName = if (message.outgoing || hideSenderHeader) "" else senderNames[message.senderRedId].orEmpty(),
-                        senderRedId = if (message.outgoing || hideSenderHeader) "" else message.senderRedId,
+                        senderName = if (message.outgoing) "" else senderNames[message.senderRedId].orEmpty(),
+                        senderRedId = if (message.outgoing) "" else message.senderRedId,
                         fontFamily = ChatFontPolicy.familyFor(SettingsRuntime.current.fontFamily),
                         bubbleStyle = SettingsRuntime.current.bubbleStyle,
-                        isSelected = isSelected,
-                        forwardOf = richOfMessage?.forwardOf,
-                        forwardCount = richOfMessage?.forwardCount ?: 0,
-                        richMessage = richOfMessage
+                        isSelected = isSelected
                     )
 
                     if (!multiSelectMode) {
@@ -446,7 +405,7 @@ fun ChatThreadScreen(
                                 text = { Text("رد") },
                                 onClick = {
                                     showMenu = false
-                                    handleReply(message)
+                                    onReplyClick(message)
                                 }
                             )
                             DropdownMenuItem(
@@ -462,41 +421,6 @@ fun ChatThreadScreen(
                                     )
                                 }
                             )
-                            DropdownMenuItem(
-                                text = { Text("تفاعل") },
-                                onClick = {
-                                    showMenu = false
-                                    showQuickReact = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("معلومات") },
-                                onClick = {
-                                    showMenu = false
-                                    onMessageInfoClick(message)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("تحديد") },
-                                onClick = {
-                                    showMenu = false
-                                    multiSelectMode = true
-                                    selectedMessageIds.add(message.id)
-                                }
-                            )
-                        }
-                    }
-                    if (showQuickReact && !multiSelectMode) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            listOf("👍", "❤️", "😂", "🙏", "🔥").forEach { emoji ->
-                                TextButton(onClick = {
-                                    showQuickReact = false
-                                    onReactionClick(message, emoji)
-                                }) { Text(emoji, fontSize = 20.sp) }
-                            }
                         }
                     }
                 }
@@ -650,10 +574,10 @@ fun MultiSelectTopBar(
         },
         actions = {
             IconButton(onClick = onSelectAll) {
-                Icon(Icons.Default.CheckCircle, "تحديد الكل", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.CheckCircle, "تحديد الكل", tint = YounesEmerald)
             }
             IconButton(onClick = onStar) {
-                Icon(Icons.Default.Star, "تعليم", tint = MaterialTheme.colorScheme.tertiary)
+                Icon(Icons.Default.Star, "تعليم", tint = AqyalGold)
             }
             IconButton(onClick = onForward) {
                 Icon(Icons.Default.Forward, "إعادة توجيه", tint = MaterialTheme.colorScheme.onSurface)
@@ -759,25 +683,20 @@ fun MessageBubble(
     message: DecryptedMessage,
     isMine: Boolean,
     onReplyClick: () -> Unit = {},
-    onReactionClick: (String) -> Unit = {},
-    onInfoClick: () -> Unit = {},
     senderName: String = "",
     senderRedId: String = message.senderRedId
 ) {
+    // فقاعات واعية بالثيم: داكن = كحلي/فحمي السيادي، فاتح = حاويات Material.
+    // النص والطابع الزمني من colorScheme فيُحققان AA في الوضعين معًا.
+    // (كانت ألوان YounesBubble* مثبتة داكنة فتكسر الوضع الفاتح كليًا.)
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.4f
     val backgroundBrush = if (isDark) {
         if (isMine) {
             Brush.linearGradient(
-                colors = listOf(
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
-                    MaterialTheme.colorScheme.primaryContainer
-                )
+                colors = listOf(YounesBubbleOut, YounesBubbleOutGlow)
             )
         } else {
-            Brush.linearGradient(colors = listOf(
-                MaterialTheme.colorScheme.surfaceContainerHigh,
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            ))
+            Brush.linearGradient(colors = listOf(YounesBubbleIn, YounesBubbleIn))
         }
     } else {
         if (isMine) {
@@ -813,7 +732,7 @@ fun MessageBubble(
         runCatching { String(message.plaintext, Charsets.UTF_8) }.getOrDefault("")
     }
 
-    var showMenu by remember(message.id) { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     val bubbleCtx = androidx.compose.ui.platform.LocalContext.current
     val sysClipboard = bubbleCtx
         .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
@@ -888,7 +807,7 @@ fun MessageBubble(
                             // المقروء بـ YounesReadTick (4.75:1 على الصادرة) لا أزرق عشوائي.
                             Text(
                                 text = if (message.status == "READ" || message.status == "DELIVERED") "✓✓" else "✓",
-                                color = if (message.status == "READ") MaterialTheme.colorScheme.tertiary else bubbleDimColor,
+                                color = if (message.status == "READ") YounesReadTick else bubbleDimColor,
                                 fontSize = 10.sp,
                                 fontFamily = PlexArabicFamily,
                                 fontWeight = FontWeight.Bold
@@ -922,20 +841,6 @@ fun MessageBubble(
                         )
                     }
                 )
-                DropdownMenuItem(
-                    text = { Text("تفاعل") },
-                    onClick = {
-                        showMenu = false
-                        onReactionClick("👍")
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("معلومات") },
-                    onClick = {
-                        showMenu = false
-                        onInfoClick()
-                    }
-                )
             }
         }
     }
@@ -964,9 +869,7 @@ fun ChatHistoryPagingColumn(
     modifier: Modifier = Modifier,
     pagingViewModel: ChatHistoryPagingViewModel = viewModel(),
     senderNames: Map<String, String> = emptyMap(),
-    onReplyClick: (DecryptedMessage) -> Unit = {},
-    onReactionClick: (DecryptedMessage, String) -> Unit = { _, _ -> },
-    onMessageInfoClick: (DecryptedMessage) -> Unit = {}
+    onReplyClick: (DecryptedMessage) -> Unit = {}
 ) {
     val lazyItems = remember(conversationId) { pagingViewModel.pager(conversationId) }
         .collectAsLazyPagingItems()
@@ -975,12 +878,6 @@ fun ChatHistoryPagingColumn(
     // كاش مفكوك LRU (200) + تمرير واحد لآخر id (لا عاصفة عند الحذف/التحديث).
     val pagingListState = rememberLazyListState()
     var lastPinnedId by remember { mutableStateOf<String?>(null) }
-    // replyTo محفوظ عبر rememberSaveable — لا يضيع عند إعادة البناء (توحيد مع List).
-    var pagingReplyToId by rememberSaveable { mutableStateOf<String?>(null) }
-    fun handlePagingReply(msg: DecryptedMessage) {
-        pagingReplyToId = msg.id
-        onReplyClick(msg)
-    }
     val latestPagingId: String? =
         if (lazyItems.itemCount > 0) runCatching { lazyItems[0]?.id }.getOrNull() else null
     LaunchedEffect(latestPagingId) {
@@ -1020,39 +917,9 @@ fun ChatHistoryPagingColumn(
             }
         }
         else -> {
-            Column(modifier = modifier.fillMaxSize()) {
-                // بانر الرد — موحد مع مسار List (id محفوظ، يُمسح عند الحذف/الإلغاء).
-                pagingReplyToId?.let { replyId ->
-                    val replyEntity = remember(replyId, lazyItems.itemCount) {
-                        (0 until lazyItems.itemCount).asSequence()
-                            .mapNotNull { runCatching { lazyItems[it] }.getOrNull() }
-                            .firstOrNull { it.id == replyId }
-                    }
-                    val replyPreview = replyEntity?.let { remember(it.id, it.createdAt) { pagingViewModel.decryptedText(it) } } ?: replyId
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier.width(4.dp).fillMaxHeight()
-                                    .clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.primary)
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("رد", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                Text(replyPreview, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            IconButton(onClick = { pagingReplyToId = null }) {
-                                Icon(Icons.Default.Close, "إلغاء الرد", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                    }
-                }
             LazyColumn(
                 state = pagingListState,
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                modifier = modifier.fillMaxSize().padding(horizontal = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 16.dp),
                 // المصدِر DESC (الأحدث أولًا) — العكس يضع الأحدث في الأسفل.
@@ -1083,91 +950,31 @@ fun ChatHistoryPagingColumn(
                                 ).format(timeFormatter)
                             }.getOrDefault("--:--")
                         }
-                        // الحمولة الغنية + الدمج البصري — توحيد مع مسار List.
-                        val pagingRich = remember(entity.id, entity.createdAt) {
-                            if (entity.messageType == "RICH_TEXT") RichMessage.decode(entity.encryptedPlaintext) else null
-                        }
-                        val curAsMsg = remember(entity.id, entity.createdAt) {
-                            DecryptedMessage(
-                                id = entity.id,
-                                conversationId = entity.conversationId,
-                                senderRedId = entity.senderId,
-                                plaintext = entity.encryptedPlaintext,
-                                timestamp = entity.createdAt,
-                                sequence = 0,
-                                type = entity.messageType,
-                                outgoing = entity.outgoing,
-                                status = entity.status
-                            )
-                        }
-                        // السابق زمنيًا في ترتيب DESC+reverse هو index+1 (الأقدم).
-                        val prevEntity: LocalHistoryEntity? = remember(index, lazyItems.itemCount) {
-                            if (index + 1 < lazyItems.itemCount) runCatching { lazyItems[index + 1] }.getOrNull() else null
-                        }
-                        val hideSenderHeader = remember(entity.id, prevEntity?.id, prevEntity?.createdAt) {
-                            val prevAsMsg = prevEntity?.let {
-                                DecryptedMessage(
-                                    id = it.id,
-                                    conversationId = it.conversationId,
-                                    senderRedId = it.senderId,
-                                    plaintext = it.encryptedPlaintext,
-                                    timestamp = it.createdAt,
-                                    sequence = 0,
-                                    type = it.messageType,
-                                    outgoing = it.outgoing,
-                                    status = it.status
+                        LuxuryChatBubble(
+                            message = decoded,
+                            isMe = entity.outgoing,
+                            time = timeText,
+                            status = entity.status,
+                            onLongClick = {
+                                onReplyClick(
+                                    DecryptedMessage(
+                                        id = entity.id,
+                                        conversationId = entity.conversationId,
+                                        senderRedId = entity.senderId,
+                                        plaintext = entity.encryptedPlaintext,
+                                        timestamp = entity.createdAt,
+                                        sequence = 0,
+                                        type = entity.messageType,
+                                        outgoing = entity.outgoing,
+                                        status = entity.status
+                                    )
                                 )
-                            }
-                            shouldMergeWithPrevious(prevAsMsg, curAsMsg)
-                        }
-                        var showMenu by remember(entity.id) { mutableStateOf(false) }
-                        var showQuickReact by remember(entity.id) { mutableStateOf(false) }
-                        val clipCtx = androidx.compose.ui.platform.LocalContext.current
-                        val sysClipboard = clipCtx
-                            .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                        Box {
-                            LuxuryChatBubble(
-                                message = decoded,
-                                isMe = entity.outgoing,
-                                time = timeText,
-                                status = entity.status,
-                                onLongClick = { showMenu = true },
-                                onSwipeReply = { handlePagingReply(curAsMsg) },
-                                messageId = entity.id,
-                                senderName = if (entity.outgoing || hideSenderHeader) "" else senderNames[entity.senderId].orEmpty(),
-                                senderRedId = if (entity.outgoing || hideSenderHeader) "" else entity.senderId,
-                                fontFamily = ChatFontPolicy.familyFor(SettingsRuntime.current.fontFamily),
-                                bubbleStyle = SettingsRuntime.current.bubbleStyle,
-                                forwardOf = pagingRich?.forwardOf,
-                                forwardCount = pagingRich?.forwardCount ?: 0,
-                                richMessage = pagingRich
-                            )
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(text = { Text("رد") }, onClick = { showMenu = false; handlePagingReply(curAsMsg) })
-                                DropdownMenuItem(
-                                    text = { Text("نسخ") },
-                                    onClick = {
-                                        showMenu = false
-                                        val cm = sysClipboard ?: run {
-                                            android.widget.Toast.makeText(clipCtx, "الحافظة غير متاحة", android.widget.Toast.LENGTH_SHORT).show()
-                                            return@DropdownMenuItem
-                                        }
-                                        cm.setPrimaryClip(android.content.ClipData.newPlainText("رسالة", decoded))
-                                    }
-                                )
-                                DropdownMenuItem(text = { Text("تفاعل") }, onClick = { showMenu = false; showQuickReact = true })
-                                DropdownMenuItem(text = { Text("معلومات") }, onClick = { showMenu = false; onMessageInfoClick(curAsMsg) })
-                            }
-                        }
-                        if (showQuickReact) {
-                            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf("👍", "❤️", "😂", "🙏", "🔥").forEach { emoji ->
-                                    TextButton(onClick = { showQuickReact = false; onReactionClick(curAsMsg, emoji) }) {
-                                        Text(emoji, fontSize = 20.sp)
-                                    }
-                                }
-                            }
-                        }
+                            },
+                            senderName = if (entity.outgoing) "" else senderNames[entity.senderId].orEmpty(),
+                            senderRedId = if (entity.outgoing) "" else entity.senderId,
+                            fontFamily = ChatFontPolicy.familyFor(SettingsRuntime.current.fontFamily),
+                            bubbleStyle = SettingsRuntime.current.bubbleStyle
+                        )
                     }
                 }
                 // تذييل التحميل التدريجي (append)
@@ -1191,7 +998,6 @@ fun ChatHistoryPagingColumn(
                     else -> Unit
                 }
             }
-            } // إغلاق Column (بانر الرد + القائمة)
         }
     }
 }

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -177,124 +176,6 @@ fun SovereignBottomBar(
                                 )
                             }
                         }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * شريط تنقل جانبي زجاجي (Navigation Rail) للشاشات الكبيرة والتابلت والأجهزة القابلة للطي.
- * يدعم الشفافية والتكيّف التلقائي وحفظ المساحة الرأسية.
- */
-@Composable
-fun SovereignNavRail(
-    currentSection: MainSection,
-    onSectionSelected: (MainSection) -> Unit,
-    hazeState: dev.chrisbanes.haze.HazeState? = null,
-    modifier: Modifier = Modifier
-) {
-    val liquidGlass = com.red.sovereign.ui.theme.AppThemeState.liquidGlassEnabled
-    val reduceMotion = com.red.sovereign.ui.theme.AppThemeState.reduceMotion
-
-    Surface(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(84.dp)
-            .padding(vertical = 12.dp, horizontal = 6.dp)
-            .sovereignHazeEffect(
-                state = hazeState,
-                tier = com.red.sovereign.ui.theme.SovereignGlassTier.NavBar,
-                isDark = true
-            )
-            .clip(RoundedCornerShape(28.dp))
-            .border(
-                width = 1.2.dp,
-                brush = if (liquidGlass) com.red.sovereign.ui.theme.SovereignGradients.liquidGlassBorder else Brush.verticalGradient(
-                    listOf(
-                        SovereignColors.GlassBorder.copy(alpha = 0.5f),
-                        SovereignColors.Emerald.copy(alpha = 0.35f),
-                        SovereignColors.GlassBorder.copy(alpha = 0.5f)
-                    )
-                ),
-                shape = RoundedCornerShape(28.dp)
-            ),
-        color = if (liquidGlass) SovereignColors.GlassBgLiquid else SovereignColors.ObsidianDeep.copy(alpha = 0.94f),
-        tonalElevation = 12.dp,
-        shadowElevation = 20.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceEvenly
-        ) {
-            MainSection.entries.forEach { item ->
-                val isSelected = currentSection == item
-
-                val itemColor by animateColorAsState(
-                    targetValue = if (isSelected) SovereignColors.EmeraldNeon else Color(0xFF94A3B8),
-                    animationSpec = if (reduceMotion) spring(stiffness = Spring.StiffnessMedium) else spring(stiffness = Spring.StiffnessLow),
-                    label = "NavRailColor"
-                )
-
-                val itemScale by animateFloatAsState(
-                    targetValue = if (isSelected) 1.12f else 1.0f,
-                    animationSpec = if (reduceMotion) spring(stiffness = Spring.StiffnessMedium) else spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    ),
-                    label = "NavRailScale"
-                )
-
-                val interactionSource = remember { MutableInteractionSource() }
-
-                Box(
-                    modifier = Modifier
-                        .size(width = 68.dp, height = 56.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            if (isSelected) {
-                                Brush.verticalGradient(
-                                    listOf(
-                                        SovereignColors.Emerald.copy(alpha = 0.22f),
-                                        SovereignColors.EmeraldDark.copy(alpha = 0.08f)
-                                    )
-                                )
-                            } else {
-                                androidx.compose.ui.graphics.SolidColor(Color.Transparent)
-                            }
-                        )
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null,
-                            onClick = { onSectionSelected(item) }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.scale(itemScale)
-                    ) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = item.label,
-                            tint = itemColor,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        androidx.compose.foundation.layout.Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = item.label,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = itemColor,
-                                fontSize = 10.sp
-                            ),
-                            maxLines = 1
-                        )
                     }
                 }
             }

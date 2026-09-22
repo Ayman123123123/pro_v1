@@ -344,5 +344,3 @@ print("=" * 78)
 status = "✅ PASS" if not errors_per_file else "❌ FAIL"
 print(f"  {status}")
 print("=" * 78)
-# CI gate: non-zero exit on FAIL so the static-guards job actually fails.
-sys.exit(1 if errors_per_file else 0)

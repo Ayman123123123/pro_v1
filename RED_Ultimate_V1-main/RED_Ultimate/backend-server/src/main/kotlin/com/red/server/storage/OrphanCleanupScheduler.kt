@@ -7,13 +7,12 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 
 /**
- * 🧹 تنظيف يومي للملفات اليتيمة — يحذف كائنات MinIO بدون مرجع في MongoDB/PG
+ * 🧹 تنظيف يومي للملفات اليتيمة — يحذف كائنات MinIO بدون مرجع في MongoDB
  * يعمل كل يوم 03:00 Asia/Aden
  *
  * يجمع الـ object keys المُشار إليها من:
@@ -22,21 +21,13 @@ import org.springframework.stereotype.Component
  * 3. GroupDocument.avatarKey (صور المجموعات)
  * 4. CommunityDocument.avatarKey + bannerKey (المجتمعات)
  * 5. media_grants collection (صلاحيات الوصول)
- * 6. PG users.avatar_media_key (صور الحسابات)
- * 7. PG call_history.recording_media_key (تسجيلات المكالمات)
- * 8. PG sticker_packs.cover_media_key (أغلفة الملصقات)
- *
- * Config source of truth: application.yml `red.retention.*` + `red.storage.*`.
- * Legacy `system_settings` keys (`retention.*_days`) are deprecated —
- * COMMENT only, do not read them here and do not change production values.
  */
 @Component
 @EnableScheduling
 class OrphanCleanupScheduler(
     private val storage: StorageMonitorService,
     private val media: MediaService,
-    private val mongo: MongoTemplate,
-    private val jdbc: JdbcTemplate
+    private val mongo: MongoTemplate
 ) {
     private val log = LoggerFactory.getLogger(OrphanCleanupScheduler::class.java)
 
@@ -139,42 +130,6 @@ class OrphanCleanupScheduler(
             }
         } catch (e: Exception) {
             log.debug("media_grants scan skipped: {}", e.message)
-        }
-
-        // 6) PG users.avatar_media_key — صور الحسابات
-        try {
-            jdbc.queryForList(
-                "SELECT DISTINCT avatar_media_key FROM users WHERE avatar_media_key IS NOT NULL AND avatar_media_key <> ''",
-                String::class.java
-            ).forEach { key ->
-                if (key.isNotBlank()) keys.add(key)
-            }
-        } catch (e: Exception) {
-            log.debug("users avatar_media_key scan skipped: {}", e.message)
-        }
-
-        // 7) PG call_history.recording_media_key — تسجيلات المكالمات
-        try {
-            jdbc.queryForList(
-                "SELECT DISTINCT recording_media_key FROM call_history WHERE recording_media_key IS NOT NULL AND recording_media_key <> ''",
-                String::class.java
-            ).forEach { key ->
-                if (key.isNotBlank()) keys.add(key)
-            }
-        } catch (e: Exception) {
-            log.debug("call_history recording_media_key scan skipped: {}", e.message)
-        }
-
-        // 8) PG sticker_packs.cover_media_key — أغلفة الملصقات
-        try {
-            jdbc.queryForList(
-                "SELECT DISTINCT cover_media_key FROM sticker_packs WHERE cover_media_key IS NOT NULL AND cover_media_key <> ''",
-                String::class.java
-            ).forEach { key ->
-                if (key.isNotBlank()) keys.add(key)
-            }
-        } catch (e: Exception) {
-            log.debug("sticker_packs cover_media_key scan skipped: {}", e.message)
         }
 
         return keys

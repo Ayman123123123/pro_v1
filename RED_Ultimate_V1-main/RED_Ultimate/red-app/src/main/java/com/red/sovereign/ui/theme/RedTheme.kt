@@ -18,42 +18,34 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.LayoutDirection
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.R
 
-// ════════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 // الخط الموحّد — IBM Plex Sans Arabic ثنائي النص (SIL OFL 1.1)
 // مضمّن في الحزمة لا مجلوب من الشبكة: 4 أوزان محلية في res/font
 // plex_arabic.xml (400/500/600/700). ينهي ارتداد خطوط Google الشبكية
 // ويوحّد هوية التطبيق مع admin_dashboard (IBM Plex) ويضمن ثبات مقاسات
 // الأسطر حتى على شبكات اليمن الضعيفة.
-// ════════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 val PlexArabicFamily = FontFamily(
-    Font(R.font.plex_arabic_regular, FontWeight.Normal, FontStyle.Normal),
-    Font(R.font.plex_arabic_regular, FontWeight.Light, FontStyle.Normal),
-    Font(R.font.plex_arabic_medium, FontWeight.Medium, FontStyle.Normal),
-    Font(R.font.plex_arabic_semibold, FontWeight.SemiBold, FontStyle.Normal),
-    Font(R.font.plex_arabic_bold, FontWeight.Bold, FontStyle.Normal),
-    Font(R.font.plex_arabic_bold, FontWeight.ExtraBold, FontStyle.Normal),
-    Font(R.font.plex_arabic_bold, FontWeight.Black, FontStyle.Normal)
+    Font(R.font.plex_arabic_regular, FontWeight.Normal),
+    Font(R.font.plex_arabic_regular, FontWeight.Light),
+    Font(R.font.plex_arabic_medium, FontWeight.Medium),
+    Font(R.font.plex_arabic_semibold, FontWeight.SemiBold),
+    Font(R.font.plex_arabic_bold, FontWeight.Bold),
+    Font(R.font.plex_arabic_bold, FontWeight.ExtraBold),
+    Font(R.font.plex_arabic_bold, FontWeight.Black),
 )
-
-val NotoSansArabicFamily = PlexArabicFamily
-
-// عائلة الخط الأساسية للتطبيق - Plex Arabic مع Noto كبديل
-val AppFontFamily = PlexArabicFamily
 
 // أسماء مستعارة للتوافق — كلها Plex Arabic فعليًا.
 // @deprecated استعمل PlexArabicFamily مباشرة؛ Cairo/Tajawal باقيان للتوافق فقط
@@ -99,8 +91,6 @@ val TajawalFamily: FontFamily = PlexArabicFamily
 val YounesPrimary      = Color(0xFF14C79A)
 /** زمرد مضيء للتنبيهات والتوهّج. نص داكن فوقه = 12.78:1. */
 val YounesPrimaryGlow  = Color(0xFF3DE8BC)
-/** زمرد عميق لطرف التدرّج الداكن (هوامش الأزرار والهالات) — وليس لوناً منافساً. */
-val YounesPrimaryDeep  = Color(0xFF00674F)
 /** ذهب إمبراطوري للروابط والشارات. نص داكن فوقه = 10.34:1، وعلى الخلفية 9.96:1. */
 val YounesAccent       = Color(0xFFE0B551)
 /** ذهب فاتح للحدود المميّزة والتدرّجات. */
@@ -251,139 +241,24 @@ val GradientNavBar      = Brush.verticalGradient(
 // Material 3 Type Scale كامل — 15 نمطًا تغطي كل الاستعمالات
 // ═══════════════════════════════════════════════════════════════════════════════
 private val redTypography = Typography(
-    // Display - للعناوين الكبيرة جداً
-    displayLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 57.sp,
-        lineHeight = 64.sp,
-        fontWeight = FontWeight.Black,
-        letterSpacing = 0.sp
-    ),
-    displayMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 45.sp,
-        lineHeight = 52.sp,
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = 0.sp
-    ),
-    displaySmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 36.sp,
-        lineHeight = 44.sp,
-        fontWeight = FontWeight.Black,
-        letterSpacing = 0.sp
-    ),
-
-    // Headline - للعناوين الرئيسية
-    headlineLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 32.sp,
-        lineHeight = 40.sp,
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = 0.sp
-    ),
-    headlineMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 28.sp,
-        lineHeight = 36.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 0.sp
-    ),
-    headlineSmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 24.sp,
-        lineHeight = 32.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 0.sp
-    ),
-
-    // Title - للعناوين المتوسطة
-    titleLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 0.sp
-    ),
-    titleMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.sp
-    ),
-    titleSmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.sp
-    ),
-
-    // Body - للنصوص الأساسية (min 14sp، lineHeight ≥ 1.5)
-    bodyLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 16.sp,
-        lineHeight = 26.sp,
-        fontWeight = FontWeight.Normal,
-        letterSpacing = 0.sp
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 14.sp,
-        lineHeight = 22.sp,
-        fontWeight = FontWeight.Normal,
-        letterSpacing = 0.sp
-    ),
-    bodySmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 13.sp,
-        lineHeight = 22.sp,
-        fontWeight = FontWeight.Normal,
-        letterSpacing = 0.sp
-    ),
-
-    // Label - للتسميات والأزرار
-    labelLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.sp
-    ),
-    labelMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = 0.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontSize = 12.sp,
-        lineHeight = 18.sp,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = 0.sp
-    ),
-)
-
-// Typography محسن للوضع الليلي (أوزان أثقل للتباين)
-private val redTypographyDark = Typography(
-    displayLarge = redTypography.displayLarge.copy(fontWeight = FontWeight.Black),
-    displayMedium = redTypography.displayMedium.copy(fontWeight = FontWeight.ExtraBold),
-    displaySmall = redTypography.displaySmall.copy(fontWeight = FontWeight.Black),
-    headlineLarge = redTypography.headlineLarge.copy(fontWeight = FontWeight.ExtraBold),
-    headlineMedium = redTypography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-    headlineSmall = redTypography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-    titleLarge = redTypography.titleLarge.copy(fontWeight = FontWeight.Bold),
-    titleMedium = redTypography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-    titleSmall = redTypography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-    bodyLarge = redTypography.bodyLarge.copy(fontWeight = FontWeight.Medium, lineHeight = 28.sp),
-    bodyMedium = redTypography.bodyMedium.copy(fontWeight = FontWeight.Normal, lineHeight = 24.sp),
-    bodySmall = redTypography.bodySmall.copy(fontWeight = FontWeight.Normal, lineHeight = 20.sp),
-    labelLarge = redTypography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-    labelMedium = redTypography.labelMedium.copy(fontWeight = FontWeight.Medium),
-    labelSmall = redTypography.labelSmall.copy(fontWeight = FontWeight.Medium),
+    // عناوين كبيرة
+    displayLarge  = TextStyle(fontFamily = PlexArabicFamily, fontSize = 57.sp, lineHeight = 64.sp, fontWeight = FontWeight.Black, letterSpacing = (-0.25).sp),
+    displayMedium = TextStyle(fontFamily = PlexArabicFamily, fontSize = 45.sp, lineHeight = 52.sp, fontWeight = FontWeight.ExtraBold),
+    displaySmall  = TextStyle(fontFamily = PlexArabicFamily, fontSize = 36.sp, lineHeight = 46.sp, fontWeight = FontWeight.Black),
+    headlineLarge = TextStyle(fontFamily = PlexArabicFamily, fontSize = 30.sp, lineHeight = 40.sp, fontWeight = FontWeight.ExtraBold),
+    headlineMedium= TextStyle(fontFamily = PlexArabicFamily, fontSize = 25.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
+    headlineSmall = TextStyle(fontFamily = PlexArabicFamily, fontSize = 22.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold),
+    titleLarge    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 21.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold),
+    titleMedium   = TextStyle(fontFamily = PlexArabicFamily, fontSize = 17.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
+    titleSmall    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
+    // نصوص المحادثات والوصف
+    bodyLarge     = TextStyle(fontFamily = PlexArabicFamily, fontSize = 17.sp, lineHeight = 27.sp, fontWeight = FontWeight.Normal),
+    bodyMedium    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 15.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal),
+    bodySmall     = TextStyle(fontFamily = PlexArabicFamily, fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal),
+    // تسميات وشارات
+    labelLarge    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
+    labelMedium   = TextStyle(fontFamily = PlexArabicFamily, fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium),
+    labelSmall    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
 )
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -645,12 +520,12 @@ fun YounesTheme(
         )
     } else baseScheme
 
-    // ─── مقياس الخط: Density في MainActivity يكبّر كل sp — لا تكبير ثانٍ هنا
-    // (التكبير المزدوج السابق 1.3x→1.69x كان يفجّر الفقاعات). نحترم fontScale
-    // عبر Density فقط ونمرر redTypography كما هي.
+    // ─── مقياس الخط الديناميكي ───────────────────────────────────────────
+    val scaledTypography = rememberScaledTypography(AppThemeState.fontScale)
+
     MaterialTheme(
         colorScheme = finalScheme,
-        typography = redTypography,
+        typography = scaledTypography,
         shapes = redShapes,
         content = content
     )

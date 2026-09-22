@@ -45,18 +45,6 @@ data class CreateCommunityBody(
     val avatarColor: String? = null
 )
 
-/** يطابق UpdateCommunityRequest في الخادم — كل الحقول nullable وتُحذف الـ null (explicitNulls=false). */
-@Serializable
-data class UpdateCommunityBody(
-    val name: String? = null,
-    val description: String? = null,
-    val category: String? = null,
-    val tags: List<String>? = null,
-    val isPublic: Boolean? = null,
-    val rules: String? = null,
-    val avatarColor: String? = null
-)
-
 class CommunitiesApi(private val client: AuthorizedApiClient) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; explicitNulls = false }
     private val JSON = "application/json; charset=utf-8".toRequestBody()
@@ -94,11 +82,6 @@ class CommunitiesApi(private val client: AuthorizedApiClient) {
 
     suspend fun join(id: String): ApiResult<Community> = parseCommunity(
         client.request("POST", "/api/communities/$id/join")
-    )
-
-    /** تعديل إعدادات المجتمع (ADMIN فقط) — PUT /api/communities/{id}. */
-    suspend fun update(id: String, body: UpdateCommunityBody): ApiResult<Community> = parseCommunity(
-        client.request("PUT", "/api/communities/$id", json.encodeToString(body))
     )
 
     suspend fun leave(id: String): ApiResult<String> =

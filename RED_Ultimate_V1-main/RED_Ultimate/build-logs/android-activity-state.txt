@@ -1,0 +1,145 @@
+ACTIVITY MANAGER ACTIVITIES (dumpsys activity activities)
+Display #0 (activities from top to bottom):
+
+  Stack #245: type=standard mode=fullscreen
+  isSleeping=false
+  mBounds=Rect(0, 0 - 0, 0)
+    Task id #239
+    mBounds=Rect(0, 0 - 0, 0)
+    mMinWidth=-1
+    mMinHeight=-1
+    mLastNonFullscreenBounds=null
+    * TaskRecord{a0da41f #239 A=com.red.sovereign U=0 StackId=245 sz=1}
+      userId=0 effectiveUid=u0a246 mCallingUid=2000 mUserSetupComplete=true mCallingPackage=null
+      affinity=com.red.sovereign
+      intent={flg=0x10000000 cmp=com.red.sovereign/.MainActivity}
+      mActivityComponent=com.red.sovereign/.MainActivity
+      autoRemoveRecents=false isPersistable=true numFullscreen=1 activityType=1
+      rootWasReset=false mNeverRelinquishIdentity=true mReuseTask=false mLockTaskAuth=LOCK_TASK_AUTH_PINNABLE
+      Activities=[ActivityRecord{bd4dc94 u0 com.red.sovereign/.MainActivity t239}]
+      askedCompatMode=false inRecents=true isAvailable=true
+      mRootProcess=ProcessRecord{eca836c 7664:com.red.sovereign/u0a246}
+      stackId=245
+      hasBeenVisible=true mResizeMode=RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION mSupportsPictureInPicture=true isResizeable=true lastActiveTime=364983738 (inactive for 317s)
+      * Hist #0: ActivityRecord{bd4dc94 u0 com.red.sovereign/.MainActivity t239}
+          packageName=com.red.sovereign processName=com.red.sovereign
+          launchedFromUid=10246 launchedFromPackage=com.red.sovereign userId=0
+          app=ProcessRecord{eca836c 7664:com.red.sovereign/u0a246}
+          Intent { flg=0x10000000 cmp=com.red.sovereign/.MainActivity }
+          frontOfTask=true task=TaskRecord{a0da41f #239 A=com.red.sovereign U=0 StackId=245 sz=1}
+          taskAffinity=com.red.sovereign
+          mActivityComponent=com.red.sovereign/.MainActivity
+          baseDir=/data/app/com.red.sovereign-v3Fa0nVMeiVDmBQhhixoJg==/base.apk
+          dataDir=/data/user/0/com.red.sovereign
+          stateNotNeeded=false componentSpecified=true mActivityType=standard
+          compat={280dpi} labelRes=0x7f12001e icon=0x7f0f0001 theme=0x7f1302b3
+          mLastReportedConfigurations:
+           mGlobalConfig={1.0 ?mcc?mnc [en_US] ldltr sw411dp w411dp h835dp 280dpi nrml long port finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 720, 1600) mAppBounds=Rect(0, 43 - 720, 1516) mWindowingMode=fullscreen mDisplayWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_0} s.1386 ?spn ?gid}
+           mOverrideConfig={1.0 ?mcc?mnc [en_US] ldltr sw411dp w411dp h835dp 280dpi nrml long port finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 720, 1600) mAppBounds=Rect(0, 43 - 720, 1516) mWindowingMode=fullscreen mDisplayWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_0} s.1 ?spn ?gid}
+          CurrentConfiguration={1.0 ?mcc?mnc [en_US] ldltr sw411dp w411dp h835dp 280dpi nrml long port finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 720, 1600) mAppBounds=Rect(0, 43 - 720, 1516) mWindowingMode=fullscreen mDisplayWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_0} s.1 ?spn ?gid}
+          taskDescription: label="null" icon=null iconResource=0 iconFilename=null primaryColor=ff00c98c
+           backgroundColor=ff050a16
+           statusBarColor=ff030712
+           navigationBarColor=ff030712
+          launchFailed=false launchCount=1 lastLaunchTime=-5m24s591ms
+          haveState=false icicle=null
+          state=RESUMED stopped=false delayedResume=false finishing=false
+          keysPaused=false inHistory=true visible=true sleeping=false idle=true mStartingWindowState=STARTING_WINDOW_SHOWN
+          fullscreen=true noDisplay=false immersive=false launchMode=2
+          frozenBeforeDestroy=false forceNewConfig=false
+          mActivityType=standard
+           nowVisible=true lastVisibleTime=-5m22s850ms
+          resizeMode=RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION
+          mLastReportedMultiWindowMode=false mLastReportedPictureInPictureMode=false
+          supportsPictureInPicture=true
+          supportsEnterPipOnTaskSwitch: false
+
+    Running activities (most recent first):
+      TaskRecord{a0da41f #239 A=com.red.sovereign U=0 StackId=245 sz=1}
+        Run #0: ActivityRecord{bd4dc94 u0 com.red.sovereign/.MainActivity t239}
+
+    mResumedActivity: ActivityRecord{bd4dc94 u0 com.red.sovereign/.MainActivity t239}
+
+  Stack #0: type=home mode=fullscreen
+  isSleeping=false
+  mBounds=Rect(0, 0 - 0, 0)
+
+    Task id #47
+    mBounds=Rect(0, 0 - 0, 0)
+    mMinWidth=-1
+    mMinHeight=-1
+    mLastNonFullscreenBounds=null
+    * TaskRecord{d61235f #47 I=com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher U=0 StackId=0 sz=1}
+      userId=0 effectiveUid=u0a186 mCallingUid=u0a186 mUserSetupComplete=true mCallingPackage=com.motorola.launcher3
+      intent={act=android.intent.action.MAIN cat=[android.intent.category.HOME] flg=0x10000100 cmp=com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher}
+      mActivityComponent=com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher
+      autoRemoveRecents=false isPersistable=true numFullscreen=1 activityType=2
+      rootWasReset=false mNeverRelinquishIdentity=true mReuseTask=false mLockTaskAuth=LOCK_TASK_AUTH_PINNABLE
+      Activities=[ActivityRecord{534de51 u0 com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher t47}]
+      askedCompatMode=false inRecents=true isAvailable=true
+      mRootProcess=ProcessRecord{512aa10 24751:com.motorola.launcher3/u0a186}
+      stackId=0
+      hasBeenVisible=true mResizeMode=RESIZE_MODE_RESIZEABLE mSupportsPictureInPicture=false isResizeable=true lastActiveTime=364976371 (inactive for 324s)
+      * Hist #0: ActivityRecord{534de51 u0 com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher t47}
+          packageName=com.motorola.launcher3 processName=com.motorola.launcher3
+          launchedFromUid=0 launchedFromPackage=null userId=0
+          app=ProcessRecord{512aa10 24751:com.motorola.launcher3/u0a186}
+          Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] flg=0x10000100 cmp=com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher (has extras) }
+          frontOfTask=true task=TaskRecord{d61235f #47 I=com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher U=0 StackId=0 sz=1}
+          taskAffinity=null
+          mActivityComponent=com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher
+          baseDir=/product/priv-app/Launcher3QuickStep/Launcher3QuickStep.apk
+          dataDir=/data/user/0/com.motorola.launcher3
+          stateNotNeeded=true componentSpecified=false mActivityType=home
+          compat={280dpi} labelRes=0x7f11004d icon=0x7f080092 theme=0x7f12000b
+          mLastReportedConfigurations:
+           mGlobalConfig={1.0 ?mcc?mnc [en_US] ldltr sw411dp w411dp h835dp 280dpi nrml long port finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 720, 1600) mAppBounds=Rect(0, 43 - 720, 1516) mWindowingMode=fullscreen mDisplayWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_0} s.1052 ?spn ?gid}
+           mOverrideConfig={1.0 ?mcc?mnc [en_US] ldltr sw411dp w411dp h835dp 280dpi nrml long port finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 720, 1600) mAppBounds=Rect(0, 43 - 720, 1516) mWindowingMode=fullscreen mDisplayWindowingMode=fullscreen mActivityType=home mAlwaysOnTop=undefined mRotation=ROTATION_0} s.42 ?spn ?gid}
+          CurrentConfiguration={1.0 ?mcc?mnc [en_US] ldltr sw411dp w411dp h835dp 280dpi nrml long port finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 720, 1600) mAppBounds=Rect(0, 43 - 720, 1516) mWindowingMode=fullscreen mDisplayWindowingMode=fullscreen mActivityType=home mAlwaysOnTop=undefined mRotation=ROTATION_0} s.54 ?spn ?gid}
+          RequestedOverrideConfiguration={0.0 ?mcc?mnc ?localeList ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mWindowingMode=undefined mDisplayWindowingMode=undefined mActivityType=home mAlwaysOnTop=undefined mRotation=undefined} ?spn ?gid}
+          taskDescription: label="null" icon=null iconResource=0 iconFilename=null primaryColor=fff5f5f5
+           backgroundColor=fffafafa
+           statusBarColor=0
+           navigationBarColor=0
+          launchFailed=false launchCount=0 lastLaunchTime=-1d7h30m2s584ms
+          haveState=true icicle=Bundle[mParcelledData.dataSize=7404]
+          state=STOPPED stopped=true delayedResume=false finishing=false
+          keysPaused=false inHistory=true visible=false sleeping=false idle=true mStartingWindowState=STARTING_WINDOW_REMOVED
+          fullscreen=true noDisplay=false immersive=false launchMode=2
+          frozenBeforeDestroy=false forceNewConfig=false
+          mActivityType=home
+           nowVisible=false lastVisibleTime=-5m39s282ms
+          connections=com.android.server.wm.ActivityServiceConnectionsHolder@59d31ac
+          resizeMode=RESIZE_MODE_RESIZEABLE
+          mLastReportedMultiWindowMode=false mLastReportedPictureInPictureMode=false
+
+    Running activities (most recent first):
+      TaskRecord{d61235f #47 I=com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher U=0 StackId=0 sz=1}
+        Run #0: ActivityRecord{534de51 u0 com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher t47}
+
+    mLastPausedActivity: ActivityRecord{534de51 u0 com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher t47}
+
+ ResumedActivity:ActivityRecord{bd4dc94 u0 com.red.sovereign/.MainActivity t239}
+
+  ResumedActivity: ActivityRecord{bd4dc94 u0 com.red.sovereign/.MainActivity t239}
+
+ActivityStackSupervisor state:
+  topDisplayFocusedStack=ActivityStack{1cd0d35 stackId=245 type=standard mode=fullscreen visible=true translucent=false, 1 tasks}
+  displayId=0 stacks=2
+   mHomeStack=ActivityStack{65c356b stackId=0 type=home mode=fullscreen visible=false translucent=true, 1 tasks}
+   mPreferredTopFocusableStack=ActivityStack{1cd0d35 stackId=245 type=standard mode=fullscreen visible=true translucent=false, 1 tasks}
+   mLastFocusedStack=ActivityStack{1cd0d35 stackId=245 type=standard mode=fullscreen visible=true translucent=false, 1 tasks}
+  mCurTaskIdForUser={0=239}
+  mUserStackInFront={}
+  isHomeRecentsComponent=true  KeyguardController:
+    mKeyguardShowing=false
+    mAodShowing=false
+    mKeyguardGoingAway=false
+    Occluded=false DismissingKeyguardActivity=null at display=0
+    mDismissalRequested=false
+    mVisibilityTransactionDepth=0
+  LockTaskController
+    mLockTaskModeState=NONE
+    mLockTaskModeTasks=
+    mLockTaskPackages (userId:packages)=
+      u0:[]

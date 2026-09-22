@@ -126,7 +126,7 @@ fun perksForLevel(level: Int): ChannelLevelPerks {
 fun ChannelBoostState.perks(): ChannelLevelPerks = perksForLevel(level)
 
 // ────────────────────────────────────────────────────────────────
-// بحث سحابي مكمّل — المحلي أولًا، السحابي مكمّل فقط
+// بحث سحابي مكمّل (TODO) — المحلي أولًا، السحابي مكمّل فقط
 // ────────────────────────────────────────────────────────────────
 
 /**
@@ -160,14 +160,10 @@ fun mergeChannelSearch(
     return out
 }
 
-// السلك السحابي مكتمل الآن (كان TODO(P1-G)):
-//  1) Backend: `GET /api/channels?search=` مفعَّل في ChannelController.list →
-//     ChannelService.searchCloudComplement (ILIKE على name/username/description،
-//     حد 1..100، ترتيب subscriberCount DESC، وفشل الاستعلام يعيد قائمة فارغة).
-//  2) Client: features/channels/ChannelsApi.kt — بنمط CommunitiesApi عبر
-//     AuthorizedApiClient، ودالة الدمج `ChannelsApi.searchMerged(local, query)`
-//     تُطبّق هذه السياسة في مكان واحد: حد أدنى حرفين بلا شبكة، وتجاهل أي فشل
-//     (OFFLINE/401/429/500) بصمت فيُعرض المحلي وحده.
-//  3) Debounce موحّد 300ms (MESSAGE_SEARCH_DEBOUNCE_MS) داخل collectLatest مثل
-//     RedGlobalSearch — يُطبّقه مستهلك الواجهة عند بناء شاشة القنوات.
-// المتبقي: لا توجد شاشة قنوات في red-app بعد؛ هذه الطبقة جاهزة لها.
+// TODO(P1-G/cloud-search): تكملة السلك السحابي عند توفر اتصال — لا يؤثر على بناء offline:
+//  1) Backend: أضف GET /api/channels?search= (مرآة CommunitiesController.list: regex على
+//     name/username/description في Mongo، حد 1..100، ترتيب subscriberCount DESC).
+//  2) Client: انسخ نمط CommunitiesApi.list(search) بـ AuthorizedApiClient.request("GET", …)
+//     داخل features/channels/ChannelsApi (ملف لاحق)، ثم ادمج بـ mergeChannelSearch(local, cloud).
+//  3) Debounce موحّد 300ms + حد أدنى حرفين + إلغاء السابق (collectLatest) مثل RedGlobalSearch.
+//  4) عند انقطاع الشبكة: تجاهل الخطأ بصمت واعرض المحلي فقط (offline-first).

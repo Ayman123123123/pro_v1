@@ -1,0 +1,944 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>Port Configuration</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+var PortCount;
+var LocalPort = 5060;
+var Type = 0;
+var IsSipSameUser = 0;
+var IsSipSamePort = 0;
+function MM_callJS(TotalPort)
+{
+	var i, text, obj, portcfg;
+	
+	PortCount = parseInt(TotalPort);
+	
+	text = '{"PortCfg":[{"SipAcc":"ymn01","AuthId":"ymn01","SipAccPsw":"0192023a7bbd73250516f069df18b500","SipLocalPort":"5068","Register":"31","TxGain":"2","RxGain":"6","szHotLine":"","szHotLine_I2T":""},{"SipAcc":"ymn02","AuthId":"ymn02","SipAccPsw":"d325ffe191a600f562fb59ae52ccbc75","SipLocalPort":"5061","Register":"31","TxGain":"2","RxGain":"6","szHotLine":"","szHotLine_I2T":""},{"SipAcc":"ymn03","AuthId":"ymn03","SipAccPsw":"d5d126684ac9630c107e55b7f0e76ff5","SipLocalPort":"5062","Register":"31","TxGain":"2","RxGain":"6","szHotLine":"","szHotLine_I2T":""},{"SipAcc":"ymn04","AuthId":"ymn04","SipAccPsw":"ddf04a0a99986b0624a38ceea702be76","SipLocalPort":"5063","Register":"31","TxGain":"2","RxGain":"6","szHotLine":"","szHotLine_I2T":""},{"SipAcc":"ymn05","AuthId":"ymn05","SipAccPsw":"d84f8fcb02903f2f7909d3296fc751bb","SipLocalPort":"5064","Register":"31","TxGain":"2","RxGain":"6","szHotLine":"","szHotLine_I2T":""},{"SipAcc":"ymn06","AuthId":"ymn06","SipAccPsw":"0df1f19150ec76698e143f8f35d9c834","SipLocalPort":"5065","Register":"31","TxGain":"2","RxGain":"6","szHotLine":"","szHotLine_I2T":""},{"SipAcc":"ymn07","AuthId":"ymn07","SipAccPsw":"4123570adeabe94c748e3bbeb7c883ca","SipLocalPort":"5066","Register":"31","TxGain":"2","RxGain":"6","szHotLine":"","szHotLine_I2T":""},{"SipAcc":"ymn08","AuthId":"ymn08","SipAccPsw":"6209af25efb234ece470ed36709bf79f","SipLocalPort":"5067","Register":"31","TxGain":"2","RxGain":"6","szHotLine":"785681741","szHotLine_I2T":""}]}';
+	obj = eval('('+text+')');
+	
+	portcfg = obj.PortCfg;
+	
+	for(i=0; i<PortCount; i++)
+	{
+		document.getElementById("SipAcc"+i).value = portcfg[i].SipAcc;
+		document.getElementById("AuthenticateID"+i).value = portcfg[i].AuthId;
+		document.getElementById("SipAccPsw"+i).value = portcfg[i].SipAccPsw;
+		document.getElementById("TxGain"+i).value = portcfg[i].TxGain;
+		document.getElementById("RxGain"+i).value = portcfg[i].RxGain;
+		document.getElementById("OffhookAutodial"+i).value =portcfg[i].szHotLine;
+		document.getElementById("PSTNHotline"+i).value = portcfg[i].szHotLine_I2T;
+		if(document.getElementById("SipAcc"+i).value.length != 0)
+		{
+			document.getElementById("Register"+i).value = portcfg[i].Register;
+		}
+		else
+		{
+			document.getElementById("Register"+i).value = 64;
+		}
+		
+		if(IsSipSamePort)
+		{
+			document.getElementById("SipLocalPort"+i).disabled = true;
+		}
+		else
+		{
+			document.getElementById("SipLocalPort"+i).disabled = false;
+			document.getElementById("SipLocalPort"+i).value = portcfg[i].SipLocalPort;
+		}
+	}
+	
+	if(IsSipSameUser)
+	{
+		for(i=1; i<PortCount; i++)
+		{
+			document.getElementById("SipAcc"+i).disabled = true;
+			document.getElementById("AuthenticateID"+i).disabled = true;
+			document.getElementById("SipAccPsw"+i).disabled = true;
+			document.getElementById("OffhookAutodial"+i).disabled = true;
+			document.getElementById("PSTNHotline"+i).disabled = true;
+		}
+	}
+	
+	for(i=0; i<PortCount; i++)
+	{
+		RegSelect(i);
+	}
+}
+
+function find_repeat_sipPort()
+{
+	var mPortCount=0;
+    if(IsSipSamePort)
+    {
+        mPortCount = 1;
+    }
+    else
+	{
+        mPortCount = PortCount;
+	}
+    var i = 0;
+    var j = 0;
+    for(i = 0; i < mPortCount; i++)
+    {
+        var port1 = parseInt(document.getElementById(("SipLocalPort"+i)).value, 10);
+        for(j = i + 1; j < mPortCount; j++)
+        {
+            var port2 = parseInt(document.getElementById(("SipLocalPort"+j)).value, 10);
+            if(port1 == port2)
+            {
+                alert("The Local Sip Port of port "+i+" is same as port "+j);
+                return false;
+            }
+        }
+    }
+
+    var groupPort = '[{"port":"0","SIPPortNum":"5060"}]';
+    var groupPortObj = eval('('+groupPort+')');
+    for(i = 0; i < groupPortObj.length; i++)
+    {
+        var portGroup = parseInt(groupPortObj[i].SIPPortNum);
+        for(j = 0; j < mPortCount; j++)
+        {
+            var port = parseInt(document.getElementById(("SipLocalPort"+j)).value);
+            if(port != 0 && portGroup != 0)
+            {
+                if(port == portGroup) {
+                    alert("The Local Sip Port of port "+j+" is same as port group "+groupPortObj[i].port);
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+function find_repeat_regist()
+{
+	var mIsSipSameUser = 0;
+    if(IsSipSameUser != 0)
+    {
+        mIsSipSameUser = 1;
+    }
+    else
+	{
+        mIsSipSameUser = PortCount;
+	}
+    var i = 0;
+    var j = 0;
+    for(i = 0; i < mIsSipSameUser; i++)
+    {
+        var userId1 = document.getElementById("SipAcc"+i).value;
+        for(j = i+1; j < mIsSipSameUser; j++)
+        {
+            var userId2 = document.getElementById("SipAcc"+j).value;
+            if(userId1.length > 0 && userId2.length > 0)
+            {
+                if(userId1 == userId2)
+                {
+                    var regist1 = document.getElementById("Register"+i).value;
+                    var regist2 = document.getElementById("Register"+j).value;
+                    if(regist1 != 64 && regist2 != 64)
+                    {
+                        if(regist1 == regist2)
+                        {
+                            alert("the sip user id and register of port "+i+" is same as port "+j);
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    var groupRegist = '[]';
+    var groupRegistObj = eval('('+groupRegist+')');
+    for(i = 0; i < groupRegistObj.length; i++)
+    {
+        var userId2 = groupRegistObj[i].SipUserId;
+        var regist2 = parseInt(groupRegistObj[i].RegistNum, 10);
+        for(j = 0; j < mIsSipSameUser; j++)
+        {
+            var userId1 = document.getElementById("SipAcc"+j).value;
+            if(userId1.length > 0 && userId2.length > 0)
+            {
+                if(userId2 == userId1)
+                {
+                    var regist1 = parseInt(document.getElementById("Register"+j).value, 10);
+                    if(regist2 !=64 && regist1 != 64)
+                    {
+                        if(regist2 == regist1)
+                        {
+                            alert("the sip user id and register of port group "+groupRegistObj[i].port+" is same as port "+j);
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
+function form_check()
+{
+	var permit = 1;
+	if(permit == 0)
+	{
+		window.alert("You have no permission.\n Please visit the Access Control page.");
+		return false;
+	}
+	
+	for(i=0; i<PortCount; i++)
+	{
+        if(sip_local_port_in(document.getElementById("SipLocalPort"+i).value) == false)
+        {
+            alert("The Local Sip Port range from 1024-65534");
+            return false;
+        }
+		port_number = document.getElementById("SipLocalPort"+i).value
+		if((port_number> 65534  ||  port_number< 1024) && (port_number.length != 0))
+		{
+			alert("The Local Sip Port range from 1024-65534");
+			return false;
+		}
+		if(IsValidVoIPHotline(document.getElementById("OffhookAutodial"+i).value) == false)
+		{
+            alert("VoIP Hotline number cannot contain characters other than English digital -_*#+.!!");
+            return false;
+		}
+		if(IsValidHotline(document.getElementById("PSTNHotline"+i).value) == false)
+		{
+            alert("Hotline number cannot contain characters other than English digital -_*#+!!");
+            return false;
+		}
+	}
+
+    if(find_repeat_sipPort() == false)
+    {
+        return false;
+    }
+
+    if(find_repeat_regist() == false)
+    {
+        return false;
+    }
+    return true;
+}
+
+function CheckAll()
+{
+	var i;
+	if(document.getElementById("All").checked == true)
+	{
+		for(i=0; i<PortCount; i++)
+		{
+			document.getElementById(i).checked = true;
+		}
+	}
+	else
+	{
+		for(i=0; i<PortCount; i++)
+		{
+			document.getElementById(i).checked = false;
+		}
+	}
+}
+
+function LastStrIsDigital(value, index)
+{
+	var re = /^\d+$/;
+	var match = value.substr(value.length - index);
+	if(re.test(match) == false)
+	{
+		return false;
+	}
+	return true;
+}
+
+function IncreaseStrIsDigital(value)
+{
+	var re = /^\d{0,4}$/;
+	if(re.test(value) == false)
+	{
+		return false;
+	}
+	return true;
+}
+
+function strDelEndStr (strSource,strEnd)
+{
+    var str=strSource;
+    var str1=strEnd;
+    var len=str.length;
+    if(len<=0)
+	{
+		return "error";
+	}     
+    var len1=str1.length;
+    len=len-len1;
+    var str3=str.substring(0,len);
+    return str3;
+}
+
+
+function split_str(text, step)
+{
+	var strs = new Array();
+	var str  = text;
+	var n    = str.replace(/[^0-9]/ig, ".");
+	strs     = n.split(".");
+	n        = strs.pop();
+	
+	if((isNaN(n) == false) && (n.length >16))
+	{
+		alert("The number of digits at the end of the string should not exceed 16 ");
+		return "error";
+	}
+	
+	var s    = strDelEndStr (str, n );
+	if(s == "error")
+	{
+		return "error";
+	}
+	var num  = parseInt(n,10);
+    num      = num + step ;
+    var strN = num.toString();
+    var numStart = "";
+    if(n.length > strN.length)
+    {
+        var ln =n.length - strN.length;
+        while(ln)
+        {
+            numStart+="0";
+            ln--;
+        }
+        strN = numStart+strN;
+    }
+    s = s + strN;
+	return s;
+}
+
+function SipAccCopy()
+{
+	var i,index;
+	var add = parseInt(document.getElementById("SipAccIn").value);
+	var Temp2 = document.getElementById("SipAccAll").value;
+	var re = /\d/;
+	var step = 0;
+	var szPrefix, Suffix, szSuffix;
+	
+	if((isNaN(Temp2) == false) && Temp2.length >16)
+	{
+		alert("The length of SIP User ID must be less than 16 when just in number");
+		return false;
+	}
+	
+	if(LastStrIsDigital(document.getElementById("SipAccAll").value, 1) == false)
+	{
+		alert("'SIP User ID' that the last one character must be digits!");
+		document.getElementById("SipAccAll").select();
+		return false;
+	}
+	
+	if(document.getElementById("SipAccIn").value.length == 0)
+	{
+		alert("Range from 1-1000!");
+		return false;
+	}
+		
+	if(IncreaseStrIsDigital(document.getElementById("SipAccIn").value) == false
+	|| add <1 || add> 1000 || (document.getElementById("SipAccIn").value.length == 0))
+	{
+		alert("Range from 1-1000!");
+		document.getElementById("SipAccIn").select();
+		return false;
+	}
+	
+	for(i=0; i<PortCount; i++)
+	{
+		if(document.getElementById(i).checked == true)
+		{
+			if(split_str(Temp2, step) == "error")
+			{
+				return false;
+			}
+			else
+			{
+				output_string = split_str(Temp2, step);
+			}		
+			document.getElementById("SipAcc"+i).value = output_string;
+			step += add;
+		}
+	}
+}
+
+function RegSelect(Index)
+{
+	var PortObj = document.getElementById("SipLocalPort"+Index);
+	//SIP_TRANSPORT_TLS
+	if(Type == 3)
+	{
+		if(document.getElementById("Register"+Index).value == 65)
+		{
+			PortObj.value = LocalPort;
+			PortObj.disabled = false;
+			PortObj.setAttribute("readOnly",'true');
+		}
+		else if(document.getElementById("Register"+Index).value == 64)
+		{
+			if(IsSipSameUser || IsSipSamePort)
+			{
+				PortObj.disabled = true;
+			}
+			PortObj.value = "";
+			PortObj.removeAttribute("readOnly");
+		}
+		else
+		{
+			if(IsSipSameUser || IsSipSamePort)
+			{
+				PortObj.disabled = true;
+			}
+			PortObj.removeAttribute("readOnly");
+		}
+	}
+}
+
+function AuthenticateIDCopy()
+{
+	var i,index;
+	var add = parseInt(document.getElementById("AuthenticateIDIn").value);
+	var Temp2 = document.getElementById("AuthenticateIDAll").value;
+	var re = /\d/;
+	var step = 0;
+	var szPrefix, Suffix, szSuffix;
+	
+	if((isNaN(Temp2) == false) && Temp2.length >16)
+	{
+		alert("The length of Authenticate ID must be less than 16 when just in number");
+		return false;
+	}
+	
+	if(LastStrIsDigital(document.getElementById("AuthenticateIDAll").value, 1) == false)
+	{
+		
+		alert("'Authenticate ID' that the last one character must be digits!");
+		document.getElementById("AuthenticateIDAll").select();
+		return false;
+	}
+	
+	if(IncreaseStrIsDigital(document.getElementById("AuthenticateIDIn").value) == false
+	|| add <1 || add> 1000 || (document.getElementById("AuthenticateIDIn").value.length == 0))
+	{
+		alert("Range from 1-1000!");
+		document.getElementById("AuthenticateIDIn").select();
+		return false;
+	}
+	
+	for(i=0; i<PortCount; i++)
+	{
+		if(document.getElementById(i).checked == true)
+		{
+			if(split_str(Temp2, step) == "error")
+			{
+				return false;
+			}
+			else
+			{
+				output_string = split_str(Temp2, step);
+			}		
+			document.getElementById("AuthenticateID"+i).value = output_string;
+			step += add;
+		}
+	}
+}
+
+function SipAccPswCopy()
+{
+	var i,index;
+	var add = parseInt(document.getElementById("SipAccPswIn").value);
+	var Temp2 = document.getElementById("SipAccPswAll").value;
+	var re = /\d/;
+	var step = 0;
+	var szPrefix, Suffix, szSuffix;
+	
+	if((isNaN(Temp2) == false) && Temp2.length >16)
+	{
+		alert("The length of Authenticate Password must be less than 16 when just in number");
+		return false;
+	}
+	
+	if(IncreaseStrIsDigital(document.getElementById("SipAccPswIn").value) == false
+	|| add <0 || add> 1000 || (document.getElementById("SipAccPswIn").value.length == 0))
+	{
+		alert("Range from 0-1000!");
+		document.getElementById("SipAccPswIn").select();
+		return false;
+	}
+	
+	if((document.getElementById("SipAccPswIn").value == 0) && (IncreaseStrIsDigital(document.getElementById("SipAccPswIn").value) == true))
+	{
+		//密码步长为0时，不应该去判断最后一位是否为数字，表示所有账户使用相同密码	
+		//步长不为0时，应该去判断最后一位是否为数字
+		for(i=0; i<PortCount; i++)
+		{
+			if(document.getElementById(i).checked == true)
+			{
+				document.getElementById("SipAccPsw"+i).value = Temp2;
+			}
+		}
+		
+		return true;
+	}
+	else
+	{
+		if(LastStrIsDigital(document.getElementById("SipAccPswAll").value, 1) == false)
+		{
+			alert("'Authenticate Password' that the last one character must be digits!");
+			document.getElementById("SipAccPswAll").select();
+			return false;
+		}
+	}
+	
+	for(i=0; i<PortCount; i++)
+	{
+		if(document.getElementById(i).checked == true)
+		{
+			if(split_str(Temp2, step) == "error")
+			{
+				return false;
+			}
+			else
+			{
+				output_string = split_str(Temp2, step);
+			}		
+			document.getElementById("SipAccPsw"+i).value = output_string;
+			step += add;
+		}
+	}
+}
+
+function sip_local_port_in(str) {
+    var re=/^[0-9]*$/;
+    return re.test(str);
+}
+
+function SipLocalPortCopy()
+{
+	var i,index;
+	var add = parseInt(document.getElementById("SipLocalPortIn").value);
+	var Temp2 = document.getElementById("SipLocalPortAll").value;
+	var re = /\d/;
+	var Count = 0;
+	
+	if(IsSipSamePort)
+	{
+		alert("Use the same local sip port, do not need to input!");
+		return false;
+	}
+	
+	if(Temp2.length == 0)
+	{
+		alert("The Type of Sip Local Port must be digits");
+		return false;
+	}
+	
+	if(isNaN(Temp2) == true)
+	{
+		alert("The Type of Sip Local Port must be digits");
+		return false;
+	}
+
+    if( sip_local_port_in(document.getElementById("SipLocalPortIn").value) == false
+        || add <1
+        || add> 1000
+        || (document.getElementById("SipLocalPortIn").value.length == 0))
+	{
+		alert("Range from 1-1000!");
+		document.getElementById("SipLocalPortIn").select();
+		return false;
+	}
+	
+	var Port = parseInt(Temp2);
+	for(i=0; i<PortCount; i++)
+	{
+		if(document.getElementById(i).checked == true)
+		{
+			document.getElementById("SipLocalPort"+i).value = Port + Count;
+			Count += add;
+		}
+	}
+}
+
+function RegisterCopy()
+{
+	var i;
+	for(i=0; i<PortCount; i++)
+	{
+		if(document.getElementById(i).checked == true)
+		{
+			document.getElementById("Register"+i).value = document.getElementById("RegisterAll").value;
+		}
+	}
+}
+
+function TxGainCopy()
+{
+	var i;
+	for(i=0; i<PortCount; i++)
+	{
+		if(document.getElementById(i).checked == true)
+		{
+			document.getElementById("TxGain"+i).value = document.getElementById("TxGainAll").value;
+		}
+	}
+}
+
+function RxGainCopy()
+{
+	var i;
+	for(i=0; i<PortCount; i++)
+	{
+		if(document.getElementById(i).checked == true)
+		{
+			document.getElementById("RxGain"+i).value = document.getElementById("RxGainAll").value;
+		}
+	}
+}
+
+function split_string_num(source)
+{
+	var position = 0;
+	var str="", num="";
+	for(i=source.length - 1; i >= 0; i--)
+	{
+		if(source[i] == '0' || source[i] =='1' || source[i] =='2' || source[i] =='3' || source[i] =='4' || source[i] =='5'
+		|| source[i] =='6' || source[i] =='7' || source[i] =='8' || source[i] =='9')
+		{
+			position = i;
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	if(position != 0)
+	{
+		str = source.substring(0, position);
+	}
+	num = source.substring(position);
+	return [str, num]
+}
+
+function OffhookAutodialCopy()
+{
+	var i;
+	var j=0;
+
+	var splitArray;
+	var clean = false;
+		if(document.getElementById("OffhookAutodialAll").value=='')
+		{
+			clean = true;
+		}
+		else if(LastStrIsDigital(document.getElementById("OffhookAutodialAll").value, 1) == false)
+		{
+			alert("'To VOIP Hotline' that the last one character must be digits!");
+			document.getElementById("OffhookAutodialAll").select();
+			return false;
+		}
+
+		splitArray = split_string_num(document.getElementById("OffhookAutodialAll").value)
+
+		var addValue = parseInt(document.getElementById("OffhookAutodialCpyIn").value)
+		
+		//if addValue no input,turn to 0
+		if(isNaN(addValue))
+		{
+			addValue = 0;
+			document.getElementById("OffhookAutodialCpyIn").value ='0';
+		}
+		
+		
+		for(i=0; i<PortCount; i++)
+		{
+			if(document.getElementById(i).checked == true&&clean)
+			{
+				document.getElementById("OffhookAutodial"+i).value ='';
+			}
+			else if(document.getElementById(i).checked == true)
+			{
+				
+				document.getElementById("OffhookAutodial"+i).value = splitArray[0] + (parseInt(splitArray[1]) + j*addValue);
+			
+				j++;
+			}
+		}
+	}
+function PSTNHotlineCopy()
+{	
+	var i;
+	var j=0;
+	var clean = false;
+	if(document.getElementById("PSTNHotlineAll").value=='')
+	{
+		clean = true;
+	}
+	else if(LastStrIsDigital(document.getElementById("PSTNHotlineAll").value, 1) == false)
+	{
+		alert("'To PSTN Hotline' that the last one character must be digits!");
+		document.getElementById("PSTNHotlineAll").select();
+		return false;
+	}
+
+	splitArray = split_string_num(document.getElementById("PSTNHotlineAll").value)
+
+	var addValue = parseInt(document.getElementById('PSTNHotlineCpyIn').value)
+	if(isNaN(addValue))
+	{
+		addValue = 0;
+		document.getElementById("PSTNHotlineCpyIn").value = '0';
+	}
+	for(i=0; i<PortCount; i++)
+	{
+		if(document.getElementById(i).checked == true&&clean)
+		{
+			document.getElementById("PSTNHotline"+i).value='';
+		}
+		else if(document.getElementById(i).checked == true)
+		{
+			document.getElementById("PSTNHotline"+i).value = splitArray[0] + (parseInt(splitArray[1]) + j*addValue);
+			j++;
+		}
+	}
+}
+</script>
+</head>
+<body onLoad="MM_callJS('8')">
+<form action="/goform/PortCfg" method="post" name="PortCfg" id="PortCfg">
+<input type="hidden" name="PortNo" id="PortNo" value="">
+<table width="1400px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left" width="7" height="24"></td>
+   <td>Port List</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+     
+ <table id="PortConfig1" width="1400px" align="center" class="content">
+	 <tr class="thead" align="center">
+		<td width="3%"> </td>
+	    <td width="3%">Port</td>
+		<td width="11%">SIP User ID</td>
+		<td width="11%">Authenticate ID</td>
+		<td width="11%">Authenticate Password</td>
+        <td width="10%">Local SIP Port</td>
+		<td width="15%">Register to</td>
+		<td width="7%">Tx Gain</td>
+		<td width="7%">Rx Gain</td>
+		<td width="11%">To VOIP Hotline</td>
+		<td width="11%">To PSTN Hotline</td>
+       </tr>
+	   
+	   <script language="JavaScript" type="text/JavaScript">
+			var i = 0;
+			for(i=0; i<8; i++)
+			{
+				document.write("<tr align='center'><td> <input id='"+i+"' name='"+i+"' type='checkbox' /></td>"
+					+"<td align='center'  style=font-size:13px;>"+i+"</td>"
+					+"<td><input class='text' id='SipAcc"+i+"' maxlength='31' name='SipAcc"+i+"' size='13' value='' oninput=\"value=value.replace(/[\u4E00-\u9FA5]/g,'')\"></td>"
+					+"<td><input class='text' id='AuthenticateID"+i+"' maxlength='31' name='AuthenticateID"+i+"' size='13' value='' oninput=\"value=value.replace(/[\u4E00-\u9FA5]/g,'')\"></td>"
+					+"<td><span id='PasswordSpace"+i+"'>");
+					
+				document.write("<input class='text' type='password' id='SipAccPsw"+i+"' maxlength='31' size='13' name='SipAccPsw"+i+"'  value=''>"
+					+"</span></td>");
+					
+				document.write("<td><input name='SipLocalPort"+i+"' class='text' id='SipLocalPort"+i+"' size='7' value=''  maxlength='5' oninput=\"value=value.replace(/[\u4E00-\u9FA5]/g,'')\"></td>"
+					+"<td><select name='Register"+i+"' id='Register"+i+"' class='list' onchange='RegSelect("+i+")'>"
+					+"<option value='64'>No Register</option>"
+					+"<option value='65'>Sip Proxy</option>"
+					+"<optgroup id= 'sipTrunk"+i+"' label='Sip Trunk'>"
+					+"<option value='31' id='idSrcIpTrunk31'>sip-trunk-31 &lt;Asterisk&gt;</option>"
+					+"</optgroup>"
+					+"</select></td>"
+					+"<td>"
+					 +"<select name='TxGain"+i+"' class='list' id='TxGain"+i+"' onChange='mouse_click();'>"
+					  +"<option value='-10' >-10dB</option>"
+					  +"<option value='-9' >-9dB</option>"
+					  +"<option value='-8' >-8dB</option>"
+					  +"<option value='-7' >-7dB</option>"
+					  +"<option value='-6' >-6dB</option>"
+					  +"<option value='-5' >-5dB</option>"
+					  +"<option value='-4' >-4dB</option>"
+					  +"<option value='-3' >-3dB</option>"
+					  +"<option value='-2' >-2dB</option>"
+					  +"<option value='-1' >-1dB</option>"
+					  +"<option value='0' >0dB</option>"
+					  +"<option value='1' >+1dB</option>"
+					  +"<option value='2' selected>+2dB</option>"
+					  +"<option value='3' >+3dB</option>"
+					  +"<option value='4' >+4dB</option>"
+					  +"<option value='5' >+5dB</option>"
+					  +"<option value='6' >+6dB</option>"
+					  +"<option value='7' >+7dB</option>"
+					  +"<option value='8' >+8dB</option>"
+					  +"<option value='9' >+9dB</option>"
+					  +"<option value='10' >+10dB</option>"
+					  +"</select></td>");
+					  
+				document.write("<td>"
+					  +"<select name='RxGain"+i+"' class='list' id='RxGain"+i+"' onChange='mouse_click();'>"
+					  +"<option value='-10' >-10dB</option>"
+					  +"<option value='-9' >-9dB</option>"
+					  +"<option value='-8' >-8dB</option>"
+					  +"<option value='-7' >-7dB</option>"
+					  +"<option value='-6' >-6dB</option>"
+					  +"<option value='-5' >-5dB</option>"
+					  +"<option value='-4' >-4dB</option>"
+					  +"<option value='-3' >-3dB</option>"
+					  +"<option value='-2' >-2dB</option>"
+					  +"<option value='-1' >-1dB</option>"
+					  +"<option value='0' >0dB</option>"
+					  +"<option value='1' >+1dB</option>"
+					  +"<option value='2' >+2dB</option>"
+					  +"<option value='3' >+3dB</option>"
+					  +"<option value='4' >+4dB</option>"
+					  +"<option value='5' >+5dB</option>"
+					  +"<option value='6' selected>+6dB</option>"
+					  +"<option value='7' >+7dB</option>"
+					  +"<option value='8' >+8dB</option>"
+					  +"<option value='9' >+9dB</option>"
+					  +"<option value='10' >+10dB</option>"
+					  +"</select>	   </td>");
+					  
+				document.write("<td><input class='text' id='OffhookAutodial"+i+"' maxlength='31' onClick='radio_click();' name='OffhookAutodial"+i+"' size='11' value='' oninput=\"value=value.replace(/[\u4E00-\u9FA5]/g,'')\"></td>"
+					  +"<td><input class='text' id='PSTNHotline"+i+"' maxlength='31' name='PSTNHotline"+i+"' size='11' value='' oninput=\"value=value.replace(/[\u4E00-\u9FA5]/g,'')\"> </td>"
+					  +"</tr>");
+			}
+		</script>
+		<tr align="center">
+			<td>
+				<input id='All' name='All' type="checkbox" onclick="CheckAll();"/>
+			</td>
+			<td align='center'  style=font-size:13px;>All</td>
+			<td>
+				<input class="text" id="SipAccIn" maxlength="4" size='2' value='1' oninput="value=value.replace(/[\u4E00-\u9FA5]/g,'')"/>
+				<input id="SipAccCpy" name="SipAccCpy" type="button" class="button" onclick="SipAccCopy();" value="Increment"/>
+			</td>
+			<td>
+				<input class="text" id="AuthenticateIDIn" maxlength="4" size='2' value='1' oninput="value=value.replace(/[\u4E00-\u9FA5]/g,'')"/>
+				<input id="AuthenticateIDCpy" name="AuthenticateIDCpy" type="button" class="button" onclick="AuthenticateIDCopy();" value="Increment"/>
+			</td>
+			<td>
+				<input class="text" id="SipAccPswIn" maxlength="4" size='2' value='0' oninput="value=value.replace(/[\u4E00-\u9FA5]/g,'')"/>
+				<input id="SipAccPswCpy" name="SipAccPswCpy" type="button" class="button" onclick="SipAccPswCopy();" value="Increment"/>
+			</td>
+			<td>
+				<input class="text" id="SipLocalPortIn" maxlength="4" size='2' value='1' oninput="value=value.replace(/[\u4E00-\u9FA5]/g,'')"/>
+				<input id="SipLocalPortCpy" name="SipLocalPortCpy" type="button" class="button" onclick="SipLocalPortCopy();" value="Increment"/>
+			</td>
+			<td><input id="RegisterCpy" name="RegisterCpy" type="button" class="button" onclick="RegisterCopy();" value="copy"/></td>	
+			<td><input id="TxGainCpy" name="TxGainCpy" type="button" class="button" onclick="TxGainCopy();" value="copy"/></td>
+			<td><input id="RxGainCpy" name="RxGainCpy" type="button" class="button" onclick="RxGainCopy();" value="copy"/></td>
+			<td>
+				<input class="text" id="OffhookAutodialCpyIn" maxlength="4" size='2' value='1' oninput="value=value.replace(/[^0-9]/g,'')"/>
+				<input id="OffhookAutodialCpy" name="OffhookAutodialCpy" type="button" onclick="OffhookAutodialCopy();" class="button" value="copy"/>
+			</td>
+			<td>
+				<input class="text" id="PSTNHotlineCpyIn" maxlength="4" size='2' value='1' oninput="value=value.replace(/[^0-9]/g,'')"/>
+				<input id="PSTNHotlineCpy" name="PSTNHotlineCpy" type="button" class="button" onclick="PSTNHotlineCopy();" value="copy"/>
+			</td>
+					
+		</tr>
+		
+		<tr align='center'>
+			<td></td>
+			<td></td>
+			<td>
+				<input class='text' id='SipAccAll' maxlength='31' name='SipAccAll' size='13' value='' oninput="value=value.replace(/[\u4E00-\u9FA5]/g,'')"></td>
+			<td><input class='text' id='AuthenticateIDAll' maxlength='31' name='AuthenticateIDAll' size='13' value=''  oninput="value=value.replace(/[\u4E00-\u9FA5]/g,'')"></td>
+			<td>
+				<span id='PasswordSpace'>
+				<input class='text' type='password' id='SipAccPswAll' maxlength='31' size='13' name='SipAccPswAll'  value=''>
+				</span>
+			</td>
+			<td><input name='SipLocalPortAll' class='text' id='SipLocalPortAll' size='7' value=''  maxlength='5' oninput="value=value.replace(/[^0-9]/g,'')"></td>
+			<td><select name='RegisterAll' id='RegisterAll' class='list'>
+				<option value='64'>No Register</option>
+				<option value='65'>Sip Proxy</option>
+				<optgroup label='Sip Trunk'>
+					<option value='31' id='idSrcIpTrunk31'>sip-trunk-31 &lt;Asterisk&gt;</option>
+				</optgroup>
+				</select>
+		    </td>
+			<td>
+			 <select name='TxGainAll' class='list' id='TxGainAll' onChange='mouse_click();'>
+			  <option value='-10' >-10dB</option>
+			  <option value='-9' >-9dB</option>
+			  <option value='-8' >-8dB</option>
+			  <option value='-7' >-7dB</option>
+			  <option value='-6' >-6dB</option>
+			  <option value='-5' >-5dB</option>
+			  <option value='-4' >-4dB</option>
+			  <option value='-3' >-3dB</option>
+			  <option value='-2' >-2dB</option>
+			  <option value='-1' >-1dB</option>
+			  <option value='0' >0dB</option>
+			  <option value='1' >+1dB</option>
+			  <option value='2' selected>+2dB</option>
+			  <option value='3' >+3dB</option>
+			  <option value='4' >+4dB</option>
+			  <option value='5' >+5dB</option>
+			  <option value='6' >+6dB</option>
+			  <option value='7' >+7dB</option>
+			  <option value='8' >+8dB</option>
+			  <option value='9' >+9dB</option>
+			  <option value='10' >+10dB</option>
+			 </select>
+			</td>
+			<td>
+			  <select name='RxGainAll' class='list' id='RxGainAll' onChange='mouse_click();'>
+			  <option value='-10' >-10dB</option>
+			  <option value='-9' >-9dB</option>
+			  <option value='-8' >-8dB</option>
+			  <option value='-7' >-7dB</option>
+			  <option value='-6' >-6dB</option>
+			  <option value='-5' >-5dB</option>
+			  <option value='-4' >-4dB</option>
+			  <option value='-3' >-3dB</option>
+			  <option value='-2' >-2dB</option>
+			  <option value='-1' >-1dB</option>
+			  <option value='0' >0dB</option>
+			  <option value='1' >+1dB</option>
+			  <option value='2' >+2dB</option>
+			  <option value='3' >+3dB</option>
+			  <option value='4' >+4dB</option>
+			  <option value='5' >+5dB</option>
+			  <option value='6' selected>+6dB</option>
+			  <option value='7' >+7dB</option>
+			  <option value='8' >+8dB</option>
+			  <option value='9' >+9dB</option>
+			  <option value='10' >+10dB</option>
+			</select>	   
+		  </td>
+		  <td>
+			<input class='text' id='OffhookAutodialAll' maxlength='31' onClick='radio_click();' name='OffhookAutodialAll' size='11' value='' oninput="value=value.replace(/[^0-9a-zA-Z\+]/g,'')">
+		  </td>																
+		  <td><input class='text' id='PSTNHotlineAll' maxlength='31' name='PSTNHotlineAll' size='11' value='' oninput="value=value.replace(/[^0-9\+]/g,'')"> </td>
+		  
+		 </tr>
+			 
+     </table>
+	 
+	 <p align="center">
+		<input class="button" id="ok" name="ok" type="submit" value="Save" onClick="return form_check();"/>
+	</p>
+ </form>
+</body>
+</html>

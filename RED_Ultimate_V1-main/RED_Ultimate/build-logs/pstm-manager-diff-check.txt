@@ -1,0 +1,109 @@
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:9: trailing whitespace.
++import org.asteriskjava.manager.action.HangupAction
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:10: trailing whitespace.
++import org.asteriskjava.manager.action.RedirectAction
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:23: trailing whitespace.
++
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:302: trailing whitespace.
++
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:305: trailing whitespace.
++    /**
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:306: trailing whitespace.
++     * Accept an incoming PSTN call by bridging the DINSTAR channel to the WebRTC client.
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:307: trailing whitespace.
++     * Uses AMI RedirectAction to move the channel from from-dinstar to from-incoming-bridge
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:308: trailing whitespace.
++     * which dials the red-webrtc-client endpoint, sending a SIP INVITE to the app.
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:309: trailing whitespace.
++     */
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:310: trailing whitespace.
++    fun acceptIncomingCall(channel: String, webrtcUser: String): Boolean {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:311: trailing whitespace.
++        return try {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:312: trailing whitespace.
++            val conn = ensureConnected()
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:313: trailing whitespace.
++            // Redirect the incoming DINSTAR channel to the incoming-bridge context
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:314: trailing whitespace.
++            // which will dial the red-webrtc-client endpoint via exten 's'
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:315: trailing whitespace.
++            val action = RedirectAction().apply {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:316: trailing whitespace.
++                setChannel(channel)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:317: trailing whitespace.
++                setContext("from-incoming-bridge")
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:318: trailing whitespace.
++                setExten("s")
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:319: trailing whitespace.
++                setPriority(1)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:320: trailing whitespace.
++            }
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:321: trailing whitespace.
++            val response = conn.sendAction(action, actionTimeoutMs)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:322: trailing whitespace.
++            val success = response.response?.equals("Success", ignoreCase = true) == true
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:323: trailing whitespace.
++            if (success) {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:324: trailing whitespace.
++                log.info("Redirected incoming channel {} to from-incoming-bridge for {}", channel, webrtcUser)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:325: trailing whitespace.
++            } else {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:326: trailing whitespace.
++                log.warn("Failed to redirect channel {}: {}", channel, response.message)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:327: trailing whitespace.
++            }
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:328: trailing whitespace.
++            success
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:329: trailing whitespace.
++        } catch (e: Exception) {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:330: trailing whitespace.
++            log.error("Error accepting incoming call on channel {}: {}", channel, e.message)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:331: trailing whitespace.
++            false
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:332: trailing whitespace.
++        }
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:333: trailing whitespace.
++    }
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:334: trailing whitespace.
++
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:335: trailing whitespace.
++    /**
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:336: trailing whitespace.
++     * Reject an incoming PSTN call by hanging up the DINSTAR channel.
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:337: trailing whitespace.
++     */
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:338: trailing whitespace.
++    fun rejectIncomingCall(channel: String): Boolean {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:339: trailing whitespace.
++        return try {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:340: trailing whitespace.
++            val conn = ensureConnected()
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:341: trailing whitespace.
++            val action = HangupAction(channel)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:342: trailing whitespace.
++            val response = conn.sendAction(action, actionTimeoutMs)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:343: trailing whitespace.
++            val success = response.response?.equals("Success", ignoreCase = true) == true
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:344: trailing whitespace.
++            if (success) {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:345: trailing whitespace.
++                log.info("Hung up incoming channel {}", channel)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:346: trailing whitespace.
++            } else {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:347: trailing whitespace.
++                log.warn("Failed to hangup channel {}: {}", channel, response.message)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:348: trailing whitespace.
++            }
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:349: trailing whitespace.
++            success
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:350: trailing whitespace.
++        } catch (e: Exception) {
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:351: trailing whitespace.
++            log.error("Error rejecting incoming call on channel {}: {}", channel, e.message)
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:352: trailing whitespace.
++            false
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:353: trailing whitespace.
++        }
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt:354: trailing whitespace.
++    }
+EXIT_CODE=2

@@ -128,11 +128,6 @@ class CallLogSyncWorker(
                 }
                 is ApiResult.Error -> {
                     android.util.Log.w("CallLogSync", "Push failed for ${log.id}: ${result.message}")
-                    // FIX: Break loop on rate limit or connection failure to prevent OkHttp pool exhaustion
-                    if (result.message.contains("RATE_LIMIT") || result.message.contains("connect") || result.message.contains("timeout", ignoreCase = true)) {
-                        android.util.Log.e("CallLogSync", "Halting sync loop due to network/rate-limit error")
-                        break
-                    }
                     // Keep pending for next sync
                 }
             }

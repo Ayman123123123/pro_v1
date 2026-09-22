@@ -399,8 +399,7 @@ wss.on('connection', (ws, _req, claims) => {
         const roomId = String(message.roomId || '');
         if (!/^[A-Za-z0-9_-]{4,128}$/.test(roomId)) throw new Error('Invalid roomId');
         // أمان: التذكرة مربوطة بغرفة محددة (claim sfuGroupId) — لا يُسمح بالانضمام لغرفة غير الغرفة المصرَّح بها
-        const allowedRooms = [String(claims.sfuGroupId), `GROUP_CALL_${claims.sfuGroupId}`];
-        if (!claims.sfuGroupId || !allowedRooms.includes(roomId)) throw new Error('Ticket not bound to this room');
+        if (!claims.sfuGroupId || String(claims.sfuGroupId) !== roomId) throw new Error('Ticket not bound to this room');
 
         const room = await roomFor(roomId);
         const peerId = claims.redId;
@@ -550,8 +549,6 @@ wss.on('connection', (ws, _req, claims) => {
         consumer.on('layerschange', (layers) => {
           console.debug(`[Simulcast] Consumer ${consumer.id} spatial layer changed to: ${layers ? layers.spatialLayer : 'none'}`);
         });
-
-        await consumer.resume();
 
         return send(ws, requestId, {
           status: 'consuming',

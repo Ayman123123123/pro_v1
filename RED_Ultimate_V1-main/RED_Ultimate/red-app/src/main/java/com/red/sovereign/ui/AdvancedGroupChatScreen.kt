@@ -1,6 +1,5 @@
 package com.red.sovereign.ui
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -164,7 +163,7 @@ fun AdvancedGroupChatScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(text = msg.senderName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                                Text(text = msg.timestamp, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(text = msg.timestamp, fontSize = 11.sp, color = Color.Gray)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(text = msg.content, fontSize = 15.sp)
@@ -211,7 +210,7 @@ fun AdvancedGroupChatScreen(
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         Text(text = agent.agentName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        Text(text = agent.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(text = agent.description, fontSize = 11.sp, color = Color.Gray)
                                         Text(text = "Status: ACTIVE 🟢", fontSize = 10.sp, color = Color.Green, fontWeight = FontWeight.Bold)
                                     }
                                 }

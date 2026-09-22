@@ -1,6 +1,5 @@
 package com.red.sovereign.features.calls
 
-import androidx.compose.material3.MaterialTheme
 import android.content.Intent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -277,7 +276,7 @@ fun CallStatsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Rounded.Star, null, tint = SovereignColors.GoldNeon, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("الأكثر تواصلاً", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text("الأكثر تواصلاً", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -303,7 +302,7 @@ fun CallStatsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Rounded.Schedule, null, tint = SovereignColors.CyanNeon, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("ساعة الذروة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text("ساعة الذروة", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -389,7 +388,7 @@ private fun ChannelMiniCard(
         ) {
             Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
             Text("$count", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text(label, color = Color.White.copy(0.7f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

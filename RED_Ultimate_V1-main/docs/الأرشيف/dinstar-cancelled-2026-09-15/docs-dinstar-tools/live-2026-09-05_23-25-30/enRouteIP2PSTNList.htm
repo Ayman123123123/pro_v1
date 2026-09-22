@@ -1,0 +1,1115 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>RouteIP2PSTN</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+var currentpage =-1;
+var pagenum = 0;
+var RowCount = 0;
+var TableSize = 0;
+
+
+
+var g_RouteObj;
+var MaxTableSize = 64;
+var g_IsSelectIndexRecord = 0;
+
+var g_RouteTableIndexRecord = 0;
+
+var g_totalValidRoute = 0;
+
+//web 
+var PER_PAGE_ELEM_MAX = 16;
+var g_CurrPageRecord = 1;				//当前页
+var g_PageTotalRecord = 1;			//总页数
+var g_PageElemTotalRecord = 0;	//总计条目
+//有效的路由编号值.
+var g_RoutingID_Table = new Array();
+//每一页的内容
+var g_WebFormContextTable = new Array();
+
+//宏定义
+var MAX_ELEM = 11;
+
+var SRC_MODE_PORT		 		= 0;
+var SRC_MODE_PORT_GROUP = 1;
+var SRC_MODE_IP 				= 2;
+var SRC_MODE_IP_GROUP	 	= 3;
+var SRC_MODE_SIP_SERVER = 4;
+var SRC_MODE_ANY			  = 255;
+
+var quickLoadFlag = 0;
+var url = decodeURI(window.location.href);
+var argsIndex = url .split("?flag=");
+quickLoadFlag = argsIndex[1]
+
+function change_html(){
+	var url = 'enPortGroup.htm'+'?flag='+1;
+    url = encodeURI(url);
+    parent.document.getElementById('mainframe').src = url
+}
+
+//主函数
+function MM_callJS()
+{	 
+	WebFormContextTable_Clear();	 
+	GetWebContext();
+	if(quickLoadFlag == 1)
+	{
+		document.getElementById("back").style.display = ""
+	}
+}
+
+//设置当前页面值
+function RouteCurrPageRecord_Set(cur)
+{
+	//参数判断
+	if("undefined" == typeof(cur) || 0 != isNaN(parseInt(cur)))
+	{
+		alert("RouteCurrPageRecord_Set(): Parameter Error!!!");
+		g_CurrPageRecord = 1;
+		return 0; //第一个界面
+	}		
+	g_CurrPageRecord = parseInt(cur);
+	if(g_CurrPageRecord < 1)
+	{
+		g_CurrPageRecord = 1;
+	}
+}
+//获取当前页面值
+function RouteCurrPageRecord_Get()
+{
+	var currPage = 1,total = 0;
+	currPage = g_CurrPageRecord;
+	total = WebFormContextTableTotal_Get(PER_PAGE_ELEM_MAX);
+	//参数判断
+	if(currPage > total) //如果当前页面值 大于 页面总数.
+	{
+		currPage = total;
+		if(currPage < 1) //当前页面不能小于 1 
+		{
+			currPage = 1;
+		}
+		RouteCurrPageRecord_Set(currPage);//重新设置当前页面值.
+	}
+	
+	return currPage;
+}
+
+
+
+//全局对象设置
+function GlobalRouteObject_Set(obj)
+{
+	//参数判断
+	if("undefined" == typeof(obj))
+	{
+		alert("GlobalRouteObject_Set(): Parameter Error!!!");
+		return 0;
+	}	
+	g_RouteObj = obj;
+
+	return true;
+}
+
+//全局对象获取
+function GlobalRouteObject_Get()
+{
+	return g_RouteObj;
+}
+
+//路由表索引值获取
+function RouteTableIndexRecord_Get()
+{
+	return g_RouteTableIndexRecord;
+}
+
+//路由表索引值设置
+function RouteTableIndexRecord_Set(val)
+{
+	//参数判断
+	if("undefined" == typeof(val))
+	{
+		alert("RouteTableIndexRecord_Set(): Parameter Error!!!");
+		return 0;
+	}	
+	//操作
+	var obj;
+	obj = GlobalRouteObject_Get();
+	//设置	
+	g_RouteTableIndexRecord = val;
+	//超出范围
+	if(g_RouteTableIndexRecord >= obj.routing.length)
+	{
+		g_RouteTableIndexRecord = 0;
+	}
+}
+
+//对象转字符串
+function Object2String(obj)
+{
+	//参数判断
+	if("undefined" == typeof(obj))
+	{
+		alert("Object2String(): Parameter Error!!!");
+		return 0;
+	}	
+	//操作	
+	var str;
+	str = JSON.stringify(obj)
+	return str;
+}
+
+//字符串转对象
+function String2Object(str)
+{
+	//参数判断
+	if("undefined" == typeof(str))
+	{
+		alert("String2Object(): Parameter Error!!!");
+		return 0;
+	}	
+	//操作
+	var obj;
+	obj = eval('('+str+')');
+	return obj;
+}
+
+//创建select对象
+function SelectObject_Creat(sID,sType,sTotal,str1,str2)
+{
+	var i;
+	var sel;	
+	
+	//0.参数判断
+	
+	//1.获取select对象ID
+	sel = document.getElementById(sID);
+	
+	//1.删除原有的选项.
+//	alert("parseInt(sel.length) = " + parseInt(sel.options.length));
+	if(parseInt(sel.options.length) >　0)
+	{
+		for(i = parseInt(sel.options.length) - 1; i >= 0 ;i--) 
+		{
+			sel.options.remove(parseInt(i));
+		}		
+	}
+
+	
+	//3.操作  
+	if(0 == parseInt(sType))//升序排列
+	{
+		for(i = 1; i <= parseInt(sTotal) ; i++) 
+		{	
+				var opt = document.createElement('option');
+				//document.getElementById("idIndex"+i).disabled = true;
+				opt.text = str1 + i + str2;
+				opt.value = parseInt(i);
+				sel.add(opt,null);	
+		}			
+	}
+	else  //降序排列
+	{
+		for(i = parseInt(sTotal) - 1; i >= 0 ; i--) 
+		{	
+				var opt = document.createElement('option');
+				//document.getElementById("idIndex"+i).disabled = true;
+				opt.text = i;
+				opt.value = parseInt(i);
+				sel.add(opt,null);	
+		}			
+	}
+}
+
+//Web初始化
+function WebInit()
+{
+	var totalPage = 0;
+	//等待全局变量初始完毕
+	totalPage = WebFormContextTableTotal_Get(PER_PAGE_ELEM_MAX);
+	//创建select表单
+	SelectObject_Creat("WebPage",0,totalPage,"Page "," ");
+	//
+	g_PageElemTotalRecord = RouteElemSum_Serach();
+	g_totalValidRoute = g_PageElemTotalRecord;
+	g_CurrPageRecord 			= RouteCurrPageRecord_Get();
+	g_PageTotalRecord 		= WebFormContextTableTotal_Get(PER_PAGE_ELEM_MAX);
+	 
+	//设置页面底部参数
+	document.getElementById('WebPageElemTotol').innerHTML = parseInt(g_PageElemTotalRecord);
+	document.getElementById('WebPerPageCount').innerHTML  = parseInt(PER_PAGE_ELEM_MAX);
+	document.getElementById('WebCurrPage').innerHTML			= parseInt(g_CurrPageRecord);
+	if(parseInt(g_PageTotalRecord) > 0)
+	{
+		document.getElementById('WebPageTotol').innerHTML			= parseInt(g_PageTotalRecord);
+	}
+	else
+	{
+		document.getElementById('WebPageTotol').innerHTML			= 1;
+	}
+	
+}
+
+//checkbox处理函数
+function CheckBoxSignal()
+{
+	var i;
+	var AllButtonFlag = 0;
+	var obj;
+	var str = "";
+	//获取当前页
+	var CurrPage = RouteCurrPageRecord_Get();	
+	//	
+	var max_val = PerPageElemMaxVal_Get();
+	var min_val = (CurrPage - 1)*PER_PAGE_ELEM_MAX;
+
+  for(i = min_val;i < max_val ;i++)
+  {
+      if(document.getElementById("RouteIP2PSTNEnable"+g_RoutingID_Table[i]).checked == false )
+      {
+       	AllButtonFlag = 1;
+      }
+     
+  }	
+//  alert("AllButtonFlag = " +AllButtonFlag);
+  if(0 != AllButtonFlag)
+  {
+		document.getElementById("RouteIP2PSTNCheckAll").checked = false;
+  }
+	mouse_click();     
+}
+
+
+
+
+//web表单内容处理函数
+function WebFormContext_Handle()
+{
+	var obj ;
+	var text;
+	var str = "";
+	var total = 0;
+	var currPage = 1;
+	//
+	if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+	{    
+		  text = xmlHttp.responseText;
+			//字符串转换成obj对象
+		  obj = String2Object(text);     
+		  //设置全局对象
+		  
+		  //alert(text);
+		  
+		  GlobalRouteObject_Set(obj);     
+		  
+		  /************* 初始化全部表单	**************/
+		  //清除.
+//		  WebFormContextTable_Clear();
+		  //获取表单总数	  
+		  total = WebFormContextTableTotal_Get(PER_PAGE_ELEM_MAX);
+		  //索引表清零
+		  RouteTableIndexRecord_Set(0);
+		  //创建FormContextTable
+		  for(var i = 0; i < total;i++)
+		  {
+		  	g_WebFormContextTable[i] = WebFormContext_Creat(PER_PAGE_ELEM_MAX);
+		  }
+		  
+			//获取上一次表单
+			currPage = RouteCurrPageRecord_Get();
+			
+//		  alert("currPage = " + currPage);
+
+		  //表单显示
+		  WebFormContext_Dispaly(g_WebFormContextTable[currPage - 1],total);
+		  //web 初始化
+		  WebInit();
+			//select复选框显示		  
+		  document.getElementById("WebPage").selectedIndex = currPage - 1;
+		  
+	}	
+}
+
+//搜索有限路由个数
+function RouteElemSum_Serach()
+{
+	var i,count  = 0;
+	var obj;
+	var obj_length;
+	var route;	
+	var index = 0;
+	//获取全局对象
+	obj = GlobalRouteObject_Get();	
+	obj_length = obj.routing.length;
+	
+//	alert("string = " + Object2String(obj));
+
+	for(i = 0 ;i < obj_length; i++)
+	{
+		route = obj.routing[i];
+		if(1 == parseInt(route.enable))
+		{
+			++count;
+			//g_RoutingID_Table[index++] = i;  //记录有效路由编号.
+			g_RoutingID_Table[index++] = route.index;
+		}
+	}
+	
+	return count;
+}
+
+//web表单总数获取
+function WebFormContextTableTotal_Get(formmax)
+{
+	var ret = 0;
+	var count = 0;
+
+	//参数判断
+	if(parseInt(formmax) < 0 || "undefined" == typeof(formmax))
+	{
+		alert("WebFormContextTableTotal_Get(): Parameter Error!!!");
+		return 0;
+	}
+	
+	count = RouteElemSum_Serach();
+	if(0 != formmax)
+	{
+	//	alert("count = " + count);
+		if(0 == parseInt(parseInt(count)%parseInt(formmax)))
+		{
+			ret = parseInt(parseInt(count)/parseInt(formmax));
+		}
+		else
+		{
+			ret = parseInt(parseInt(count)/parseInt(formmax))+1;
+		}		
+	}
+
+	
+//	alert("WebFormContextTableTotal_Get(): ret = " + ret);
+	return parseInt(ret);
+}
+
+
+//web表单创建
+function WebFormContext_Creat(formmax)
+{
+	var obj ;
+	var text = "";
+	var formsize = 0;
+	var i;
+	var obj_length;
+	//参数判断
+	if(parseInt(formmax) <= 0 || "undefined" == typeof(formmax))
+	{
+		alert("WebFormContext_Creat(): Parameter Error!!!");
+		return 0;
+	}
+	//获取全局对象
+	obj = GlobalRouteObject_Get();	
+//	alert("Object2String = " + Object2String(obj));
+	obj_length = obj.routing.length;
+	
+	//遍历路由表
+//	alert("RouteTableIndexRecord_Get() = "+RouteTableIndexRecord_Get());
+	for(i = RouteTableIndexRecord_Get();i < obj_length; i++)
+	{
+		routing = obj.routing[i];
+		if(routing.enable)
+		{
+			//创建字符串.
+			text += WebFormElement_Creat(routing,routing.index);
+			formsize++;
+			if(formsize >= parseInt(formmax))
+			{
+				break;
+			}		
+		}
+	}
+	RouteTableIndexRecord_Set(i+1);
+	return text;
+}
+
+function WebInvalidFormContext_Dispaly(id , max)
+{
+	var text  = "";
+	var i;
+
+	text += "<tbody id='" + id +"' align='center'>";
+	text += "<td>&nbsp;</td>";
+	for(i = 0; i < max;i++)
+	{
+		text += "<td>---</td>"
+	}
+	text += "</tbody>";
+	document.getElementById(id).innerHTML = text;
+
+	return text;
+}
+
+
+//web表单Table清除
+function WebFormContextTable_Clear()
+{
+	var i;
+	var total = 0;
+	
+	//total = WebFormContextTableTotal_Get(PER_PAGE_ELEM_MAX);
+	var str  = "";
+	str += WebInvalidFormContext_Dispaly('idRoutingList',MAX_ELEM);
+	
+	for(var i = 0; i < 8;i++)
+	{
+		g_WebFormContextTable[i] = str;
+	}
+}
+
+//web表单Table刷新
+function WebFormContextTable_Update()
+{
+	var total = 0;
+
+	//清除表单Table
+	WebFormContextTable_Clear();
+	
+	//更新 Web Form Context Table.
+	total = WebFormContextTableTotal_Get(PER_PAGE_ELEM_MAX);
+	
+	RouteTableIndexRecord_Set(0);
+	for(var i = 0; i < total;i++)
+	{
+		g_WebFormContextTable[i] = WebFormContext_Creat(PER_PAGE_ELEM_MAX);
+	}	
+}
+
+//web表单元素创建
+function WebFormElement_Creat(obj,idx)
+{
+	var text = "";
+	var routing;
+	routing = obj;
+	text += "<tr><td> <input name='RouteIP2PSTNEnable"+ idx +"' type='checkbox' id='RouteIP2PSTNEnable"+ idx +"' onClick=\"CheckBoxSignal();\" ></td><td align=\"center\">" + idx + "</td>"
+  text += "<td align=\"center\">" + routing.desc + "</td>"
+  if(SRC_MODE_IP == routing.src_mode)
+  {
+  	if(255 == routing.src)
+  	{
+  		text += "<td >" + "Any" + "</td>"
+  	}
+  	else
+  	{
+  		text += "<td >" + "Trunk-" + routing.src + "</td>"
+  	}
+  }  	
+  else if(SRC_MODE_IP_GROUP == routing.src_mode)
+  	text += "<td >" + "Trunk Group-" + routing.src + "</td>"
+  else if(SRC_MODE_SIP_SERVER == routing.src_mode)
+  	text += "<td >" + "SIP Server" + "</td>"
+  else if(SRC_MODE_ANY == routing.src_mode)
+  	text += "<td >" + "Any" + "</td>"
+  else
+  	text += "<td >" + "Unknow" + "</td>"
+  	
+	if(SRC_MODE_PORT == routing.dest_mode)
+  	text += "<td >" + "Port-" + routing.dest + "</td>"
+  else if(SRC_MODE_PORT_GROUP == routing.dest_mode)
+  	text += "<td >" + "Port Group-" + routing.dest + "</td>"
+	else if(SRC_MODE_ANY == routing.dest_mode)
+  	text += "<td >" + "Any" + "</td>"
+  else
+  	text += "<td >" + "Unknow" + "</td>"
+  	
+	if(1 == routing.operation)
+	{
+		text += "<td>" + "Allow" + "</td>"
+	}
+	else if(2 == routing.operation)
+	{
+		text += "<td>" + "Forbid" + "</td>"
+	}
+	else
+	{
+//					alert("operation = "+parseInt(routing.operation));
+		text += "<td>" + "Unknow" + "</td>"
+	}
+		
+	if(0 == parseInt(routing.advanced_mode))	
+	{
+//		text += "<td>" + "Forbid" + "</td>"
+		
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+	}
+	else if(1 == parseInt(routing.advanced_mode))
+	{
+//			text += "<td>" + "Allow" + "</td>"
+			if(1 == routing.operation)
+			{
+				if(0 != routing.src_prefix.length)
+				{
+					text += "<td>" + routing.src_prefix + "</td>"
+				}
+				else
+				{
+					text += "<td>" + "--" + "</td>"
+				}	
+				if(0 != routing.dest_prefix.length)
+				{
+					text += "<td>" + routing.dest_prefix + "</td>"	
+				}
+				else
+				{
+					text += "<td>" + "--" + "</td>"
+				}
+				
+				if(0 != routing.add_prefix.length)
+				{
+					text += "<td>" + routing.add_prefix + "</td>"
+				}
+				else
+				{
+					text += "<td>" + "--" + "</td>"
+				}
+					
+				if(0 != routing.add_suffix.length)
+				{
+					text += "<td>" + routing.add_suffix + "</td>"
+				}
+				else
+				{
+					text += "<td>" + "--" + "</td>"
+				}	
+				
+				if(255 == parseInt(routing.del_prefix) || 0 == parseInt(routing.del_prefix))
+				{
+					text += "<td>" + "--" + "</td>"
+				}
+				else
+				{
+					text += "<td>" + routing.del_prefix + "</td>"	
+				}
+				
+				if(255 == parseInt(routing.reserved_number))
+				{
+					text += "<td>" + "--" + "</td>"
+				}
+				else
+				{
+					text += "<td>" + routing.reserved_number + "</td>"
+				}								
+			}
+			else if (2 == routing.operation)
+			{
+				if(0 != routing.src_prefix.length)
+				{
+					text += "<td>" + routing.src_prefix + "</td>"
+				}
+				else
+				{
+					text += "<td>" + "--" + "</td>"
+				}	
+				if(0 != routing.dest_prefix.length)
+				{
+					text += "<td>" + routing.dest_prefix + "</td>"	
+				}
+				else
+				{
+					text += "<td>" + "--" + "</td>"
+				}
+				text += "<td>" + "--" + "</td>"
+				text += "<td>" + "--" + "</td>"
+				text += "<td>" + "--" + "</td>"
+				text += "<td>" + "--" + "</td>"
+			}
+			else
+			{							
+//				text += "<td>" + "Unknow" + "</td>"
+				text += "<td>" + "Unknow" + "</td>"
+				text += "<td>" + "Unknow" + "</td>"
+				text += "<td>" + "Unknow" + "</td>"
+				text += "<td>" + "Unknow" + "</td>"
+				text += "<td>" + "Unknow" + "</td>"
+			}													
+	}
+	else
+	{
+//		alert("advanced_mode = "+parseInt(routing.advanced_mode));
+//		text += "<td>" + "Unknow" + "</td>"
+		
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+		text += "<td>" + "--" + "</td>"
+	}
+	text += "</tr>"		
+	
+	return text;
+}
+
+//web表单显示
+function WebFormContext_Dispaly(str,flag)
+{
+	var text  = ""; 
+	//参数判断
+	if("undefined" == typeof(str) || "undefined" == typeof(flag))
+	{
+		alert("WebFormContext_Dispaly(): Parameter Error!!!");
+		alert("typeof(str) = " + typeof(str) + " , " + "typeof(flag) = " + typeof(flag));
+		return 0;
+	}
+			
+  if (0 != parseInt(flag))
+	{
+		document.getElementById('idRoutingList').innerHTML = str;
+	}	    	
+  else
+  {
+	  WebInvalidFormContext_Dispaly('idRoutingList',MAX_ELEM);
+  }	  	
+}
+
+
+function handleStateReturn()
+{
+	if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+	{
+		//从后台获取JSON数据
+		GetWebContext();
+	}
+	else if(xmlHttp.status == 404)
+	{
+		location.href = "enNoAuthority.htm";
+	}
+}
+
+function handleStateModifyBack()
+{
+		if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+		{
+			location.href = "enRouteIP2PSTNModifyNew.htm?flag="+quickLoadFlag;			
+		}
+		else if(xmlHttp.status == 404)
+		{
+			location.href = "enNoAuthority.htm";
+		}
+}
+
+function handleStateChange()
+{
+	var obj;
+	var text = "";
+
+	if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+	{    
+		  text = xmlHttp.responseText;
+
+		  obj = eval('('+text+')');
+		  g_Obj = obj;
+//  	  alert(text);
+			
+      htmlText = parseRouting(obj,1);
+      
+      
+      if (0 != TableSize)
+    	{
+    		document.getElementById('idRoutingList').innerHTML = htmlText;
+    	}	    	
+	    else
+	    {
+			WebInvalidFormContext_Dispaly('idRoutingList',MAX_ELEM);
+	    }	  
+	    
+	}
+}
+
+
+function GetWebContext()
+{
+    var para;
+		var url;
+    para = "routing_type=ip-to-tel";//"event=" + event.toString() + "&port=" + port.toString() + "&imsi=" + imsi + "&WebPage=" + currentPage; 
+	  url = "/GetRoutingList";
+	  doRequestUsingGet(url, para, WebFormContext_Handle);
+	  TableSize = 0;
+    return true;
+}
+
+
+
+
+function mouse_click()
+{
+	var i = 0,Selectcount = 0;
+	var Count = 0;
+	Count = RouteElemSum_Serach();
+	//获取当前页
+	var CurrPage = RouteCurrPageRecord_Get();
+	//
+	var max_val = PerPageElemMaxVal_Get();	
+	var min_val = (CurrPage - 1)*PER_PAGE_ELEM_MAX;
+	for (i = min_val;i < max_val;i++)
+	{
+	  if (eval("document.forms[0].RouteIP2PSTNEnable"+g_RoutingID_Table[i]+".checked") == true)
+		{
+			Selectcount++;
+		}
+	}
+
+	if (Selectcount == 1)
+	{
+		document.forms[0].Del.disabled = false;
+		document.forms[0].Mod.disabled = false;	
+	}
+	else if (Selectcount > 1)
+	{
+		document.forms[0].Del.disabled = false;
+		document.forms[0].Mod.disabled = true;
+	}
+	else
+	{
+		document.forms[0].Del.disabled = true;
+		document.forms[0].Mod.disabled = true;
+	}
+//	alert("RowCount : " + RowCount +",TableSize : " + TableSize);
+	if (RowCount >= MaxTableSize)
+	{
+		document.forms[0].Add.disabled = true;
+	}	
+}
+
+
+
+function doRefresh()
+{
+	var str = "";
+	var pageTotal = 0;
+	var index = 0;
+	
+	pageTotal = WebFormContextTableTotal_Get(PER_PAGE_ELEM_MAX);
+	
+	index = parseInt(document.getElementById("WebPage").value);
+
+  if (0 != pageTotal)
+	{
+		if(index <= pageTotal)
+		{
+			str = g_WebFormContextTable[index-1];
+			document.getElementById('idRoutingList').innerHTML = str;
+			//设置当前处于第几个页面	
+			RouteCurrPageRecord_Set(index);		
+		}
+		
+	}	    	
+  else
+  {
+  	str  = "";
+  	str += WebInvalidFormContext_Dispaly('idRoutingList',MAX_ELEM);
+  	document.getElementById('idRoutingList').innerHTML = str;
+  }	
+}
+
+
+function AddData()
+{
+	var permit = 1;
+	if(permit == 0)
+	{
+		window.alert("You have no permission.\n Please visit the Access Control page.");
+		return false;
+	}
+	
+	var license = 1;
+	if(license == 0)
+	{
+		window.alert("You are not authorized.\n");
+		return false;
+	}
+	
+	if(g_totalValidRoute == 64)
+	{
+		return false;
+	}
+	location.href = "enRouteIP2PSTNAddNew.htm?flag="+quickLoadFlag;
+	return true;
+}
+
+
+
+function DelData_New()
+{
+	var obj;
+	var RoutingIDTotal = 0;
+	var str ;
+	var para;
+	var url;	
+	//1.先删除
+	
+	var permit = 1;
+	if(permit == 0)
+	{
+		window.alert("You have no permission.\n Please visit the Access Control page.");
+		return false;
+	}
+	
+	var license = 1;
+	if(license == 0)
+	{
+		window.alert("You are not authorized.\n");
+		return false;
+	}
+	
+	//获取全局对象
+	obj = GlobalRouteObject_Get();	
+	str = "{\"routing\":[";
+	
+	RoutingIDTotal = RouteElemSum_Serach();
+	//获取当前页
+	var CurrPage = RouteCurrPageRecord_Get();
+	//
+	var max_val = PerPageElemMaxVal_Get();	
+	var min_val = (CurrPage - 1)*PER_PAGE_ELEM_MAX;
+	if(true == IsSelectDelElement())
+	{
+		if(confirm("Are you sure ?") != 0)
+		{			
+			//删除全部
+			for(var i = min_val;i < max_val; i++)
+			{			
+				routing = obj.routing[i];
+	
+				if(document.getElementById("RouteIP2PSTNEnable"+g_RoutingID_Table[i]).checked == true)
+				{									
+//					if(63 != g_RoutingID_Table[i])//63号路由不允许删除
+					{
+						routing.enable = 0;
+						str += JSON.stringify(routing);
+						str += ",";
+					}		
+				}
+			}				
+			//清除CheckAll勾选
+			document.getElementById("RouteIP2PSTNCheckAll").checked = false;
+			
+			//2.发送数据给后台,然后重新加载内容；
+			str = StringRmEndChar(str);
+			str += "]}";	
+//			alert("str :: " + str);
+			url = "/SetRoutingIp2PstnList";	
+			doRequestUsingPost(url, str, handleStateReturn);					
+		}		
+	}
+
+	return true;
+}
+
+function StringRmEndChar(str)
+{
+	var newstr = str.substring(0,str.length - 1);
+	return newstr;
+}
+
+
+function ModData()
+{
+	var str = "";
+	var permit = 1;
+	if(permit == 0)
+	{
+		window.alert("You have no permission.\n Please visit the Access Control page.");
+		return false;
+	}
+	
+	var license = 1;
+	if(license == 0)
+	{
+		window.alert("You are not authorized.\n");
+		return false;
+	}
+	
+	if(true == IsSelectDelElement())
+	{
+		str += g_IsSelectIndexRecord;
+//		alert("ModData str = " + str);
+		url = "/SendRoutingIndex";				
+		doRequestUsingPost(url, str, handleStateModifyBack);		
+	}
+}
+
+function CheckAll()
+{
+	var i,total = 0;
+	var CurrPage;
+	
+	//获取当前页
+	CurrPage = RouteCurrPageRecord_Get();
+	//
+	var max_val = PerPageElemMaxVal_Get();	
+	var min_val = (CurrPage - 1)*PER_PAGE_ELEM_MAX;
+	
+	if(document.getElementById("RouteIP2PSTNCheckAll").checked == true)
+	{
+	    for(i = min_val;i < max_val;i++)
+	    {
+	        if(document.getElementById("RouteIP2PSTNEnable"+g_RoutingID_Table[i]) != null )
+	        {
+	            document.getElementById("RouteIP2PSTNEnable"+g_RoutingID_Table[i]).checked = true;
+	        }            
+	    }
+	}
+	else
+	{
+	    for(i = min_val;i < max_val;i++)
+	    {
+	        if(document.getElementById("RouteIP2PSTNEnable"+g_RoutingID_Table[i]) != null )
+	        {
+	            document.getElementById("RouteIP2PSTNEnable"+g_RoutingID_Table[i]).checked = false;
+	        }
+	    }
+	}
+
+	mouse_click();    
+}
+
+
+function IsSelectDelElement()
+{
+	var count =0;
+	//获取当前页
+	CurrPage = RouteCurrPageRecord_Get();
+	//
+	var max_val = PerPageElemMaxVal_Get();	
+	var min_val = (CurrPage - 1)*PER_PAGE_ELEM_MAX;
+	
+	for(var i = min_val;  i < max_val; i++)
+	{
+		if(document.getElementById("RouteIP2PSTNEnable"+g_RoutingID_Table[i]).checked == true)
+		{
+			g_IsSelectIndexRecord = g_RoutingID_Table[i];
+			return true;
+		}
+			
+	}
+	return false;
+}
+
+
+//获取每个页面元素的最大值
+function PerPageElemMaxVal_Get()
+{
+	var RoutingIDTotal = 0;
+	var currPage = 1 ;	 //当前页面,最小值为 1
+	var maxRouteVal = 0;
+	
+	//获取当前页
+	currPage = RouteCurrPageRecord_Get();
+	//获取所以页面路由总数
+	RoutingIDTotal = RouteElemSum_Serach();
+	
+	//计算
+	if(RoutingIDTotal - currPage * PER_PAGE_ELEM_MAX >= 0)
+	{
+		maxRouteVal = currPage * PER_PAGE_ELEM_MAX;
+	}
+	else
+	{
+		maxRouteVal = RoutingIDTotal;  //最后页面可能不是16的整数倍.
+	}
+
+	return maxRouteVal;
+}
+
+
+</script>
+</head>
+
+<body onLoad="MM_callJS();">
+<form action="/goform/RouteIP2PSTN" method="post" name="RouteIP2PSTN" id="RouteIP2PSTN">
+<table width="1000px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+    <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+    <td>IP->Tel Routing</td>
+    <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+</table>
+<table class="content" width="1000px" align="center">
+  <tr class="thead">
+    <td width="5%">&nbsp;</td>    
+    <td width="5%">Index</td>
+    <td width="10%">Description</td>
+    <td width="10%">Source</td>
+    <td width="10%">Destination</td>
+    <td width="10%">Call Restriction</td>
+	  <!--td width="10%">Advanced Rules</td-->
+	  <td width="10%">Source Prefix</td>
+    <td width="10%">Destination Prefix</td>
+    <td width="10%">Prefix to Add</td>
+	<td width="10%">Suffix to Add</td>
+    <td width="10%">Digits to be Deleted</td>
+    <td width="10%">Number of Digits Reserved</td>
+  </tr>    
+
+  <tbody id="idRoutingList" BGCOLOR="#FFFFFF" align="center">
+    <td>&nbsp;</td>
+    <td>---</td>
+    <td>---</td>
+    <td>---</td>    
+    <td>---</td>
+    <td>---</td>
+    <td>---</td>
+	  <td>---</td> 
+	  <td>---</td>
+    <td>---</td>
+	  <td>---</td> 
+	  <td>---</td>
+	  <!--td>---</td-->  
+  </tbody> 
+  <tr id="last" align="center">
+    <td><input name='RouteIP2PSTNCheckAll' type='checkbox' id='RouteIP2PSTNCheckAll' onClick="CheckAll();"></td>
+    <td>All</td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td>
+	<td>&nbsp;</td>
+    <!--td>&nbsp;</td-->
+  </tr>
+</table> 
+<div align="center" style="width:1000px; margin:auto">    
+ <p align="left">
+Total:&nbsp;
+<label id="WebPageElemTotol"></label>&nbsp;entries&nbsp;&nbsp;
+<label id="WebPerPageCount"></label>&nbsp;entries/Page&nbsp;&nbsp;
+<label id="WebCurrPage"></label> / <label id="WebPageTotol"></label>Page
+ <input type="hidden" name="CurWebPage" id="CurWebPage" value=""> 
+ <select name="WebPage" class="alist" id="WebPage"  onChange="doRefresh();"></select>  			
+ </p>
+</div>
+ <p align="center">
+ <input name="Add"  class="button" type="button" id="Add" value="Add" onClick="return AddData();">
+ &nbsp;&nbsp;&nbsp;&nbsp;
+ <input name="Del"  class="button" type="button" id="Del" value="Delete" onClick="return DelData_New();">
+ &nbsp;&nbsp;&nbsp;&nbsp;
+ <input name="Mod"  class="button" type="button" id="Mod" value="Modify" onClick="ModData();">
+ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ <input  class="button" type="button" id="back" value="Back" style="display:none" onClick="change_html();">
+</p>
+<!--p class="notes" align="center">Note:&nbsp;63号路由不允许删除，只允许修改.</p-->
+</form>
+</body>
+</html>

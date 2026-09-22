@@ -1,9 +1,10 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
+
+import tools.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
@@ -631,74 +632,11 @@ class ConferenceWebSocketHandler(
         lastReactionAt.keys.removeIf { it.startsWith(prefix) }
     }
 
-    /**
-     * إنشاء مكالمة جماعية (REST → WS) — يسجل الغرفة ويُرنّ لكل مدعو.
-     * يُستدعى من CallsV1Controller.initiateGroup.
-     */
-    fun createGroupCall(
-        groupCallId: String,
-        hostRedId: String,
-        initialMembers: List<String>,
-        mode: String
-    ) {
-        val effectiveId = resolveRoom(groupCallId)
-        val existing = conferenceRooms[effectiveId] ?: conferenceRooms[groupCallId.trim()]
-        val current = (existing?.members.orEmpty() + (existing?.host?.let { listOf(it) } ?: emptyList()))
-            .filter { it.isNotBlank() }.distinct()
-        val fresh = initialMembers.filter { it.isNotBlank() && it != hostRedId && it !in current }
-            .take((MAX_PARTICIPANTS - current.size).coerceAtLeast(0))
-        if (existing == null) {
-            require(fresh.isNotEmpty()) { "inviteeIds is required" }
-            conferenceRooms[effectiveId] = ConferenceRoom(host = hostRedId, members = fresh.toMutableList())
-        } else if (fresh.isNotEmpty()) {
-            conferenceRooms[effectiveId] = existing.copy(members = (existing.members + fresh).distinct().toMutableList())
-        }
-        fresh.forEach { invitee ->
-            deliverConferenceInvite(invitee, "GROUP_CALL_INVITE", effectiveId, hostRedId, mode.uppercase(),
-                mapOf("hostName" to ""))
-        }
-    }
-
-    /**Room للمكالمات الجماعية (مستقل عن غرف المؤتمر العادية). */
-    private val conferenceRooms = ConcurrentHashMap<String, ConferenceRoom>()
-
-    private data class ConferenceRoom(
-        val host: String,
-        val members: MutableList<String> = mutableListOf()
-    )
-
-    /** إرسال دعوة مكالمة جماعية عبر قناة الإشارة. */
-    private fun deliverConferenceInvite(targetRedId: String, type: String, roomId: String, sourceRedId: String, mode: String, payload: Map<String, Any?>) {
-        val outbound = objectMapper.writeValueAsString(mapOf(
-            "type" to type,
-            "roomId" to roomId,
-            "userId" to sourceRedId,
-            "payload" to payload + ("mode" to mode)
-        ))
-        val targets = liveSessions(targetRedId)
-        if (targets.isEmpty()) {
-            // تخزين في صندوق بريد مؤقت
-            val list = pendingConferenceInvites.computeIfAbsent(targetRedId) { ConcurrentHashMap.newKeySet() }
-            list.add(outbound)
-        } else {
-            targets.forEach { runCatching { it.sendMessage(TextMessage(outbound)) } }
-        }
-    }
-
-    /** صندوق بريد الدعوات المعلقة للمؤتمرات. */
-    private val pendingConferenceInvites = ConcurrentHashMap<String, MutableSet<String>>()
-
     /** G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام. */
     private fun resolveRoom(raw: String?): String {
         val v = raw?.trim().orEmpty()
         if (v.isEmpty()) return v
         return runCatching { roomAliases?.resolve(v) ?: RoomSeparationPolicy.resolve(v) }.getOrNull()?.takeIf { it.isNotBlank() } ?: v
-    }
-
-    /** جلسات حية لمعرّف RED. */
-    private fun liveSessions(redId: String): Set<WebSocketSession> {
-        val sessions = rooms[redId] ?: return emptySet()
-        return sessions.filter { it.isOpen }
     }
 
     companion object {

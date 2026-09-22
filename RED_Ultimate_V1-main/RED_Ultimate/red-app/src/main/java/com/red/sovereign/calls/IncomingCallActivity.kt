@@ -1,6 +1,5 @@
 package com.red.sovereign.calls
 
-import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -65,12 +64,6 @@ import kotlin.math.roundToInt
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.lifecycleScope
 import com.red.sovereign.auth.TokenStore
-import com.red.sovereign.ui.theme.YounesCobalt
-import com.red.sovereign.ui.theme.YounesPrimary
-import com.red.sovereign.ui.theme.YounesPrimaryDeep
-import com.red.sovereign.ui.theme.YounesRuby
-import com.red.sovereign.ui.theme.YounesSurface2
-import com.red.sovereign.ui.theme.YounesVoid
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -120,12 +113,7 @@ class IncomingCallActivity : ComponentActivity() {
     }
 
     private fun bindIntent(intent: Intent?) {
-        // call_type إلزامي — Intent ناقص يُسقط بصمت بدل عرض مؤتمر وهمي لشخص 1:1.
-        val callType = intent?.getStringExtra(EXTRA_CALL_TYPE) ?: run {
-            android.util.Log.w("IncomingCallActivity", "missing call_type — dropping intent")
-            finish()
-            return
-        }
+        val callType = intent?.getStringExtra(EXTRA_CALL_TYPE) ?: CALL_TYPE_CONFERENCE
         viewModel.callType = callType
         when (callType) {
             CALL_TYPE_1TO1 -> {
@@ -285,7 +273,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
     var showVideoToggle by remember { mutableStateOf(viewModel.mode == "VIDEO" || viewModel.video) }
     val isVideoCapable = viewModel.mode == "VIDEO" || viewModel.video ||
         viewModel.callType == IncomingCallActivity.CALL_TYPE_LIVESTREAM
-    Box(modifier = Modifier.fillMaxSize().background(YounesVoid)) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF060D1A))) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween,
@@ -302,7 +290,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                         IncomingCallActivity.CALL_TYPE_LIVESTREAM -> "بث مباشر"
                         else -> "دعوة مؤتمر / مساحة"
                     },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(0.6f),
                     fontSize = 14.sp
                 )
                 Spacer(Modifier.height(8.dp))
@@ -310,12 +298,12 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                 // G3: Red ID الكامل تحت الاسم — معرف المتصل حيث كان ناقصاً.
                 if (inviterRedId.isNotBlank() && inviterRedId != inviterName) {
                     Spacer(Modifier.height(2.dp))
-                    Text(inviterRedId, color = Color.White.copy(0.85f), fontSize = 13.sp)
+                    Text(inviterRedId, color = Color.White.copy(0.55f), fontSize = 13.sp)
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = if (isVideoCapable) "فيديو" else "صوت",
-                    color = YounesPrimary,
+                    color = Color(0xFF00C98C),
                     fontSize = 16.sp
                 )
             }
@@ -327,12 +315,12 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                     animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
                     label = "pulseScale"
                 )
-                Box(Modifier.size(140.dp).scale(pulse).clip(CircleShape).background(YounesPrimary.copy(alpha = 0.2f)))
+                Box(Modifier.size(140.dp).scale(pulse).clip(CircleShape).background(Color(0x3300C98C)))
                 Box(
                     modifier = Modifier
                         .size(140.dp)
                         .clip(CircleShape)
-                        .background(Brush.radialGradient(listOf(YounesPrimary, YounesPrimaryDeep))),
+                        .background(Brush.radialGradient(listOf(Color(0xFF00C98C), Color(0xFF003023)))),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(inviterName.take(1).uppercase(), color = Color.White, fontSize = 56.sp, fontWeight = FontWeight.Bold)
@@ -350,13 +338,13 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("فيديو", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                        Text("فيديو", color = Color.White.copy(0.7f), fontSize = 14.sp)
                         Switch(
                             checked = showVideoToggle,
                             onCheckedChange = { showVideoToggle = it },
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = YounesPrimary,
-                                checkedTrackColor = YounesPrimary.copy(alpha = 0.4f)
+                                checkedThumbColor = Color(0xFF00C98C),
+                                checkedTrackColor = Color(0xFF00C98C).copy(0.4f)
                             )
                         )
                     }
@@ -372,20 +360,20 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(YounesRuby), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(Color(0xFFE53935)), contentAlignment = Alignment.Center) {
                             IconButton(onClick = { viewModel.decline(); onFinish() }) {
                                 Icon(Icons.Default.CallEnd, contentDescription = "رفض", tint = Color.White, modifier = Modifier.size(28.dp))
                             }
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text("رفض", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                        Text("رفض", color = Color.White.copy(0.6f), fontSize = 12.sp)
                     }
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(
                             modifier = Modifier
                                 .size(72.dp)
                                 .clip(CircleShape)
-                                .background(if (showVideoToggle && isVideoCapable) YounesPrimary else YounesCobalt),
+                                .background(if (showVideoToggle && isVideoCapable) Color(0xFF00C98C) else Color(0xFF2196F3)),
                             contentAlignment = Alignment.Center
                         ) {
                             IconButton(onClick = {
@@ -401,7 +389,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                             }
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text("قبول", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                        Text("قبول", color = Color.White.copy(0.6f), fontSize = 12.sp)
                     }
                 }
             }
@@ -433,9 +421,9 @@ private fun SwipeAnswerSlider(
                 .background(
                     Brush.horizontalGradient(
                         listOf(
-                            YounesRuby.copy(alpha = 0.35f),
-                            YounesSurface2,
-                            YounesPrimary.copy(alpha = 0.35f)
+                            Color(0xFFE53935).copy(alpha = 0.35f),
+                            Color(0xFF1B2635),
+                            Color(0xFF00C98C).copy(alpha = 0.35f)
                         )
                     )
                 )
@@ -468,9 +456,9 @@ private fun SwipeAnswerSlider(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.CallEnd, contentDescription = "اسحب للرفض", tint = YounesRuby, modifier = Modifier.size(26.dp))
+                Icon(Icons.Default.CallEnd, contentDescription = "اسحب للرفض", tint = Color(0xFFE53935), modifier = Modifier.size(26.dp))
                 Text("اسحب للرد", color = Color.White.copy(alpha = 0.55f), fontSize = 13.sp)
-                Icon(Icons.Default.Call, contentDescription = "اسحب للقبول", tint = YounesPrimary, modifier = Modifier.size(26.dp))
+                Icon(Icons.Default.Call, contentDescription = "اسحب للقبول", tint = Color(0xFF00C98C), modifier = Modifier.size(26.dp))
             }
             Box(
                 modifier = Modifier
@@ -478,7 +466,7 @@ private fun SwipeAnswerSlider(
                     .size(64.dp)
                     .clip(CircleShape)
                     .background(
-                        Brush.radialGradient(listOf(YounesPrimary, YounesPrimaryDeep))
+                        Brush.radialGradient(listOf(Color(0xFF00C98C), Color(0xFF00795A)))
                     ),
                 contentAlignment = Alignment.Center
             ) {

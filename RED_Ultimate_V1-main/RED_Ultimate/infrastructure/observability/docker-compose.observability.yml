@@ -2,7 +2,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.1.0
     profiles: [observability]
-    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=30d, --web.enable-remote-write-receiver]
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=30d]
     volumes:
       - ./infrastructure/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infrastructure/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro

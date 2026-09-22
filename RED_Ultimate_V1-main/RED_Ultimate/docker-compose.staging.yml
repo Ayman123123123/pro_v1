@@ -1,192 +1,44 @@
 # RED Sovereign — Docker Compose Staging Override
 # Usage: docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
 #
-# Staging settings:
-# - Reduced resource limits
-# - 7d Prometheus retention
-# - No published ports (behind nginx)
-# - Separate observability stack
-
-x-resource-limits-small: &resource-limits-small
-  deploy:
-    resources:
-      limits:
-        memory: 256M
-        cpus: '0.5'
-      reservations:
-        memory: 128M
-        cpus: '0.25'
-
-x-resource-limits-medium: &resource-limits-medium
-  deploy:
-    resources:
-      limits:
-        memory: 1G
-        cpus: '1.0'
-      reservations:
-        memory: 512M
-        cpus: '0.5'
-
-x-resource-limits-large: &resource-limits-large
-  deploy:
-    resources:
-      limits:
-        memory: 2G
-        cpus: '2.0'
-      reservations:
-        memory: 1G
-        cpus: '1.0'
+# Phase 10 (2026-09-15): the old prometheus/grafana stanzas were dangling
+# (command/env-only overrides of services that exist only in prod, so
+# base+staging failed to render) — staging now defines its own pair with
+# 7d retention. No published ports: staging sits behind nginx like prod.
 
 services:
-  # Staging resource overrides
-  postgres:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-
-  mongo:
-    <<: *resource-limits-large
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-
-  redis:
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
-        reservations:
-          memory: 512M
-          cpus: '0.5'
-
-  minio:
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
-        reservations:
-          memory: 512M
-          cpus: '0.5'
-
-  backend:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-    environment:
-      SPRING_PROFILES_ACTIVE: "staging"
-      JAVA_TOOL_OPTIONS: "-Xms512m -Xmx1g -XX:+UseZGC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0"
-
-  media-sfu:
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-    environment:
-      MEDIASOUP_WORKERS: "2"
-
-  admin-dashboard:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
-
-  nginx:
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
-
-  coturn:
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
-
-  # Staging observability stack
   prometheus:
-    image: prom/prometheus:v3.14.0
+    image: prom/prometheus:v2.52.0
+    container_name: red-prometheus-staging
     restart: unless-stopped
-    <<: *resource-limits-medium
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
-        reservations:
-          memory: 512M
-          cpus: '0.5'
+    mem_limit: 1g
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=7d'
       - '--web.enable-lifecycle'
     volumes:
-      - ./infrastructure/observability/prometheus:/etc/prometheus
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     networks:
       - red-net
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 30s
 
   grafana:
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:10.4.0
+    container_name: red-grafana-staging
     restart: unless-stopped
-    <<: *resource-limits-small
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-        reservations:
-          memory: 128M
-          cpus: '0.25'
+    mem_limit: 256m
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
     volumes:
-      - ./infrastructure/observability/grafana:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - grafana-data:/var/lib/grafana
     networks:
       - red-net
@@ -195,17 +47,11 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 30s
 
 volumes:
   prometheus-data:
     driver: local
   grafana-data:
     driver: local
-
-networks:
-  red-net:
-    driver: bridge
-    enable_ipv6: false

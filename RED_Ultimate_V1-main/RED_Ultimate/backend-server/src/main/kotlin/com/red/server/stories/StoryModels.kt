@@ -1,7 +1,6 @@
 package com.red.server.stories
 
 import org.springframework.data.annotation.Id
-import org.springframework.data.mongodb.core.index.CompoundIndex
 import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
 import java.time.Instant
@@ -32,7 +31,6 @@ data class StoryDocument(
 )
 
 @Document("story_views")
-@CompoundIndex(name = "storyId_1_viewerId_1", def = "{'storyId': 1, 'viewerId': 1}", unique = true)
 data class StoryView(
     @Id val id: String,
     @Indexed val storyId: String,
@@ -41,7 +39,6 @@ data class StoryView(
 )
 
 @Document("story_reactions")
-@CompoundIndex(name = "storyId_1_userId_1", def = "{'storyId': 1, 'userId': 1}", unique = true)
 data class StoryReaction(
     @Id val id: String,
     @Indexed val storyId: String,

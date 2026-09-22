@@ -61,8 +61,6 @@ object ZoomRuntime {
     var state: ZoomUiState by mutableStateOf(ZoomUiState.Idle)
     var localVideo: VideoTrack? by mutableStateOf(null)
     var remoteVideos: Map<String, VideoTrack> by mutableStateOf(emptyMap())
-    var speakingPeers: Set<String> by mutableStateOf(emptySet())
-    var isBackgroundBlurred by mutableStateOf(false)
     var eglContext: org.webrtc.EglBase.Context? by mutableStateOf(null)
     var isMuted by mutableStateOf(false)
     var isVideoEnabled by mutableStateOf(false)
@@ -274,16 +272,6 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 }
             }
             ACTION_SWITCH_CAMERA -> { engine?.switchCamera(); mesh?.switchCamera(); sfu?.switchCamera() }
-            "ACTION_TOGGLE_BLUR" -> {
-                ZoomRuntime.isBackgroundBlurred = !ZoomRuntime.isBackgroundBlurred
-                // NOTE: Assume underlying engine/mesh/sfu has setBackgroundBlur or similar if it exists
-                runCatching {
-                    sfu?.javaClass?.getMethod("setBackgroundBlur", Boolean::class.java)?.invoke(sfu, ZoomRuntime.isBackgroundBlurred)
-                }
-                runCatching {
-                    mesh?.javaClass?.getMethod("setBackgroundBlur", Boolean::class.java)?.invoke(mesh, ZoomRuntime.isBackgroundBlurred)
-                }
-            }
             ACTION_TOGGLE_SPEAKER -> { audio.isSpeakerphoneOn = !audio.isSpeakerphoneOn }
             ACTION_RAISE_HAND -> {
                 ZoomRuntime.isHandRaised = !ZoomRuntime.isHandRaised
@@ -303,18 +291,6 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                         }
                     }
                     signaling.send(CallSignal(callId=meetingId, type="ZOOM_MUTE_ALL", groupCallId=meetingId, mode=if(isVideo)"VIDEO" else "VOICE"))
-                }
-            }
-            "ACTION_MUTE_MEMBER" -> {
-                val memberId = intent.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (isHost && memberId.isNotBlank()) {
-                    signaling.send(CallSignal(callId=meetingId, type="ZOOM_MUTE_MEMBER", groupCallId=meetingId, targetUserId=memberId))
-                }
-            }
-            "ACTION_STOP_VIDEO_MEMBER" -> {
-                val memberId = intent.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (isHost && memberId.isNotBlank()) {
-                    signaling.send(CallSignal(callId=meetingId, type="ZOOM_STOP_VIDEO_MEMBER", groupCallId=meetingId, targetUserId=memberId))
                 }
             }
             ACTION_ADMIT_ZOOM -> {
@@ -565,17 +541,6 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 }
             }
             "ZOOM_MUTE_ALL" -> { ZoomRuntime.isMuted=true; mesh?.setMicrophoneEnabled(false); sfu?.setMicrophoneEnabled(false); engine?.setMicrophoneEnabled(false) }
-            "ZOOM_MUTE_MEMBER" -> {
-                if (signal.targetUserId == myUserId) {
-                    ZoomRuntime.isMuted=true; mesh?.setMicrophoneEnabled(false); sfu?.setMicrophoneEnabled(false); engine?.setMicrophoneEnabled(false)
-                }
-            }
-            "ZOOM_STOP_VIDEO_MEMBER" -> {
-                if (signal.targetUserId == myUserId) {
-                    ZoomRuntime.isVideoEnabled = false; engine?.setCameraEnabled(false); mesh?.setCameraEnabled(false); sfu?.setCameraEnabled(false)
-                    ZoomRuntime.localVideo = null
-                }
-            }
             "ZOOM_RAISE_HAND" -> updateHand(signal.sourceUserId.orEmpty(), true)
             "ZOOM_LOWER_HAND" -> updateHand(signal.sourceUserId.orEmpty(), false)
             "ZOOM_LOCK" -> ZoomRuntime.isLocked = true
@@ -681,18 +646,6 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
     override fun onRemoteVideo(peerId: String, track: VideoTrack){
         android.util.Log.d("ZoomService","onRemoteVideo peer=$peerId track=${track.id()} egl=${ZoomRuntime.eglContext!=null}")
         track.setEnabled(true); scope.launch(Dispatchers.Main.immediate){ ZoomRuntime.remoteVideos = ZoomRuntime.remoteVideos + (peerId to track) }
-    }
-    override fun onActiveSpeaker(peerId: String) {
-        ZoomRuntime.speakingPeers = if (peerId.isBlank()) emptySet() else setOf(peerId)
-    }
-    override fun onPeerAudioLevel(peerId: String, level: Float) {
-        if (peerId.isBlank()) return
-        val current = ZoomRuntime.speakingPeers
-        val shouldSpeak = level >= 0.12f // SPEAKING_LEVEL_THRESHOLD
-        val next = if (shouldSpeak) current + peerId else current - peerId
-        if (next != current) {
-            ZoomRuntime.speakingPeers = next
-        }
     }
     override fun onNetworkStats(stats: NetworkStats){ ZoomRuntime.networkStats=stats }
     override fun onCameraUnavailable(){ ZoomRuntime.isVideoEnabled=false; ZoomRuntime.localVideo=null; updateNetworkNotification("تعذر فتح الكاميرا — الاجتماع صوتي • أعد المحاولة من زر الكاميرا") }
@@ -872,15 +825,14 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_DECLINE_ZOOM).putExtra(EXTRA_MEETING_ID,safeId)) }
         fun end(context: Context){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_END_ZOOM)) }
         fun action(context: Context, act: String){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(act)) }
-        fun startScreenShare(context: Context, intentData: Intent) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_START_SCREEN_SHARE).putExtra("screen_data", intentData))
-        fun stopScreenShare(context: Context) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_STOP_SCREEN_SHARE))
-        fun toggleLock(context: Context) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_TOGGLE_LOCK))
-        fun toggleWaitingRoom(context: Context) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_TOGGLE_WAITING_ROOM))
-        fun admitParticipant(context: Context, userId: String) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_ADMIT_ZOOM).putExtra(EXTRA_TARGET_USER_ID, userId))
-        fun createPoll(context: Context, question: String, options: List<String>) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_CREATE_POLL).putExtra("poll_question", question).putStringArrayListExtra("poll_options", ArrayList(options)))
-        fun votePoll(context: Context, pollId: String, optionIndex: Int) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_VOTE_POLL).putExtra("poll_id", pollId).putExtra("poll_option", optionIndex))
-        fun createBreakout(context: Context, count: Int) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_CREATE_BREAKOUT).putExtra("breakout_count", count))
-        fun muteMember(context: Context, userId: String) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction("ACTION_MUTE_MEMBER").putExtra(EXTRA_TARGET_USER_ID, userId))
-        fun stopVideoMember(context: Context, userId: String) = context.startService(Intent(context, ZoomGroupCallService::class.java).setAction("ACTION_STOP_VIDEO_MEMBER").putExtra(EXTRA_TARGET_USER_ID, userId))
+        fun startScreenShare(context: Context, data: Intent){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_START_SCREEN_SHARE).putExtra("screen_data",data)) }
+        fun stopScreenShare(context: Context){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_STOP_SCREEN_SHARE)) }
+        fun toggleLock(context: Context){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_TOGGLE_LOCK)) }
+        fun toggleWaitingRoom(context: Context){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_TOGGLE_WAITING_ROOM)) }
+        fun createPoll(context: Context, question: String, options: List<String>){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_CREATE_POLL).putExtra("poll_question", question).putStringArrayListExtra("poll_options", ArrayList(options))) }
+        fun votePoll(context: Context, pollId: String, option: Int){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_VOTE_POLL).putExtra("poll_id", pollId).putExtra("poll_option", option)) }
+        fun createBreakout(context: Context, count: Int){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_CREATE_BREAKOUT).putExtra("breakout_count", count)) }
+        /** إدخال مشارك محجوز في قاعة الانتظار (المضيف فقط). */
+        fun admitParticipant(context: Context, targetUserId: String){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_ADMIT_ZOOM).putExtra(EXTRA_TARGET_USER_ID, targetUserId)) }
     }
 }

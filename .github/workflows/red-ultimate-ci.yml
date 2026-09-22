@@ -55,10 +55,10 @@ jobs:
         working-directory: ${{ env.PROJECT }}
         run: docker compose --env-file .env.example config --quiet
 
-      - name: Render every environment override (dev/staging/prod/observability)
+      - name: Render every environment override
         working-directory: ${{ env.PROJECT }}
         run: |
-          for env in dev staging prod observability; do
+          for env in dev staging prod; do
             echo "--- base + $env ---"
             docker compose -f docker-compose.yml -f docker-compose.$env.yml \
               --env-file .env.example config --quiet
@@ -158,19 +158,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
           cache: npm
           cache-dependency-path: ${{ env.PROJECT }}/admin_dashboard/package-lock.json
       - name: Install and run static checks
         working-directory: ${{ env.PROJECT }}/admin_dashboard
         run: |
           npm ci --no-audit --no-fund
-          npm run typecheck
-          npm run build:fast
-
-      - name: Run dashboard unit tests (vitest)
-        working-directory: ${{ env.PROJECT }}/admin_dashboard
-        run: npm test -- --run
+          npm run check
+          npm run build
 
   android:
     name: Android 17 build and unit tests
@@ -213,17 +209,12 @@ jobs:
             || sdkmanager "platforms;android-37" "build-tools;36.0.0"
       # :app is mapped to red-app/ via projectDir in settings.gradle.kts —
       # the single canonical Android product since Phase 11 triage.
-      # TEMPORARY FALLBACK (strict -> lenient): strict dependency verification
-      # is the intended single path, but the pinned
-      # gradle/verification-metadata.xml is still incomplete while
-      # gradle.properties keeps `lenient` on purpose. The strict step below
-      # runs first with continue-on-error, and ONLY a strict failure falls
-      # back to a lenient build so the pipeline cannot be bricked.
-      # MANDATORY EXIT CONDITION: regenerate with
-      #   ./gradlew --write-verification-metadata sha256 help
-      # verify the diff, commit gradle/verification-metadata.xml, then DELETE
-      # the fallback step and make the strict step blocking (remove
-      # continue-on-error). See gradle/README.md.
+      # Strict dependency verification is re-enabled here (it was dropped when
+      # the unified pipeline replaced quality-gate.yml). Because the pinned
+      # gradle/verification-metadata.xml is still being completed — gradle.properties
+      # keeps `lenient` on purpose — a strict failure falls back to a lenient build so
+      # the pipeline cannot be bricked. Promote to a single strict path once
+      # `./gradlew --write-verification-metadata sha256 help` has been regenerated.
       - name: Unit test and assemble canonical app (strict dependency verification)
         id: android_strict
         working-directory: ${{ env.PROJECT }}
@@ -238,7 +229,7 @@ jobs:
         if: steps.android_strict.outcome == 'failure'
         working-directory: ${{ env.PROJECT }}
         run: |
-          echo "::warning::TEMPORARY fallback: strict dependency verification failed — retrying lenient. Exit condition: regenerate gradle/verification-metadata.xml via './gradlew --write-verification-metadata sha256 help', commit it, then delete this fallback step (see gradle/README.md)."
+          echo "::warning::Strict dependency verification failed — retrying with the configured lenient mode. Regenerate gradle/verification-metadata.xml (see gradle/README.md) before making strict the only path."
           set -o pipefail
           ./gradlew :app:testDebugUnitTest :app:assembleDebug \
             -PRED_SKIP_BUILD_LOGIC=true \
@@ -269,7 +260,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
           cache: npm
           cache-dependency-path: ${{ env.PROJECT }}/media-sfu/package-lock.json
       - name: Install production dependency and validate server

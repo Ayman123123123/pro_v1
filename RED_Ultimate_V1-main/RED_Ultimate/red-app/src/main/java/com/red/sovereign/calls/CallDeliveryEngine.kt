@@ -21,10 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * المسارات:
  * 1. WebSocket مباشر (الأسرع) — انتظار RINGING ACK
  * 2. Sovereign Wake Push (إيقاظ الجهاز عبر UnifiedPush) — POST /api/calls/push-notify
- * 3. HTTP Webhook Fallback (ضمان التسليم) — POST /api/calls/push-notify (إعادة محاولة للتخزين+الإيقاظ)
- *
- * ملاحظة: المسار 3 كان يرمي إلى /api/calls/pending وهي نقطة **سحب** لا تخزين، فكان بلا أثر.
- * الآن المساران 2 و3 يستهدفان نقطة التخزين نفسها؛ 2 يحاول مرة و3 يعيد المحاولة بتراجع أسي.
+ * 3. HTTP Webhook Fallback (ضمان التسليم) — POST /api/calls/pending
+ * 
  * مع Trickle ICE retry و adaptive bitrate
  */
 class CallDeliveryEngine(
@@ -175,19 +173,11 @@ class CallDeliveryEngine(
                         callerId = tokens.redId.orEmpty(),
                         mode = signal.mode,
                         offerSdp = signal.payload["sdp"].orEmpty(),
-                        // TTL = نافذة صندوق البريد في الساحب (120s) لا مهلة عدم الرد (45s).
-                        // العميل يرن حتى 45s ويسجّل «مكالمة فائتة» في النطاق 45..120s؛ فلو انتهى
-                        // العرض عند 45s على الخادم لضاع ذلك النطاق كله ولم تُسجَّل فائتة إطلاقاً.
-                        ttlSeconds = CallRingPolicy.MAILBOX_TTL_SECONDS
+                        ttlSeconds = (CallRingPolicy.UNANSWERED_TIMEOUT_MS / 1000).toInt()
                     )
                 )
                 val request = Request.Builder()
-                    // كان الوجهة /api/calls/pending وهي **سحب** لا تخزين: الخادم يقرأها
-                    // كـ PullPendingRequest فيُهمل الحقول الزائدة ويعيد 204 دائماً — و204
-                    // تُعدّ نجاحاً (isSuccessful) ⇒ المسار 3 كان بلا أثر إطلاقاً: لا تخزين
-                    // للعرض، والمتصل يستهلك كل محاولاته في انتظار تأكيد رنين لا يأتي أبداً.
-                    // الوجهة الصحيحة هي نقطة التخزين+الإيقاظ نفسها التي يستخدمها المسار 2.
-                    .url("${ServerEndpoint.url()}/api/calls/push-notify")
+                    .url("${ServerEndpoint.url()}/api/calls/pending")
                     .header("Authorization", "Bearer ${tokens.accessToken.orEmpty()}")
                     .post(body.toRequestBody("application/json".toMediaType()))
                     .build()

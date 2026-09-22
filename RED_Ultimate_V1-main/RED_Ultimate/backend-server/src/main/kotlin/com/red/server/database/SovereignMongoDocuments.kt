@@ -25,7 +25,7 @@ import java.time.Instant
 // ════════════════════════════════════════════════════
 
 @Document("messages")
-@CompoundIndex(name = "conv_seq", def = "{'conversationId': 1, 'sequenceNumber': 1}", unique = true)
+@CompoundIndex(name = "conv_seq", def = "{'conversationId': 1, 'sequenceNumber': -1}")
 @CompoundIndex(name = "pinned_conv", def = "{'conversationId': 1, 'isPinned': 1, 'pinnedAt': -1}")
 @CompoundIndex(name = "sender_created", def = "{'senderId': 1, 'createdAt': -1}")
 data class MessageDocument(
@@ -35,17 +35,12 @@ data class MessageDocument(
     @Indexed val senderId: String,
     val senderDeviceId: Int,
     @Indexed val receiverId: String,
-    // var لا val: وسم الجهاز يُشفى ذاتياً عند انحراف المعرّف (إعادة تثبيت/استعادة نسخة احتياطية)
-    // — انظر MessageService.acknowledge. الحقل والفهرس كما هما فلا حاجة لترحيل.
-    var receiverDeviceId: Int,
+    val receiverDeviceId: Int,
     var payload: ByteArray,
     val messageType: String = "TEXT", // TEXT, IMAGE, VIDEO, VOICE, FILE, LOCATION, CONTACT, POLL
     val ciphertextType: Int,
     val sequenceNumber: Long = 0,
     @Indexed var status: String = "SENT", // SENT, DELIVERED, READ, FAILED
-    // عدّاد تسليمات المضخة غير المُقرّة — يحُدّ حلقة إعادة الإرسال (انظر MessageService.recordDeliveryAttempt).
-    // حقل جديد: المستندات القديمة بلا هذا الحقل تقرأ 0 عبر قيمة المُنشئ الافتراضية، فلا حاجة لترحيل.
-    var deliveryAttempts: Int = 0,
     // الوسائط المشفرة
     val attachments: List<MessageAttachment> = emptyList(),
     // 🎙️ البيانات الوصفية للرسائل الصوتية (اختيارية — تُملأ عند messageType=VOICE)
@@ -287,7 +282,7 @@ data class SpaceSpeaker(
 // ════════════════════════════════════════════════════
 
 @Document("group_messages")
-@CompoundIndex(name = "group_seq", def = "{'groupId': 1, 'sequenceNumber': 1}", unique = true)
+@CompoundIndex(name = "group_seq", def = "{'groupId': 1, 'sequenceNumber': -1}")
 @CompoundIndex(name = "group_pinned", def = "{'groupId': 1, 'isPinned': 1, 'pinnedAt': -1}")
 @CompoundIndex(name = "group_sender_created", def = "{'groupId': 1, 'senderId': 1, 'createdAt': -1}")
 data class GroupMessageDocument(
@@ -409,7 +404,7 @@ data class ChannelDocument(
 // (channel_members)؛ المستند لم يملك أي كاتب وكان يُستخدم خطأً في فحص الصلاحيات.
 
 @Document("channel_messages")
-@CompoundIndex(name = "channel_seq", def = "{'channelId': 1, 'sequenceNumber': 1}", unique = true)
+@CompoundIndex(name = "channel_seq", def = "{'channelId': 1, 'sequenceNumber': -1}")
 data class ChannelMessageDocument(
     @Id val id: String? = null,
     @Indexed(unique = true) val uuid: String,

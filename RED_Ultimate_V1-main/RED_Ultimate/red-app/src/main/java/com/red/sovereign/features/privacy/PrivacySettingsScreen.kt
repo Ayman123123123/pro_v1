@@ -1,6 +1,5 @@
 package com.red.sovereign.features.privacy
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -191,7 +190,7 @@ private fun PrivacySettingCard(item: StatusPrivacyItem, isExpanded: Boolean, onE
             Row(Modifier.fillMaxWidth().clickable(onClick = onExpand).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(42.dp).background(SovereignColors.Cyan.copy(alpha = 0.12f), CircleShape), contentAlignment = Alignment.Center) { Icon(item.icon, null, tint = SovereignColors.Cyan, modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) { Text(item.arabicLabel, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color.White); Text(item.currentLevel.label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Column(Modifier.weight(1f)) { Text(item.arabicLabel, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color.White); Text(item.currentLevel.label, fontSize = 12.sp, color = Color.Gray) }
                 if (saving) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = SovereignColors.Cyan)
                 Icon(if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, tint = Color.Gray)
             }
@@ -203,7 +202,7 @@ private fun PrivacySettingCard(item: StatusPrivacyItem, isExpanded: Boolean, onE
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(level.icon, null, tint = if (isSelected) SovereignColors.Cyan else Color.Gray, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f)) { Text(level.label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, fontSize = 14.sp, color = if (isSelected) SovereignColors.Cyan else Color.White); Text(level.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                Column(Modifier.weight(1f)) { Text(level.label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, fontSize = 14.sp, color = if (isSelected) SovereignColors.Cyan else Color.White); Text(level.description, fontSize = 11.sp, color = Color.Gray) }
                                 if (isSelected) Icon(Icons.Rounded.CheckCircle, null, tint = SovereignColors.Cyan, modifier = Modifier.size(18.dp))
                             }
                         }

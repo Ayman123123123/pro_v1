@@ -7,7 +7,6 @@ import com.red.server.database.ConversationSequence
 import com.red.server.database.DisappearingSettingsDocument
 import com.red.server.database.GroupMessageDocument
 import com.red.server.database.MessageDocument
-import com.red.server.database.MessageEditHistoryDocument
 import com.red.server.database.MessageReaction
 import com.red.server.groups.GroupMember
 import com.red.server.groups.GroupDocument
@@ -29,13 +28,6 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.TimeUnit
-
-data class SendResult(
-    val messageId: String,
-    val sequenceNumber: Long,
-    val timestamp: java.time.Instant
-)
 
 @Service
 class MessageService(
@@ -44,82 +36,31 @@ class MessageService(
     private val users: UserAccountRepository,
     private val jdbc: JdbcTemplate
 ) {
-    /**
-     * المرجع الوحيد لفهارس الرسائل (Single Source of Truth).
-     *
-     * الأسماء الكانونية الوحيدة: conv_seq / group_seq / channel_seq للمركّب الفريد
-     * (conversation|group|channel + sequenceNumber)، و pinned_conv / sender_created
-     * و group_pinned للمشتقات. الأسماء الطويلة القديمة
-     * (conversationId_1_sequenceNumber_1 / groupId_1_sequenceNumber_1 /
-     * channelId_1_sequenceNumber_1 / conversationId_1_isPinned_1_pinnedAt_-1 /
-     * senderId_1_createdAt_-1 / groupId_1_isPinned_1_pinnedAt_-1) مهجورة وتُسقط
-     * عند الإقلاع. تعليقات @CompoundIndex على المستندات عقد توثيقي فقط —
-     * لا تُنشئ فهرسًا جديدًا باسم مختلف.
-     */
     @PostConstruct
     fun indexes() {
-        // LEGENDARY FIX 2026-09-15: حلّ جذري لتعارض الفهارس (IndexKeySpecsConflict)
-        // المشكلة: فهارس قديمة في Mongo بلا unique (auto-generated) تتعارض مع طلب unique
-        // الحل: فحص الفهرس الموجود، إسقاطه إن كان يختلف في unique/keys، ثم إعادة الإنشاء
-        fun <T : Any> ensureIndex(clazz: Class<T>, index: Index, name: String) {
-            val ops = mongo.indexOps(clazz)
-            // محاولة الإنشاء السريع أولاً
-            runCatching { ops.createIndex(index) }.onFailure { e ->
-                val msg = e.message ?: ""
-                if (msg.contains("IndexKeySpecsConflict") || msg.contains("already exists") || e is DuplicateKeyException) {
-                    runCatching {
-                        ops.dropIndex(name)
-                        log.info("Dropped conflicting Mongo index {} on {} and recreating", name, clazz.simpleName)
-                    }
-                    runCatching { ops.createIndex(index) }.onFailure { e2 ->
-                        log.warn("Failed to recreate Mongo index {} on {} after drop: {}", name, clazz.simpleName, e2.message)
-                    }
-                } else {
-                    log.warn("Failed to create Mongo index {} on {}: {}", name, clazz.simpleName, msg)
-                }
-            }
-        }
-        fun <T : Any> dropLegacy(clazz: Class<T>, legacyName: String) {
-            runCatching { mongo.indexOps(clazz).dropIndex(legacyName) }.onSuccess {
-                log.info("Dropped legacy index {} on {} (canonical name wins)", legacyName, clazz.simpleName)
-            }
-        }
-        fun <T : Any> ensureUnique(clazz: Class<T>, fields: List<Pair<String, Sort.Direction>>, uniqueName: String) {
-            val ops = mongo.indexOps(clazz)
-            val existing = runCatching { ops.indexInfo }.getOrNull() ?: emptyList()
-            val conflict = existing.firstOrNull { it.name == uniqueName && !it.isUnique }
-            if (conflict != null) {
-                runCatching { ops.dropIndex(uniqueName) }.onSuccess {
-                    log.info("Dropped legacy non-unique index {} on {} to upgrade to unique", uniqueName, clazz.simpleName)
-                }
-            }
-            val idx = Index().apply { fields.forEach { (f, d) -> on(f, d) }; unique(); named(uniqueName) }
-            ensureIndex(clazz, idx, uniqueName)
-        }
-
+        // P9: كل إنشاء فهرس محمي — تعارض خيارات فهرس قديم (unique/non-unique على نفس
+        // المفاتيح) أو بيانات قديمة مكررة يجب ألا يُسقط الإقلاع؛ المخصّص الذري يمنع التكرار أصلًا.
         runCatching {
-            ensureIndex(MessageDocument::class.java, Index().on("uuid", Sort.Direction.ASC).unique().named("uuid_1"), "uuid_1")
-            ensureIndex(MessageDocument::class.java, Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).named("receiverId_1_status_1_sequenceNumber_1"), "receiverId_1_status_1_sequenceNumber_1")
-            dropLegacy(MessageDocument::class.java, "conversationId_1_sequenceNumber_1")
-            ensureUnique(MessageDocument::class.java, listOf("conversationId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "conv_seq")
-            dropLegacy(MessageDocument::class.java, "conversationId_1_isPinned_1_pinnedAt_-1")
-            ensureIndex(MessageDocument::class.java, Index().on("conversationId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC).named("pinned_conv"), "pinned_conv")
-            dropLegacy(MessageDocument::class.java, "senderId_1_createdAt_-1")
-            ensureIndex(MessageDocument::class.java, Index().on("senderId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC).named("sender_created"), "sender_created")
-            ensureIndex(MessageDocument::class.java, Index().on("disappearAt", Sort.Direction.ASC).named("disappearAt_1"), "disappearAt_1")
-            // retention: سجل تعديلات الرسائل — TTL 365 يومًا على editedAt.
-            ensureIndex(MessageEditHistoryDocument::class.java, Index().on("editedAt", Sort.Direction.ASC).expire(365, TimeUnit.DAYS).named("editedAt_ttl_365d"), "editedAt_ttl_365d")
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("uuid", Sort.Direction.ASC).unique())
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
+            // P9: فرادة (المحادثة، التسلسل) — شبكة أمان تحت المخصّص الذري findAndModify
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
+            // V26: فهارس إضافية للميزات الجديدة
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("senderId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC))
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("disappearAt", Sort.Direction.ASC))
         }.onFailure { e -> log.warn("Failed to create message indexes: {}", e.message) }
-
-        runCatching {
-            dropLegacy(com.red.server.database.GroupMessageDocument::class.java, "groupId_1_isPinned_1_pinnedAt_-1")
-            ensureIndex(com.red.server.database.GroupMessageDocument::class.java, Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC).named("group_pinned"), "group_pinned")
-            dropLegacy(com.red.server.database.GroupMessageDocument::class.java, "groupId_1_sequenceNumber_1")
-            ensureUnique(com.red.server.database.GroupMessageDocument::class.java, listOf("groupId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "group_seq")
-            dropLegacy(com.red.server.database.ChannelMessageDocument::class.java, "channelId_1_sequenceNumber_1")
-            ensureUnique(com.red.server.database.ChannelMessageDocument::class.java, listOf("channelId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "channel_seq")
-            ensureIndex(com.red.server.database.PinnedMessageDocument::class.java, Index().on("messageUuid", Sort.Direction.ASC).unique().named("messageUuid_1"), "messageUuid_1")
-        }.onFailure { e -> log.warn("Failed to create group/channel indexes: {}", e.message) }
+        // فهارس المجموعات والقنوات
+        try {
+            mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
+            // P9: فرادة (المجموعة، التسلسل)
+            mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
+            // P9: فرادة (القناة، التسلسل)
+            mongo.indexOps(com.red.server.database.ChannelMessageDocument::class.java).createIndex(Index().on("channelId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
+            mongo.indexOps(com.red.server.database.PinnedMessageDocument::class.java).createIndex(Index().on("messageUuid", Sort.Direction.ASC).unique())
+        } catch (e: Exception) {
+            log.warn("Failed to create group/channel indexes: {}", e.message)
+        }
     }
 
     fun processIncoming(message: RedProtos.ChatMessage): MessageDocument =
@@ -220,31 +161,6 @@ class MessageService(
         MessageDocument::class.java
     )
 
-    /**
-     * FIX (رسالة مفقودة بعد انحراف وسم الجهاز): كل مسارات التسليم في RedMasterHandler تستخدم
-     * pendingFor المقيَّدة بالجهاز. فجهازٌ أُعيد تثبيته أو استُعيدت نسخته الاحتياطية يحمل معرّفاً
-     * جديداً ⇒ كل ما أُرسل له قبل ذلك لا يُستَرجَع أبداً (لا عند الاتصال ولا في مضخة الإعادة).
-     * هنا نُكمل من مخزون الحساب كله، لكن **فقط** للرسائل التي وسمها جهاز غير متصل الآن:
-     * إن كان جهازها الحقيقي حيّاً فهو أولى بها ولا نُزاحمه (حساب بعدة أجهزة).
-     */
-    fun pendingForDeviceOrAccount(redId: String, receiverDeviceId: Int, liveDeviceIds: Set<Int>, limit: Int = 50): List<MessageDocument> {
-        val capped = limit.coerceIn(1, 50)
-        val byDevice = pendingFor(redId, receiverDeviceId, capped)
-        if (byDevice.size >= capped) return byDevice
-        val accountWide = mongo.find(
-            Query(Criteria.where("receiverId").`is`(redId).and("status").`is`("SENT").and("deletedForEveryoneAt").`is`(null))
-                .with(Sort.by(Sort.Direction.ASC, "sequenceNumber")).limit(capped),
-            MessageDocument::class.java
-        ).filter { it.receiverDeviceId !in liveDeviceIds }
-        if (accountWide.isEmpty()) return byDevice
-        val seen = byDevice.mapTo(HashSet()) { it.uuid }
-        val merged = (byDevice + accountWide.filter { it.uuid !in seen }).sortedBy { it.sequenceNumber }
-        if (merged.size > byDevice.size) {
-            log.info("Device-tag drift catch-up for {} device {}: {} extra message(s) recovered", redId, receiverDeviceId, merged.size - byDevice.size)
-        }
-        return merged.take(capped)
-    }
-
     fun getMissedMessages(userId: String, conversationId: String, fromSequence: Long, toSequence: Long, limit: Int = 50): List<MessageDocument> {
         val criteria = Criteria.where("conversationId").`is`(conversationId)
             .andOperator(Criteria().orOperator(Criteria.where("senderId").`is`(userId), Criteria.where("receiverId").`is`(userId)))
@@ -257,48 +173,13 @@ class MessageService(
         return mongo.find(Query(criteria).with(Sort.by(Sort.Direction.ASC, "sequenceNumber")).limit(limit.coerceIn(1, 50)), MessageDocument::class.java)
     }
 
-    /**
-     * FIX (حلقة إعادة إرسال لا نهائية): مضخة الإعادة تُرسل كل ما status=SENT كل 30 ثانية. ورسالة
-     * يستحيل فكّها على الجهاز الحالي — لأن مفاتيح E2E الخاصة بالجهاز القديم فُقدت بإعادة التثبيت —
-     * لا تُقرّ بـ ACK أبداً: العميل يعود بلا ACK **عمداً** (ليجرّبها الجهاز الصحيح، انظر
-     * RedConnectionService: `if (!addressedToThisDevice) return`). فكانت تُعاد إلى الأبد بلا أي
-     * تقدّم. هنا نحُدّ المحاولات: بعد [cap] تسليماً غير مُقرّ نُعلنها FAILED، فيتوقف الإرسال طبيعياً
-     * لأن كل الاستعلامات تشترط status=SENT، ويرى المرسل حالة صريحة بدل انتظار أبدي.
-     * @return true إن بقيت قابلة للإعادة، false إن استُنفدت المحاولات (أو لم تكن SENT).
-     */
-    fun recordDeliveryAttempt(messageId: String, cap: Int): Boolean {
-        val updated = mongo.findAndModify(
-            Query(Criteria.where("uuid").`is`(messageId).and("status").`is`("SENT")),
-            Update().inc("deliveryAttempts", 1),
-            FindAndModifyOptions.options().returnNew(true),
-            MessageDocument::class.java
-        ) ?: return false
-        if (updated.deliveryAttempts >= cap) {
-            updated.status = "FAILED"
-            mongo.save(updated)
-            log.warn("Message {} marked FAILED after {} undelivered redelivery attempts", messageId, updated.deliveryAttempts)
-            return false
-        }
-        return true
-    }
-
-    /** Only the intended receiver may advance SENT -> DELIVERED -> READ.
-     * FIX (رسالة عالقة للأبد): كان الشرط يشترط **تطابق وسم الجهاز** أيضاً، فجهازٌ تغيّر معرّفه
-     * (إعادة تثبيت/استعادة نسخة احتياطية) يرى ACKه مرفوضاً بخطأ ⇒ تبقى status=SENT للأبد فلا
-     * يصل إشعار "تم التسليم" للمرسل. الملكية (receiverId) هي حدّ التخويل الحقيقي — فحص الجهاز
-     * كان تطابقاً تشخيصياً لا أمنياً (الجهازان ملك الحساب نفسه)؛ لذلك نُبقيه لكن **يُشفي الوسم**
-     * على الجهاز الذي أثبت حيازته للرسالة فعلاً (فلا تتكرر المشكلة ولا تُعاد الرسالة بلا نهاية).
-     */
+    /** Only the intended receiver may advance SENT -> DELIVERED -> READ. */
     fun acknowledge(receiverId: String, receiverDeviceId: Int, messageId: String, requestedStatus: String): MessageDocument {
         val status = requestedStatus.uppercase()
         require(status == "DELIVERED" || status == "READ") { "Unsupported ACK status" }
         val message = mongo.findOne(Query(Criteria.where("uuid").`is`(messageId)), MessageDocument::class.java)
             ?: throw NoSuchElementException("Message not found")
-        require(message.receiverId == receiverId) { "Only the target device can acknowledge this message" }
-        if (message.receiverDeviceId != receiverDeviceId) {
-            log.info("ACK healed device-tag drift: message={} was={} now={}", messageId, message.receiverDeviceId, receiverDeviceId)
-            message.receiverDeviceId = receiverDeviceId
-        }
+        require(message.receiverId == receiverId && message.receiverDeviceId == receiverDeviceId) { "Only the target device can acknowledge this message" }
         if (rank(status) > rank(message.status)) {
             message.status = status
             if (status == "DELIVERED" && message.deliveredAt == null) message.deliveredAt = Instant.now()
@@ -665,18 +546,16 @@ class MessageService(
     }
 
     /** معرّفات الأعضاء النشطين للمجموعة — للبث الجماعي (مؤشر كتابة إلخ). */
-    /** AUTO-FIX (message reliability): stored messages for this recipient that arrived after `since`.
-     * موحّد: سقف 50 وترتيب sequenceNumber (يطابق فهرس receiverId_1_status_1_sequenceNumber_1
-     * ومسار pendingFor المقيد بالجهاز) — لا 500 ولا createdAt. */
+    /** AUTO-FIX (message reliability): stored messages for this recipient that arrived after `since`. */
     fun pendingFor(redId: String, since: java.time.Instant, limit: Int): List<MessageDocument> {
-        val capped = limit.coerceIn(1, 50)
+        val capped = limit.coerceIn(1, 500)
         val query = Query(
             Criteria.where("receiverId").`is`(redId)
                 .andOperator(
                     Criteria.where("createdAt").gt(since),
                     Criteria.where("deletedForEveryoneAt").isNull()
                 )
-        ).with(Sort.by(Sort.Direction.ASC, "sequenceNumber")).limit(capped)
+        ).with(Sort.by(Sort.Direction.ASC, "createdAt")).limit(capped)
         return mongo.find(query, MessageDocument::class.java)
     }
 
@@ -755,105 +634,16 @@ class MessageService(
 
     private fun rank(status: String) = when (status) { "SENT" -> 1; "DELIVERED" -> 2; "READ" -> 3; else -> 0 }
 
-    fun sendEncryptedEnvelope(
-        senderRedId: String,
-        conversationId: String,
-        payload: String,
-        messageType: String,
-        senderDeviceId: Int,
-        receiverDeviceId: Int?,
-        ciphertextType: String,
-        replyToMessageId: String? = null,
-        idempotencyKey: String? = null
-    ): SendResult {
-        // Check idempotency
-        idempotencyKey?.let { key ->
-            val existing = redis.opsForValue().get("idempotency:$key")
-            if (existing != null) {
-                val parts = existing.split("|")
-                if (parts.size == 3) {
-                    return SendResult(parts[0], parts[1].toLong(), java.time.Instant.parse(parts[2]))
-                }
-            }
-        }
-
-        val message = RedProtos.ChatMessage.newBuilder()
-            .setId(UuidV7.next())
-            .setConversationId(conversationId)
-            .setSenderId(senderRedId)
-            .setReceiverId(findConversationPeer(senderRedId, conversationId))
-            .setPayload(com.google.protobuf.ByteString.copyFrom(java.util.Base64.getDecoder().decode(payload)))
-            .setType(messageType)
-            .setTimestamp(java.time.Instant.now().toEpochMilli())
-            .setSenderDeviceId(senderDeviceId)
-            .setReceiverDeviceId(receiverDeviceId ?: 1)
-            .setCiphertextType(ciphertextType.toInt())
-            .setSequenceNumber(0)
-            .build()
-
-        val saved = processIncoming(message, replyToMessageId, null)
-
-        val result = SendResult(saved.uuid, saved.sequenceNumber, saved.createdAt)
-        
-        idempotencyKey?.let { key ->
-            redis.opsForValue().set("idempotency:$key", "${result.messageId}|${result.sequenceNumber}|${result.timestamp}", java.time.Duration.ofHours(24))
-        }
-
-        return result
+    companion object {
+        private val log = LoggerFactory.getLogger(MessageService::class.java)
+        // مصدر الحقيقة الوحيد للنمط: RedIdGenerator.PATTERN.
+        // تكرار النمط بصياغات مختلفة هو ما سمح سابقًا بتباين القبول
+        // بين الوحدات (بادئة مقبولة هنا مرفوضة هناك).
+        private val RED_ID = Regex(RedIdGenerator.PATTERN)
+        private val TYPES = setOf("TEXT", "RICH_TEXT", "IMAGE", "VIDEO", "AUDIO", "VOICE", "FILE", "STICKER", "POLL", "SYSTEM", "GROUP_KEY_DISTRIBUTION", "GROUP_MESSAGE")
+        private val GROUP_TYPES = setOf("GROUP_KEY_DISTRIBUTION", "GROUP_MESSAGE")
     }
-
-    fun getMessage(messageId: String): MessageDocument? = findMessage(messageId)
-
-    fun editMessage(userRedId: String, messageId: String, newPayload: String, newMessageType: String?): Boolean {
-        val message = findAuthorized(messageId, userRedId)
-            ?: throw NoSuchElementException("Message not found or not authorized")
-        
-        val ageSeconds = java.time.Instant.now().epochSecond - message.createdAt.epochSecond
-        require(ageSeconds <= 900) { "EDIT_WINDOW_EXPIRED" } // 15 minutes
-        
-        val payloadBytes = java.util.Base64.getDecoder().decode(newPayload)
-        require(payloadBytes.size in 1..1_048_576) { "INVALID_PAYLOAD_SIZE" }
-        
-        mongo.updateFirst(
-            Query(Criteria.where("uuid").`is`(messageId)),
-            Update()
-                .set("payload", payloadBytes)
-                .set("messageType", newMessageType ?: message.messageType)
-                .set("editedAt", java.time.Instant.now())
-                .inc("editVersion", 1)
-                .set("isEdited", true),
-            MessageDocument::class.java
-        )
-        
-        return true
-    }
-
-    fun findConversationPeer(senderRedId: String, conversationId: String): String {
-        // Check if it's a self conversation
-        if (conversationId.contains("self") || conversationId.contains("note") || 
-            conversationId == senderRedId || conversationId.contains(senderRedId)) {
-            return senderRedId
-        }
-        
-        // Look up the conversation to find the other participant
-        val latest = mongo.findOne(
-            Query(Criteria.where("conversationId").`is`(conversationId))
-                .with(Sort.by(Sort.Direction.DESC, "sequenceNumber")),
-            MessageDocument::class.java
-        )
-        
-        if (latest != null) {
-            return if (latest.senderId == senderRedId) latest.receiverId else latest.senderId
-        }
-        
-        // Try to infer from conversationId (format: redId1_redId2)
-        val parts = conversationId.split("_")
-        if (parts.size == 2) {
-            return if (parts[0] == senderRedId) parts[1] else parts[0]
-        }
-        
-        throw IllegalArgumentException("Cannot determine conversation peer")
-    }
+}
 
 /**
  * 😀 هدف تفاعل — أين تعيش الرسالة ومن يجب أن يستلم البث.

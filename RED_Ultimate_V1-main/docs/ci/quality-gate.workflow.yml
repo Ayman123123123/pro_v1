@@ -1,0 +1,164 @@
+name: YOUNES quality gate
+
+on:
+  push:
+    paths:
+      - 'RED_Ultimate_V1-main/RED_Ultimate/**'
+      - '.github/workflows/quality-gate.yml'
+  pull_request:
+    paths:
+      - 'RED_Ultimate_V1-main/RED_Ultimate/**'
+      - '.github/workflows/quality-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PROJECT: RED_Ultimate_V1-main/RED_Ultimate
+
+jobs:
+  infrastructure:
+    name: Infrastructure and Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static infrastructure regressions
+        working-directory: ${{ env.PROJECT }}
+        run: |
+          python3 scripts/check-infrastructure.py
+          find scripts -maxdepth 1 -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+
+      - name: Render Docker Compose configuration
+        working-directory: ${{ env.PROJECT }}
+        run: docker compose --env-file .env.example config --quiet
+
+      - name: Validate TLS tooling and Nginx syntax
+        working-directory: ${{ env.PROJECT }}
+        run: |
+          set -euo pipefail
+          tls="$(mktemp -d)"
+          trap 'rm -rf "$tls"' EXIT
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -sha256 \
+            -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+            -keyout "$tls/privkey.pem" -out "$tls/fullchain.pem" >/dev/null 2>&1
+          chmod 600 "$tls/privkey.pem"
+          chmod 644 "$tls/fullchain.pem"
+          scripts/verify-ssl-certs.sh "$tls/fullchain.pem" "$tls/privkey.pem"
+          docker run --rm \
+            --add-host backend:127.0.0.1 \
+            --add-host media-sfu:127.0.0.1 \
+            --add-host admin-panel:127.0.0.1 \
+            -v "$PWD/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$tls:/etc/ssl/red:ro" \
+            nginx:1.27-alpine nginx -t
+
+      - name: Build backend production image with BuildKit cache mount
+        working-directory: ${{ env.PROJECT }}
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: docker build --file backend-server/Dockerfile --tag younes-backend:ci .
+
+  backend:
+    name: Backend tests (JDK 21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Test Spring backend and shared protocol
+        working-directory: ${{ env.PROJECT }}/backend-server
+        run: ./gradlew test --no-daemon --stacktrace
+
+  admin-integration:
+    name: Admin and app contract integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ env.PROJECT }}/admin_dashboard/package-lock.json
+      - name: Install and run static checks
+        working-directory: ${{ env.PROJECT }}/admin_dashboard
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+          npm run build
+      - name: Run persistent dev-server integration suite
+        working-directory: ${{ env.PROJECT }}/admin_dashboard
+        run: |
+          set -euo pipefail
+          npm run dev:server:reset > /tmp/younes-dev-server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; cat /tmp/younes-dev-server.log' EXIT
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/health >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/health >/dev/null
+          npm run check:server
+          npm run check:integration
+          npm run check:asterisk
+
+  android:
+    name: Android 17 build and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install API 37 and supported build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-37" "build-tools;36.0.0"
+      - name: Unit test and assemble canonical app
+        working-directory: ${{ env.PROJECT }}
+        run: |
+          ./gradlew :app:testDebugUnitTest :app:assembleDebug \
+            -PRED_SKIP_BUILD_LOGIC=true \
+            --dependency-verification strict \
+            --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: younes-android-debug
+          path: ${{ env.PROJECT }}/red-app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  media-sfu:
+    name: Media SFU install and syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ env.PROJECT }}/media-sfu/package-lock.json
+      - name: Install production dependency and validate server
+        working-directory: ${{ env.PROJECT }}/media-sfu
+        run: |
+          npm ci --omit=dev --no-audit --no-fund
+          npm run check

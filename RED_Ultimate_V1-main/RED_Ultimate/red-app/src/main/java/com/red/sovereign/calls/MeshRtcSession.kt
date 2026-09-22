@@ -261,10 +261,7 @@ class MeshRtcSession(
                 it.peer?.addIceCandidate(candidate)
             } else {
                 synchronized(it.pendingIce) {
-                    // Limit pending ICE candidates to prevent memory issues
-                    if (it.pendingIce.size < 50) {
-                        it.pendingIce.add(candidate)
-                    }
+                    it.pendingIce.add(candidate)
                 }
             }
         }
@@ -590,18 +587,6 @@ class MeshRtcSession(
                     }
                     haveLocalOffer = true
                     peer?.createOffer(sdpObserver(setLocal = true), constraints)
-                } else if (state == PeerConnection.IceConnectionState.DISCONNECTED) {
-                    // Schedule ICE restart if disconnected for too long
-                    scope.launch {
-                        kotlinx.coroutines.delay(10_000)
-                        if (peer?.iceConnectionState == PeerConnection.IceConnectionState.DISCONNECTED) {
-                            val constraints = MediaConstraints().apply {
-                                mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true"))
-                            }
-                            haveLocalOffer = true
-                            peer?.createOffer(sdpObserver(setLocal = true), constraints)
-                        }
-                    }
                 }
             }
             override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit

@@ -83,20 +83,7 @@ fun LanPeersScreen(
     }
 
     DisposableEffect(manager) {
-        onDispose {
-            // فصل اكتشاف NSD عن المكالمة: إغلاق الشاشة أثناء مكالمة نشطة
-            // يوقف النشر/الاكتشاف فقط ويُبقي الإشارة (BYE/ICE) والمكالمة حية.
-            // إنهاء المكالمة يتم صراحة بزر "إنهاء" فقط.
-            val s = manager.state.value
-            if (s == LanCallManager.LanCallState.CALLING ||
-                s == LanCallManager.LanCallState.RINGING ||
-                s == LanCallManager.LanCallState.IN_CALL
-            ) {
-                manager.stopDiscovery()
-            } else {
-                manager.shutdown()
-            }
-        }
+        onDispose { manager.shutdown() }
     }
 
     Column(
@@ -199,7 +186,7 @@ fun LanPeersScreen(
         if (discovering && peers.isEmpty()) {
             Text(
                 "لا أجهزة بعد — تأكد أن الطرف الآخر فتح نفس الشاشة وبدأ الاكتشاف.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.Gray,
                 fontSize = 12.sp
             )
         }
@@ -225,7 +212,7 @@ fun LanPeersScreen(
             text = {
                 Column {
                     Text("${inc.from.name} (${inc.from.redId.take(8)}…)")
-                    Text(if (inc.media == "video") "مكالمة فيديو" else "مكالمة صوتية", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (inc.media == "video") "مكالمة فيديو" else "مكالمة صوتية", fontSize = 12.sp, color = Color.Gray)
                     if (!inc.from.verified) Text(
                         "غير موجود في جهات اتصالك — تحقق من هويته قبل القبول.",
                         fontSize = 12.sp,
@@ -289,7 +276,7 @@ private fun PeerRow(
                         Text("موثق", color = Color(0xFF00C98C), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                Text("${peer.redId.take(12)}… • ${peer.host}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                Text("${peer.redId.take(12)}… • ${peer.host}", color = Color.Gray, fontSize = 11.sp)
             }
             TextButton(onClick = onVoice, enabled = !busy) { Text("صوت") }
             TextButton(onClick = onVideo, enabled = !busy) { Text("فيديو") }
@@ -342,7 +329,7 @@ private fun InCallPanel(
                         onDispose { if (track != null && viewRef != null) track.removeSink(viewRef) }
                     }
                 } else {
-                    Text("يُجهز الفيديو…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text("يُجهز الفيديو…", color = Color.Gray, fontSize = 12.sp)
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

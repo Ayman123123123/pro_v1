@@ -25,23 +25,7 @@ data class CallHistoryDocument(
     var roomId: String? = null,
     var participantIds: List<String> = emptyList(),
     var hadScreenShare: Boolean = false,
-    var wasRecorded: Boolean = false,
-    var recordingPath: String? = null,
-    var avgRttMs: Long = 0L,
-    var avgPacketLossPct: Float = 0f,
-    var avgBitrateKbps: Long = 0L,
-    /**
-     * معرّفات المستخدمين الذين أخفوا هذا السجل من سجلهم.
-     *
-     * مستند واحد يخدم **الطرفين** (`history()` يطابق initiatorId أو targetId)، فمحو
-     * المستند فعلياً يمحو سجل الطرف الآخر أيضاً. لذلك «الحذف» هنا إخفاء لكل مستخدم:
-     * يبقى الصف سليماً للطرف الآخر ويُستبعد فقط من سجل من أضاف معرّفه.
-     * غياب الحقل = غير مخفي (`$ne` يطابق المستندات التي لا تحمل الحقل) ⇒ الصفوف القديمة متوافقة.
-     */
-    var hiddenFor: MutableSet<String> = mutableSetOf(),
-    var version: Long = 1,
-    var updatedAt: Instant? = null,
-    var deletedForEveryone: Boolean = false
+    var wasRecorded: Boolean = false
 )
 
 enum class CallType { AUDIO_1V1, VIDEO_1V1, GROUP_AUDIO, GROUP_VIDEO, LIVE_STREAM, SPACE }
@@ -53,12 +37,12 @@ data class CallHistoryItem(
     val peerId: String,
     val peerLabel: String,
     val direction: String,
-    val type: String,
-    val route: String,
-    val status: String,
-    val startedAt: String,
-    val answeredAt: String? = null,
-    val endedAt: String? = null,
+    val type: CallType,
+    val route: CallRoute,
+    val status: CallStatus,
+    val startedAt: Instant,
+    val answeredAt: Instant?,
+    val endedAt: Instant?,
     val mediaServerId: String? = null,
     val durationSeconds: Long = 0L,
     val qualityScore: Float = 0f,
@@ -67,29 +51,5 @@ data class CallHistoryItem(
     val roomId: String? = null,
     val participantIds: List<String> = emptyList(),
     val hadScreenShare: Boolean = false,
-    val wasRecorded: Boolean = false,
-    val recordingPath: String? = null,
-    val avgRttMs: Long = 0L,
-    val avgPacketLossPct: Float = 0f,
-    val avgBitrateKbps: Long = 0L,
-    val deletedForMe: Boolean = false,
-    val deletedForEveryone: Boolean = false,
-    val version: Long = 1,
-    val updatedAt: String? = null
-)
-
-data class CallHistorySyncResponse(
-    val items: List<CallHistoryItem>,
-    val nextCursor: String?,
-    val hasMore: Boolean,
-    val serverVersion: Long
-)
-
-data class CallHistoryFilter(
-    val types: List<String> = emptyList(),
-    val directions: List<String> = emptyList(),
-    val statuses: List<String> = emptyList(),
-    val dateFrom: String? = null,
-    val dateTo: String? = null,
-    val includeDeleted: Boolean = false
+    val wasRecorded: Boolean = false
 )

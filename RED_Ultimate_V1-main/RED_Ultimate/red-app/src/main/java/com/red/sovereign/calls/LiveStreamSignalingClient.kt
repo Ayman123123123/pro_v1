@@ -5,40 +5,14 @@ import android.util.Log
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.descriptors.PrimitiveKind
-import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
-import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.encoding.Decoder
-import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonDecoder
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-
-object FlexibleStringMapSerializer : KSerializer<Map<String, String>> {
-    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("FlexibleStringMap", PrimitiveKind.STRING)
-
-    override fun serialize(encoder: Encoder, value: Map<String, String>) {
-        encoder.encodeSerializableValue(kotlinx.serialization.serializer(), value)
-    }
-
-    override fun deserialize(decoder: Decoder): Map<String, String> {
-        if (decoder !is JsonDecoder) return emptyMap()
-        val jsonElement = decoder.decodeJsonElement()
-        if (jsonElement !is JsonObject) return emptyMap()
-        return jsonElement.mapValues { (_, element) ->
-            if (element is JsonPrimitive) element.content else element.toString()
-        }
-    }
-}
 
 /**
  * WebSocket client for live broadcast signaling.
@@ -49,7 +23,6 @@ data class LiveStreamSignal(
     val type: String,
     val roomId: String = "",
     val userId: String = "",
-    @Serializable(with = FlexibleStringMapSerializer::class)
     val payload: Map<String, String> = emptyMap()
 )
 
@@ -80,18 +53,6 @@ class LiveStreamSignalingClient(
     @Volatile
     private var activeStreamId: String = ""
 
-    // Exponential backoff reconnection
-    private var reconnectAttempt = 0
-    private var reconnectJob: kotlinx.coroutines.Job? = null
-    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-
-    companion object {
-        private const val TAG = "LiveSignal"
-        private const val MAX_RECONNECT_ATTEMPTS = 10
-        private const val BASE_RECONNECT_DELAY_MS = 1000L
-        private const val MAX_RECONNECT_DELAY_MS = 30000L
-    }
-
     fun isConnected(): Boolean = connected
 
     fun reconnect(streamId: String) {
@@ -101,9 +62,6 @@ class LiveStreamSignalingClient(
         val oldSocket = socket
         socket = null
         runCatching { oldSocket?.cancel() }
-        reconnectAttempt = 0
-        reconnectJob?.cancel()
-        reconnectJob = null
         connect(streamId)
     }
 
@@ -144,9 +102,6 @@ class LiveStreamSignalingClient(
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
                     connected = true
-                    reconnectAttempt = 0
-                    reconnectJob?.cancel()
-                    reconnectJob = null
                     Log.d(TAG, "onOpen: live stream signaling connected, flushing queued signals")
                     pendingSignals.flush { signalJson ->
                         runCatching { webSocket.send(signalJson) }.getOrDefault(false)
@@ -169,7 +124,6 @@ class LiveStreamSignalingClient(
                     socket = null
                     Log.w(TAG, "onClosed: code=$code reason=$reason")
                     listener.onDisconnected()
-                    scheduleReconnect(streamId)
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -178,28 +132,9 @@ class LiveStreamSignalingClient(
                     socket = null
                     Log.e(TAG, "onFailure ${t.javaClass.simpleName}: ${t.message}")
                     listener.onDisconnected()
-                    scheduleReconnect(streamId)
                 }
             }
         )
-    }
-
-    private fun scheduleReconnect(streamId: String) {
-        reconnectJob?.cancel()
-        if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-            Log.e(TAG, "Max reconnect attempts reached for stream $streamId, giving up")
-            listener.onError("MAX_RECONNECT_ATTEMPTS_REACHED")
-            return
-        }
-        reconnectAttempt++
-        val delay = minOf(BASE_RECONNECT_DELAY_MS * (1L shl (reconnectAttempt - 1)), MAX_RECONNECT_DELAY_MS)
-        val jitter = (delay * 0.1 * (0..100).random()).toLong()
-        val totalDelay = delay + jitter
-        Log.d(TAG, "Scheduling reconnect attempt $reconnectAttempt for stream $streamId in ${totalDelay}ms")
-        reconnectJob = scope.launch {
-            kotlinx.coroutines.delay(totalDelay)
-            if (!connected) connect(streamId)
-        }
     }
 
     fun send(signal: LiveStreamSignal) {
@@ -272,23 +207,12 @@ class LiveStreamSignalingClient(
         )
     )
 
-    fun sendChatMessage(
-        streamId: String,
-        userId: String,
-        senderName: String,
-        text: String,
-        replyToId: String? = null,
-        chatId: String? = null
-    ) = send(
+    fun sendChatMessage(streamId: String, userId: String, senderName: String, text: String, replyToId: String? = null) = send(
         LiveStreamSignal(
             type = "CHAT",
             roomId = streamId,
             userId = userId,
             payload = buildMap {
-                // المعرّف يُرسل ليتبنّاه الخادم ويبثّه للجميع، فيتفق المرسل والمستقبلون
-                // والخادم على معرّف واحد. بدونه كان كل طرف يولّد معرّفاً مختلفاً ⇒ الحذف
-                // لا يطابق شيئاً، وتكرار لرسالة المرسل بعد تحديث السجل، واقتباس مكسور.
-                if (!chatId.isNullOrBlank()) put("id", chatId)
                 put("senderName", senderName)
                 put("text", text)
                 if (!replyToId.isNullOrBlank()) put("replyToId", replyToId)

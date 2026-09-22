@@ -166,6 +166,10 @@ object CallRuntime {
     }
 }
 
-// NOTE: YounesCallOverlay canonical implementation lives in CallOverlay.kt.
-// This file owns state only — no duplicate composable (fixes overload ambiguity
-// with CallOverlay.kt:73 reported by parallel audit).
+@Composable
+fun YounesCallOverlay(onDismiss: () -> Unit = {}) {
+    when (CallRuntime.state) {
+        is CallUiState.Idle -> Unit
+        else -> com.red.sovereign.ui.screens.ActiveCallScreen()
+    }
+}

@@ -2,7 +2,6 @@ package com.red.sovereign.features.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -30,7 +29,7 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.core.RichMessage
-import androidx.compose.material3.MaterialTheme
+import com.red.sovereign.ui.theme.PlexArabicFamily
 
 /**
  * فقاعة دردشة "Luxury" — تصميم عصري وحصري للمنصة السيادية.
@@ -59,22 +58,15 @@ fun LuxuryChatBubble(
     // اليدوية شرطيًا (لا شارة عند غياب المعلومة). "كثيرة التحويل" عندما العدد > 5.
     forwardOf: String? = null,
     forwardCount: Int = 0,
-    richMessage: RichMessage? = null,
-    // الرد المقتبس — قابل للنقر يقفز للأصل عبر onReplyClick(messageId).
-    replyToMessageId: String? = null,
-    replyToPreview: String? = null,
-    replyToSender: String? = null,
-    onReplyClick: ((String) -> Unit)? = null
+    richMessage: RichMessage? = null
 ) {
     val resolvedForwardOf: String? = richMessage?.forwardOf ?: forwardOf
     val resolvedForwardCount: Int = (richMessage?.forwardCount ?: forwardCount).coerceAtLeast(0)
     val isForwarded: Boolean = resolvedForwardOf != null || resolvedForwardCount > 0
-    val resolvedReplyTo: String? = richMessage?.replyTo ?: replyToMessageId
-    val resolvedFont = fontFamily ?: FontFamily.Default
-    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.4f
-    val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
-    val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-    val timeColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val resolvedFont = fontFamily ?: PlexArabicFamily
+    val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+    val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    val timeColor = textColor.copy(alpha = 0.7f)
     val shape = when (bubbleStyle) {
         "CLASSIC" -> RoundedCornerShape(12.dp)
         "MINIMAL" -> RoundedCornerShape(6.dp)
@@ -171,7 +163,7 @@ fun LuxuryChatBubble(
                 } else if (senderRedId.isNotBlank()) {
                     Text(
                         text = senderRedId,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1
@@ -183,11 +175,7 @@ fun LuxuryChatBubble(
             // و"كثيرة التحويل" عندما العدد > 5.
             if (isForwarded) {
                 Text(
-                    text = when {
-                        resolvedForwardCount > 5 -> "كثيرة التحويل • $resolvedForwardCount"
-                        resolvedForwardCount > 0 -> "محوّلة • $resolvedForwardCount"
-                        else -> "محوّلة"
-                    },
+                    text = if (resolvedForwardCount > 5) "كثيرة التحويل" else "محوّلة",
                     color = timeColor,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -196,49 +184,8 @@ fun LuxuryChatBubble(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
             }
-            // اقتباس الرد — قابل للنقر يقفز للرسالة الأصلية.
-            resolvedReplyTo?.let { replyId ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isMe) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.3f))
-                        .then(if (onReplyClick != null) Modifier.clickable { onReplyClick.invoke(replyId) } else Modifier)
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .heightIn(min = 28.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary)
-                    )
-                    Column(Modifier.weight(1f)) {
-                        if (!replyToSender.isNullOrBlank()) {
-                            Text(
-                                text = replyToSender,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = resolvedFont,
-                                maxLines = 1
-                            )
-                        }
-                        Text(
-                            text = replyToPreview?.takeIf { it.isNotBlank() } ?: "اضغط للانتقال إلى الرسالة الأصلية",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            fontFamily = resolvedFont,
-                            maxLines = 2
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-            }
             Text(
-                text = remember(message, isMe) { annotatedWithMentions(message, isMe) },
+                text = remember(message) { annotatedWithMentions(message, textColor) },
                 color = textColor,
                 fontSize = 16.sp,
                 lineHeight = 26.sp,
@@ -275,9 +222,9 @@ fun LuxuryChatBubble(
                         else -> "✓"
                     }
                     val tickColor = when (status.uppercase()) {
-                        "READ" -> MaterialTheme.colorScheme.tertiary
-                        "FAILED", "ERROR", "DEAD_LETTER" -> MaterialTheme.colorScheme.error
-                        "SENDING", "PENDING", "QUEUED" -> timeColor
+                        "READ" -> com.red.sovereign.ui.theme.YounesReadTick
+                        "FAILED", "ERROR", "DEAD_LETTER" -> Color(0xFFF25C5C)
+                        "SENDING", "PENDING", "QUEUED" -> timeColor.copy(alpha = 0.7f)
                         else -> timeColor
                     }
                     Text(
@@ -293,30 +240,15 @@ fun LuxuryChatBubble(
 }
 }
 
-/** LEGENDARY: منشن مميز فعلاً + هاشتاغ — داكنان على الصادرة الفاتحة، مضيئان على الواردة الداكنة (كلها معتمة). دالة خالصة (تُستدعى داخل remember من الأعلى). */
-private fun annotatedWithMentions(message: String, isMe: Boolean): androidx.compose.ui.text.AnnotatedString {
-    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.4f
-    val mentionColor = if (isMe) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.tertiary
-    val hashtagColor = if (isMe) MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.secondary
-        val mentionRegex = Regex("@(all|الجميع|online|متصل|[A-Z0-9]{5,16})", RegexOption.IGNORE_CASE)
-        val hashtagRegex = Regex("#[\\w\u0600-\u06FF]{2,30}")
+/** LEGENDARY: تمييز @all/@user بلون أساسي (واتساب يبرز المنشن — كان نصاً عادياً يضيع). دالة خالصة (تُستدعى داخل remember من الأعلى). */
+private fun annotatedWithMentions(message: String, base: Color): androidx.compose.ui.text.AnnotatedString {
+    val primary = Color(0xFF00C98C)
+        val regex = Regex("@(all|الجميع|online|متصل|[A-Z0-9]{5,16})", RegexOption.IGNORE_CASE)
         val builder = androidx.compose.ui.text.AnnotatedString.Builder(message)
-        mentionRegex.findAll(message).forEach { m ->
+        regex.findAll(message).forEach { m ->
             runCatching {
                 builder.addStyle(
-                    androidx.compose.ui.text.SpanStyle(
-                        color = mentionColor,
-                        fontWeight = FontWeight.Bold,
-                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
-                    ),
-                    m.range.first, m.range.last + 1
-                )
-            }
-        }
-        hashtagRegex.findAll(message).forEach { m ->
-            runCatching {
-                builder.addStyle(
-                    androidx.compose.ui.text.SpanStyle(color = hashtagColor, fontWeight = FontWeight.Bold),
+                    androidx.compose.ui.text.SpanStyle(color = primary, fontWeight = FontWeight.Bold),
                     m.range.first, m.range.last + 1
                 )
             }

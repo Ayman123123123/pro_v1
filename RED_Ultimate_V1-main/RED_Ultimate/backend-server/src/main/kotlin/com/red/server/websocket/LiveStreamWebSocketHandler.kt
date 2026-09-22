@@ -1,6 +1,6 @@
 package com.red.server.websocket
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
 import jakarta.annotation.PostConstruct
@@ -347,9 +347,6 @@ class LiveStreamWebSocketHandler(
                 }
             }
             "CHAT", "REACTION", "RAISE_HAND", "LOWER_HAND" -> {
-                // معرّف رسالة الشات المعتمد من الخادم — يُملأ في فرع CHAT أدناه ويُبث للجميع
-                // كي تتفق فضاءات المعرّفات (انظر التعليق عند saveChat).
-                var chatAuthoritativeId: String? = null
                 // بوابة العضوية: من لم يُكمل JOIN لا يبثّ شيئاً في غرفة حية
                 // (كان بإمكان أي سوكت متصل دون JOIN أن يغرِق الشات).
                 if (sessionRole[session.id] == null) {
@@ -425,15 +422,7 @@ class LiveStreamWebSocketHandler(
                     if (blocked.any { it.isNotBlank() && lower.contains(it) }) return
                     val senderName = signal.payload["senderName"]?.toString().orEmpty().take(64)
                     val replyToId = signal.payload["replyToId"]?.toString()?.take(64)?.takeIf { it.isNotBlank() }
-                    // المعرّف يأتي من المُرسِل ويُعتمد هنا. بدونه كان كل طرف يولّد معرّفاً
-                    // مختلفاً (العميل للمرسل، الخادم للسجل، والعميل **مجدداً** عند الاستقبال)
-                    // فتنقسم فضاءات المعرّفات الثلاثة: الحذف لا يطابق شيئاً، وبث CHAT_DELETED
-                    // لا يُزيل شيئاً من أي شاشة، ورسالة المرسل تتكرر بعد تحديث السجل (الدمج
-                    // بالمعرّف لا يتطابق)، والاقتباس replyToId يشير لمعرّف غير موجود عند الغير.
-                    val clientChatId = signal.payload["id"]?.toString()?.take(64)?.takeIf { it.isNotBlank() }
-                    chatAuthoritativeId = runCatching {
-                        liveStreamService.saveChat(signal.roomId, userId, senderName, text, replyToId, clientChatId)
-                    }.getOrNull()?.id
+                    runCatching { liveStreamService.saveChat(signal.roomId, userId, senderName, text, replyToId) }
                 }
                 // GIFT معطّل بقرار المنتج — كان التحقق هنا يخصم من محفظة الجهاز.
                 // (أُسقطت كتلة التحقق؛ انظر فرع "GIFT" المستقل أدناه: ترحيل كتفاعل مجاني.)
@@ -442,16 +431,11 @@ class LiveStreamWebSocketHandler(
                 val allSessions = mutableListOf<WebSocketSession>()
                 broadcasters[signal.roomId]?.let { allSessions.add(it) }
                 viewers[signal.roomId]?.let { allSessions.addAll(it) }
-                // رسالة الشات تُبث بحمولة تحمل معرّف الخادم **المعتمد** — بدونها كان العميل
-                // يولّد معرّفاً جديداً عند الاستقبال فينفصل عرضه عن سجل الخادم (حذف/اقتباس لا يعملان).
-                val payloadOut: Map<String, Any?> = chatAuthoritativeId?.let { authoritative ->
-                    signal.payload + ("id" to authoritative)
-                } ?: signal.payload
                 val outbound = objectMapper.writeValueAsString(mapOf(
                     "type" to signal.type.uppercase(),
                     "roomId" to signal.roomId,
                     "userId" to userId,
-                    "payload" to payloadOut
+                    "payload" to signal.payload
                 ))
                 val filterSelf = signal.type.equals("CHAT", ignoreCase = true)
                 allSessions.filter { (if (filterSelf) it.id != session.id else true) && it.isOpen }

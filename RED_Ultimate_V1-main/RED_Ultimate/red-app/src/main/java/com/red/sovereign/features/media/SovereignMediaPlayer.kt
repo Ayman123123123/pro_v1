@@ -1,6 +1,5 @@
 package com.red.sovereign.features.media
 
-import androidx.compose.material3.MaterialTheme
 import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -85,7 +84,7 @@ fun SovereignAudioPlayer(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text("رسالة صوتية سيادية", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("رسالة صوتية سيادية", color = Color.Gray, fontSize = 12.sp)
             }
             IconButton(onClick = onPlayPause) {
                 Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = SovereignColors.Cyan, modifier = Modifier.size(32.dp))

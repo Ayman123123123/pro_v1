@@ -5,7 +5,6 @@ import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
-import org.springframework.data.mongodb.core.query.Update
 import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.Instant
@@ -106,14 +105,9 @@ class CallHistoryService(
         since: Instant? = null,
         resolveName: (String) -> String? = { null }
     ): List<CallHistoryItem> {
-        val party = Criteria().andOperator(
-            Criteria().orOperator(
-                Criteria.where("initiatorId").`is`(redId),
-                Criteria.where("targetId").`is`(redId)
-            ),
-            // السجل المخفي لهذا المستخدم يُستبعد من سجله وحده؛ `$ne` يطابق المستندات
-            // التي لا تحمل حقل hiddenFor أصلاً، فالصفوف القديمة تبقى ظاهرة كما هي.
-            Criteria.where("hiddenFor").ne(redId)
+        val party = Criteria().orOperator(
+            Criteria.where("initiatorId").`is`(redId),
+            Criteria.where("targetId").`is`(redId)
         )
         val criteria = if (since != null) {
             Criteria().andOperator(party, Criteria.where("startedAt").lt(since))
@@ -196,133 +190,6 @@ class CallHistoryService(
             }
         }
         return stored
-    }
-
-    /**
-     * «حذف» سجل مكالمة من سجل [redId] وحده — إخفاء لا محو.
-     *
-     * المستند مشترك بين الطرفين، فمحوه كان سيمحو سجل الطرف الآخر. نضيف معرّف المستدعي
-     * إلى `hiddenFor` فيبقى الصف سليماً للطرف الآخر ويختفي من سجل المستدعي فقط.
-     * ولا نخفي إلا ما يشارك فيه المستدعي فعلاً (initiator أو target) — فلا يُخفى سجل
-     * مكالمة لا تخصه ولو خمّن معرّفها.
-     */
-    fun hideFor(redId: String, callIds: Collection<String>): Int {
-        val ids = callIds.filter { it.isNotBlank() }.distinct()
-        if (ids.isEmpty()) return 0
-        val query = Query(
-            Criteria().andOperator(
-                Criteria.where("_id").`in`(ids),
-                Criteria().orOperator(
-                    Criteria.where("initiatorId").`is`(redId),
-                    Criteria.where("targetId").`is`(redId)
-                )
-            )
-        )
-        return mongo.updateMulti(query, Update().addToSet("hiddenFor", redId), CallHistoryDocument::class.java)
-            .modifiedCount.toInt()
-    }
-
-    /** إخفاء كل سجل [redId] عنه وحده — لا يمس سجل الطرف الآخر. */
-    fun hideAllFor(redId: String): Int {
-        val query = Query(
-            Criteria().orOperator(
-                Criteria.where("initiatorId").`is`(redId),
-                Criteria.where("targetId").`is`(redId)
-            )
-        )
-        return mongo.updateMulti(query, Update().addToSet("hiddenFor", redId), CallHistoryDocument::class.java)
-            .modifiedCount.toInt()
-    }
-
-    /**
-     * مزامنة التدرج باستخدام الترقيم القائم على المؤشر (Cursor-based).
-     * يستخدم cursor كإزاحة زمنية (startedAt) للصفحة التالية.
-     */
-    fun syncHistory(
-        redId: String,
-        cursor: String?,
-        limit: Int,
-        sinceVersion: Long,
-        filter: CallHistoryFilter
-    ): CallHistorySyncResponse {
-        val party = Criteria().andOperator(
-            Criteria().orOperator(
-                Criteria.where("initiatorId").`is`(redId),
-                Criteria.where("targetId").`is`(redId)
-            ),
-            Criteria.where("hiddenFor").ne(redId)
-        )
-
-        val criteria = cursor?.let { cursorInstant ->
-            Criteria().andOperator(
-                party,
-                Criteria.where("startedAt").lt(cursorInstant)
-            )
-        } ?: party
-
-        // Apply filters
-        filter.types?.ifNotEmpty { criteria.and("type").`in`(it) }
-        filter.directions?.ifNotEmpty { 
-            // We can't easily filter by direction since it's derived
-            // Skip for now, could be added with a direction field in the document
-        }
-        filter.statuses?.ifNotEmpty { criteria.and("status").`in`(it) }
-        filter.dateFrom?.let { 
-            runCatching { Instant.parse(it) }?.getOrNull()?.let { criteria.and("startedAt").gte(it) } 
-        }
-        filter.dateTo?.let { 
-            runCatching { Instant.parse(it) }?.getOrNull()?.let { criteria.and("startedAt").lte(it) } 
-        }
-
-        val query = Query(criteria)
-            .with(Sort.by(Sort.Direction.DESC, "startedAt"))
-            .limit(limit.coerceIn(1, 200).toLong() + 1) // +1 to check if there's more
-
-        val docs = mongo.find(query, CallHistoryDocument::class.java)
-        
-        val hasMore = docs.size > limit
-        val pageDocs = if (hasMore) docs.dropLast(1) else docs
-        
-        val nextCursor = if (hasMore && pageDocs.isNotEmpty()) {
-            pageDocs.last().startedAt.toString()
-        } else null
-
-        val serverVersion = System.currentTimeMillis() // Simple version based on timestamp
-
-        val items = pageDocs.map { call ->
-            val outgoing = call.initiatorId == redId
-            val peerId = if (outgoing) call.targetId else call.initiatorId
-            CallHistoryItem(
-                id = call.id,
-                peerId = peerId,
-                peerLabel = if (outgoing) call.targetLabel else call.initiatorId,
-                direction = if (outgoing) "OUTGOING" else "INCOMING",
-                type = call.type,
-                route = call.route,
-                status = call.status,
-                startedAt = call.startedAt.toString(),
-                answeredAt = call.answeredAt?.toString(),
-                endedAt = call.endedAt?.toString(),
-                mediaServerId = call.mediaServerId,
-                durationSeconds = call.durationSeconds,
-                qualityScore = call.qualityScore,
-                callSource = call.callSource,
-                groupId = call.groupId,
-                roomId = call.roomId,
-                participantIds = call.participantIds,
-                hadScreenShare = call.hadScreenShare,
-                wasRecorded = call.wasRecorded,
-                version = call.version ?: 1,
-                updatedAt = call.updatedAt?.toString()
-            )
-        }
-
-        return CallHistorySyncResponse(
-            items = items,
-            nextCursor = nextCursor,
-            hasMore = hasMore,
-            serverVersion = serverVersion
-        )
     }
 
     private fun update(id: String, action: (CallHistoryDocument) -> Unit): CallHistoryDocument {

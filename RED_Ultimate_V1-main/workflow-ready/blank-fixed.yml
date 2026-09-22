@@ -1,0 +1,45 @@
+# Deprecated wrapper kept for backward compatibility — now runs real static checks
+# instead of echo. Use .github/workflows/quality-gate.yml as the canonical CI.
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Legacy CI — static regressions (use quality-gate.yml)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify quality gate workflow exists
+        run: |
+          test -f .github/workflows/quality-gate.yml || (echo "quality-gate.yml is missing — CI is not trustworthy" && exit 1)
+          test -f docs/ci/quality-gate.workflow.yml || echo "docs/ci template missing (optional)"
+
+      - name: Static infrastructure regressions (single source of truth)
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        run: |
+          python3 scripts/check-infrastructure.py
+          python3 scripts/check-android-integrity.py
+          python3 scripts/check-kotlin-static.py
+          python3 scripts/check-catalog-accessors.py
+          find scripts -maxdepth 1 -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+
+      - name: Ensure no raw SVG in Android res
+        run: |
+          if grep -R "<svg" RED_Ultimate_V1-main/RED_Ultimate --include="*.xml" | grep "res/" ; then
+            echo "Raw SVG found in Android res — AAPT will fail" && exit 1
+          fi
+          echo "No raw SVG in res — ok"
+
+      - name: Summary
+        run: echo "Legacy CI passed — canonical gate is quality-gate.yml"

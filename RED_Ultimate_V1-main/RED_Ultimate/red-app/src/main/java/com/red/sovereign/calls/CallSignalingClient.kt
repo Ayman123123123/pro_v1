@@ -54,18 +54,6 @@ class CallSignalingClient(
     @Volatile
     private var connected = false
 
-    // Exponential backoff reconnection
-    private var reconnectAttempt = 0
-    private var reconnectJob: kotlinx.coroutines.Job? = null
-    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-
-    companion object {
-        private const val TAG = "REDCall"
-        private const val MAX_RECONNECT_ATTEMPTS = 10
-        private const val BASE_RECONNECT_DELAY_MS = 1000L
-        private const val MAX_RECONNECT_DELAY_MS = 30000L
-    }
-
     fun isConnected(): Boolean = connected
 
     fun connect() {
@@ -102,15 +90,13 @@ class CallSignalingClient(
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
                     connected = true
-                    reconnectAttempt = 0
-                    reconnectJob?.cancel()
-                    reconnectJob = null
                     Log.d(TAG, "onOpen: signaling connected, flushing ${pendingSignals.size()} queued signals")
                     pendingSignals.flush { signalJson ->
                         runCatching { webSocket.send(signalJson) }.getOrDefault(false)
                     }
                     Log.d(TAG, "onOpen: signaling connected")
                     listener.onConnected()
+                    // سحب صندوق البريد فور الاتصال + جدولة احتياطية (KEEP يمنع التكرار).
                     PendingOfferPoller.pollNow(context)
                     PendingOfferPoller.schedule(context)
                 }
@@ -133,7 +119,6 @@ class CallSignalingClient(
                     socket = null
                     Log.w(TAG, "onClosed: code=$code reason=$reason")
                     listener.onDisconnected()
-                    scheduleReconnect()
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -142,28 +127,9 @@ class CallSignalingClient(
                     socket = null
                     Log.e(TAG, "onFailure: ${t.javaClass.simpleName}: ${t.message}")
                     listener.onDisconnected()
-                    scheduleReconnect()
                 }
             }
         )
-    }
-
-    private fun scheduleReconnect() {
-        reconnectJob?.cancel()
-        if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-            Log.e(TAG, "Max reconnect attempts reached, giving up")
-            listener.onError("MAX_RECONNECT_ATTEMPTS_REACHED")
-            return
-        }
-        reconnectAttempt++
-        val delay = minOf(BASE_RECONNECT_DELAY_MS * (1L shl (reconnectAttempt - 1)), MAX_RECONNECT_DELAY_MS)
-        val jitter = (delay * 0.1 * (0..100).random()).toLong()
-        val totalDelay = delay + jitter
-        Log.d(TAG, "Scheduling reconnect attempt $reconnectAttempt in ${totalDelay}ms")
-        reconnectJob = scope.launch {
-            kotlinx.coroutines.delay(totalDelay)
-            if (!connected) connect()
-        }
     }
 
     fun reconnect() {
@@ -173,9 +139,6 @@ class CallSignalingClient(
         val oldSocket = socket
         socket = null
         runCatching { oldSocket?.cancel() }
-        reconnectAttempt = 0
-        reconnectJob?.cancel()
-        reconnectJob = null
         connect()
     }
 

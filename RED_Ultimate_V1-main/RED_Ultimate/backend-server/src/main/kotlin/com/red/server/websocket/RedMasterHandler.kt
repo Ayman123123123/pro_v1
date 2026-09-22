@@ -40,8 +40,6 @@ class RedMasterHandler(
 ) : BinaryWebSocketHandler() {
     private val log = LoggerFactory.getLogger(RedMasterHandler::class.java)
     private val sessions = ConcurrentHashMap<String, ConcurrentHashMap<String, WebSocketSession>>()
-    // خنق كتابة الحضور: آخر ZADD لكل redId — يُسقَط ما دون العتبة بلا أي عملية Redis.
-    private val presenceLastTouch = ConcurrentHashMap<String, Long>()
     // Per-connection fixed-window guard: bounds CPU/DB work a single socket can demand
     // before a distributed gateway-level limit is applied.
     private val frameLimiter = WebSocketRateLimiter(maxMessages = 120, windowMillis = 60_000)
@@ -59,7 +57,7 @@ class RedMasterHandler(
             session.close(CloseStatus.POLICY_VIOLATION)
             return
         }
-        // حضور مخنوق (≤ كتابة/20s لكل مستخدم) — يبقي red:presence:index حياً دون ZADD لكل إطار.
+        // تحديث حضور لحظي عند كل إطار — يبقي red:presence:index حياً ويحدّث last_seen
         touchPresence(session)
         // Never let a malformed frame crash the handler thread — close the socket as BAD_DATA.
         val envelope = runCatching { RedProtos.RedRED.parseFrom(frame.payload) }.getOrElse {
@@ -70,17 +68,12 @@ class RedMasterHandler(
         handleEnvelopeSafely(session, envelope)
     }
 
-    /** تحديث حضور مخنوق: كتابة Redis واحدة كل 20s لكل مستخدم بدل ZADD+SADD لكل إطار
-     * (كان حتى 120 كتابة/دقيقة/مستخدم عند حد الـ frameLimiter). نافذة التطهير 5m
-     * أوسع بكثير من دورة الخنق فلا يُسقَط أي حيّ خطأً. الـ ZSET بلا TTL — يُطهَّر
-     * حسب Score في cleanupStalePresence لا بـ EXPIRE. */
+    /** تحديث حضور خفيف عند كل إطار: Redis فقط (ZSet + Set).
+     * أُزيلت كتابة DB من هنا — كانت UPDATE لكل إطار (حتى 120/دقيقة/مستخدم)
+     * تستنزف حوض Hikari. last_seen يُحدَّث عند الاتصال/الانقطاع فقط. */
     private fun touchPresence(session: WebSocketSession) {
         val redId = session.attributes["userId"] as? String ?: return
-        val nowMs = System.currentTimeMillis()
-        val last = presenceLastTouch[redId] ?: 0L
-        if (nowMs - last < PRESENCE_TOUCH_THROTTLE_MS) return
-        presenceLastTouch[redId] = nowMs
-        val now = nowMs.toDouble()
+        val now = System.currentTimeMillis().toDouble()
         runCatching { redis.opsForZSet().add("red:presence:index", redId, now) }
         // أيضاً تحديث حالة ONLINE في UserStatusService للوحة والخصوصية
         runCatching { redis.opsForSet().add("red:online", redId) }
@@ -145,16 +138,7 @@ class RedMasterHandler(
         require(incoming.senderId == sender) { "senderId does not match authenticated RED ID" }
         val stored = messages.processIncoming(incoming)
         send(session, ack(stored, "SENT"))
-        val envelope = messageEnvelope(stored)
-        // FIX (messages reach device): وسم الجهاز مرآة لتخمين المرسل وقد ينحرف
-        // (إعادة تثبيت / إعادة تسجيل / استعادة نسخة احتياطية). كان الانحراف يعني:
-        // sendToDevice لا يطابق أي جلسة ⇒ لا تسليم حيّ، وreceiverHasLiveSession يبقى
-        // صحيحاً (جلسة حيّة على جهاز آخر) ⇒ لا دفع أيضاً ⇒ الرسالة مخزَّنة لكن غير
-        // مرئية أبداً. النسخة المكافئة أُصلحت في العميل
-        // (RedConnectionService.handleEnvelope: التسامح مع الوسم المنحرف لأن وسم
-        // التشفير وحده يحسم من يفكّ) — فنُسقط هنا إلى كل جلسات الحساب.
-        sendToDevice(stored.receiverId, stored.receiverDeviceId, envelope) ||
-            sendToUser(stored.receiverId, envelope)
+        sendToDevice(stored.receiverId, stored.receiverDeviceId, messageEnvelope(stored))
         // المستلم غير متصل الآن إطلاقاً — نسجّل إشعاراً داخل التطبيق ونحاول الدفع السيادي
         // كي لا تُفوَّت الرسالة حتى لو لم يفتح التطبيق (البريد المعلق يغطي إعادة الاتصال فقط).
         val receiverHasLiveSession = sessions[stored.receiverId]?.values?.any { it.isOpen } == true
@@ -162,7 +146,7 @@ class RedMasterHandler(
             notifications.sendChatMessagePush(stored.receiverId, stored.senderId)
         }
         // Synchronize the sender's other approved devices without echoing to this socket.
-        sendToUser(sender, envelope, exceptSessionId = session.id)
+        sendToUser(sender, messageEnvelope(stored), exceptSessionId = session.id)
     }
 
     private fun receiveAck(session: WebSocketSession, incoming: RedProtos.MessageAck) {
@@ -255,14 +239,11 @@ class RedMasterHandler(
             return
         }
         val now = System.currentTimeMillis().toDouble()
-        presenceLastTouch[redId] = System.currentTimeMillis()
         redis.opsForZSet().add("red:presence:index", redId, now)
         redis.opsForSet().add("red:online", redId)
         // تحديث last_seen فوري في قاعدة البيانات (مرة واحدة — كانت مكررة بسطر ثانٍ زائد)
         runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
-        // FIX (رسالة مفقودة): المقيَّد بالجهاز وحده لا يسترجع شيئاً لجهاز انحرف معرّفه
-        messages.pendingForDeviceOrAccount(redId, protocolDeviceId, liveDeviceIds(redId))
-            .forEach { send(session, messageEnvelope(it)) }
+        messages.pendingFor(redId, protocolDeviceId).forEach { send(session, messageEnvelope(it)) }
         log.debug("Presence ONLINE for {} (sessions={})", redId, sessions[redId]?.size)
     }
 
@@ -278,7 +259,6 @@ class RedMasterHandler(
         } ?: false
         // إن لم يعد له أي جلسة حية — اعتبره offline فعلياً وحذّث last_seen
         if (removed || sessions[redId].isNullOrEmpty()) {
-            presenceLastTouch.remove(redId)
             runCatching { redis.opsForZSet().remove("red:presence:index", redId) }
             runCatching { redis.opsForSet().remove("red:online", redId) }
             runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
@@ -314,46 +294,21 @@ class RedMasterHandler(
                 val deviceId = session.attributes["protocolDeviceId"] as? Int ?: return@deviceLoop
                 runCatching {
                     val cutoff = Instant.now().minusSeconds(PENDING_REDELIVER_MIN_AGE_SECONDS)
-                    messages.pendingForDeviceOrAccount(redId, deviceId, liveDeviceIds(redId), PENDING_REDELIVER_LIMIT)
+                    messages.pendingFor(redId, deviceId, PENDING_REDELIVER_LIMIT)
                         .filter { it.createdAt.isBefore(cutoff) }
-                        .forEach { pending ->
-                            // حُدّ المحاولات: رسالة لا تُقرّ أبداً (مفاتيح E2E مفقودة بإعادة تثبيت)
-                            // كانت تُعاد كل 30s إلى الأبد. عند استنفاد المحاولات تُوسم FAILED فلا
-                            // تعودها الاستعلامات (كلها تشترط status=SENT).
-                            if (messages.recordDeliveryAttempt(pending.uuid, PENDING_REDELIVER_MAX_ATTEMPTS)) {
-                                send(session, messageEnvelope(pending))
-                            }
-                        }
+                        .forEach { send(session, messageEnvelope(it)) }
                 }.onFailure { log.debug("redeliverPendingMessages failed for {}: {}", redId, it.message) }
             }
         }
     }
 
-    /** @return true إذا سُلِّم لجهاز مطابق واحد على الأقل. */
-    private fun sendToDevice(redId: String, protocolDeviceId: Int, envelope: RedProtos.RedRED): Boolean {
-        val matched = sessions[redId]?.values?.filter { it.isOpen && it.attributes["protocolDeviceId"] == protocolDeviceId }
-        matched?.forEach { send(it, envelope) }
-        return matched?.isNotEmpty() == true
+    private fun sendToDevice(redId: String, protocolDeviceId: Int, envelope: RedProtos.RedRED) {
+        sessions[redId]?.values?.filter { it.isOpen && it.attributes["protocolDeviceId"] == protocolDeviceId }?.forEach { send(it, envelope) }
     }
 
-    /** @return true إذا سُلِّم لجلسة واحدة على الأقل من جلسات الحساب. */
-    private fun sendToUser(redId: String, envelope: RedProtos.RedRED, exceptSessionId: String? = null): Boolean {
-        val targets = sessions[redId]?.values?.filter { it.isOpen && it.id != exceptSessionId }
-        targets?.forEach { send(it, envelope) }
-        return targets?.isNotEmpty() == true
+    private fun sendToUser(redId: String, envelope: RedProtos.RedRED, exceptSessionId: String? = null) {
+        sessions[redId]?.values?.filter { it.isOpen && it.id != exceptSessionId }?.forEach { send(it, envelope) }
     }
-
-    /**
-     * معرّفات الأجهزة المتصلة الآن لهذا الحساب.
-     * تُستخدم لتفريق «وسم جهاز ميت/منحرف» (نسترجعه لأي جهاز حيّ) عن «جهاز حيّ آخر»
-     * (لا نُزاحمه برسائله) — انظر MessageService.pendingForDeviceOrAccount.
-     */
-    private fun liveDeviceIds(redId: String): Set<Int> =
-        sessions[redId]?.values
-            ?.filter { it.isOpen }
-            ?.mapNotNull { it.attributes["protocolDeviceId"] as? Int }
-            ?.toSet()
-            ?: emptySet()
 
     private fun send(session: WebSocketSession, envelope: RedProtos.RedRED) {
         synchronized(session) {
@@ -426,14 +381,9 @@ class RedMasterHandler(
         session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
 
     private companion object {
-        /** خنق كتابة الحضور: كتابة Redis واحدة لكل مستخدم كل 20s (ضمن نطاق 10-30s).
-         * نافذة التطهير 5m ≫ دورة الخنق فلا إسقاط خطأ للأحياء. */
-        private const val PRESENCE_TOUCH_THROTTLE_MS = 20_000L
         /** AUTO-FIX (message reliability): max pending messages re-sent per device per tick. */
         private const val PENDING_REDELIVER_LIMIT = 50
         /** AUTO-FIX: never race the live push - only re-send messages older than this. */
         private const val PENDING_REDELIVER_MIN_AGE_SECONDS = 10L
-        /** ~10 دقائق عند دورة 30s — بعدها تُوسم الرسالة FAILED بدل إعادة لا نهائية. */
-        private const val PENDING_REDELIVER_MAX_ATTEMPTS = 20
     }
 }

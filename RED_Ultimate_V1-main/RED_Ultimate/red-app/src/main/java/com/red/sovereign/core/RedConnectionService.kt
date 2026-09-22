@@ -404,7 +404,6 @@ class RedConnectionService : Service() {
                 connected = true
                 attempts = 0
                 reconnectTask?.cancel(false)
-                ConnectionStatusRepository.publish(ConnectionStatusRepository.ServerUiState.ONLINE)
                 notifyConnection(getString(com.red.sovereign.R.string.status_connected_local))
                 scope.launch {
                     when (val stock = signal.replenishPreKeys()) {
@@ -420,12 +419,9 @@ class RedConnectionService : Service() {
                 scope.launch { catchUpMissedMessages() }
                 runCatching { com.red.sovereign.calls.PendingOfferPoller.pollNow(applicationContext) }; runCatching { com.red.sovereign.calls.PendingOfferPoller.schedule(applicationContext) }
             }
-            ConnectionState.CONNECTING -> {
-                ConnectionStatusRepository.publish(ConnectionStatusRepository.ServerUiState.CONNECTING)
-                notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
-            }
-            ConnectionState.DISCONNECTED -> { connected = false; ConnectionStatusRepository.publish(ConnectionStatusRepository.ServerUiState.OFFLINE); scheduleReconnect() }
-            ConnectionState.UNAUTHORIZED -> { connected = false; ConnectionStatusRepository.publish(ConnectionStatusRepository.ServerUiState.OFFLINE); refreshAndReconnect() }
+            ConnectionState.CONNECTING -> notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
+            ConnectionState.DISCONNECTED -> { connected = false; scheduleReconnect() }
+            ConnectionState.UNAUTHORIZED -> { connected = false; refreshAndReconnect() }
         }
     }
 
@@ -445,21 +441,13 @@ class RedConnectionService : Service() {
         // السباق السابق مع onClosed كان يرمي RejectedExecutionException على
         // مؤشر OkHttp فينهار التطبيق كاملاً.
         if (scheduler.isShutdown || scheduler.isTerminated) return
-        // Circuit-breaker: تراجع أسّي حتى 5 دقائق بعد 10 محاولات — يوقف القصف
-        // المزعج عند انطفاء السيرفر ويكتفي بنقطة حمراء ثابتة أعلى التطبيق.
-        val attempt = attempts++
-        val delay = when {
-            attempt < 6 -> 1L shl attempt
-            attempt < 10 -> 60L
-            else -> 300L
-        }
-        ConnectionStatusRepository.publish(ConnectionStatusRepository.ServerUiState.OFFLINE, delay)
+        val delay = minOf(60L, 1L shl minOf(attempts++, 6))
         notifyConnection(getString(com.red.sovereign.R.string.status_disconnected_retry, delay))
         reconnectTask = try {
             scheduler.schedule({
-                // اكتشاف ثقيل /24 مرة واحدة فقط (attempt==4) — بعدها FAST فقط
-                // لتوفير البطارية ومنع مسوحات متكررة والسيرفر طافي.
-                if (attempt == 4) scope.launch { rediscoverAndConnect() } else socket.connect()
+                // بعد فشل متكرر: عنوان IP للخادم قد يكون تغيّر (DHCP) —
+                // أعد اكتشافه على الشبكة المحلية (تحقق صريح) ثم اتصل.
+                if (attempts == 4 || attempts == 10) scope.launch { rediscoverAndConnect() } else socket.connect()
             }, delay, TimeUnit.SECONDS)
         } catch (_: RejectedExecutionException) {
             null
@@ -546,7 +534,6 @@ class RedConnectionService : Service() {
                         .onFailure { android.util.Log.w("RedConnectionService", "store failed for ${message.id}: ${it.message}") }
                     val plaintext = try {
                         when (message.type) {
-                            "GROUP_SYNC", "SYSTEM" -> message.payload.toByteArray()
                             // توزيع مفاتيح المجموعة يُشفَّر زوجياً لكل عضو (ليس SenderKey)
                             "GROUP_KEY_DISTRIBUTION" -> signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
                             "RICH_TEXT" -> {
@@ -582,16 +569,7 @@ class RedConnectionService : Service() {
                         repository.getLocalHistoryEntry(message.id)?.let { isPendingDecryptPlaceholder(it.encryptedPlaintext) } == true
                     }.getOrDefault(false)
                     if (plaintext != null) {
-                        if (message.type == "GROUP_SYNC") {
-                            val jsonStr = String(plaintext, Charsets.UTF_8)
-                            val groupId = runCatching { json.parseToJsonElement(jsonStr).jsonObject["groupId"]?.jsonPrimitive?.contentOrNull }.getOrNull()
-                            if (groupId != null) {
-                                com.red.sovereign.core.GroupSyncBus.needRefresh(groupId)
-                            }
-                            socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
-                        } else if (message.type == "SYSTEM") {
-                            socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
-                        } else if (message.type == "GROUP_KEY_DISTRIBUTION") {
+                        if (message.type == "GROUP_KEY_DISTRIBUTION") {
                             groupCrypto.processDistribution(message.senderId, message.senderDeviceId, plaintext)
                         } else if (message.type == "RICH_TEXT") {
                             val rich = com.red.sovereign.core.RichMessage.decode(plaintext)
