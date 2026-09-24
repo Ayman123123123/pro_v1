@@ -150,7 +150,7 @@ class AdminService(
         adminSessions.findActiveSessionsForAdmin(adminId)
 
     fun getAllActiveSessions(): List<AdminSession> =
-        adminSessions.findByIsActiveAndExpiresAtBefore(true, Instant.now().plusSeconds(86400))
+        adminSessions.findByIsActiveAndExpiresAtAfter(true, Instant.now())
 
     @Transactional
     fun terminateSession(sessionId: UUID, reason: String) {
@@ -198,8 +198,8 @@ class AdminService(
     @Transactional
     fun updateFeatureFlag(name: String, adminId: UUID, updates: Map<String, Any?>): FeatureFlag? {
         val flag = featureFlags.findByFlagName(name) ?: return null
-        updates["enabled"]?.let { flag.enabled = it as Boolean }
-        updates["rolloutPercentage"]?.let { flag.rolloutPercentage = it as Int }
+        (updates["enabled"] as? Boolean)?.let { flag.enabled = it }
+        (updates["rolloutPercentage"] as? Number)?.toInt()?.let { flag.rolloutPercentage = it.coerceIn(0, 100) }
         updates["config"]?.let { flag.config = json.writeValueAsString(it) }
         updates["description"]?.let { flag.description = it as? String }
         flag.updatedBy = adminId

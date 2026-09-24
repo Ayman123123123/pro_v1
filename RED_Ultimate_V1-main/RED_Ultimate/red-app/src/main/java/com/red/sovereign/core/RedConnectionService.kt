@@ -64,6 +64,10 @@ class RedConnectionService : Service() {
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private var reconnectTask: ScheduledFuture<*>? = null
     private var attempts = 0
+    /** circuit-breaker لإعادة الاتصال: بعد فشل متكرر يُفتح (cooldown) ثم half-open بمسبار واحد. */
+    private var reconnectFailures = 0
+    @Volatile private var breakerOpenUntilMs = 0L
+    @Volatile private var lastNotifiedText: String? = null
     @Volatile private var connected = false
     private val pendingSends = ConcurrentLinkedQueue<PendingSend>()
     private val pendingGroupSends = ConcurrentLinkedQueue<PendingGroupSend>()
@@ -107,47 +111,18 @@ class RedConnectionService : Service() {
         // dedups on its uuid unique index — at-least-once, never lost.
         // Group rows: persisted to disk (group JSON + payload per clientId) so they
         // survive process death too — QUEUED→SERVER_ACK→DELIVERED→READ, idempotent.
-        scope.launch {
-            // 1) أعد تحميل معلقات المجموعات المحفوظة على القرص إلى الطوابير الذاكرية
-            val restoredGroups = runCatching { loadPersistedGroupPendings() }.getOrDefault(0)
-            if (restoredGroups > 0) {
-                android.util.Log.i("RedConnectionService", "restored $restoredGroups persisted group pending(s)")
-            }
-            val stuck = runCatching { repository.getUnsentOutgoing() }.getOrDefault(emptyList())
-            if (stuck.isEmpty()) {
-                if (restoredGroups > 0 && connected) { drainGroupSends(); drainGroupPayloadSends() } else if (restoredGroups > 0) socket.connect()
-                return@launch
-            }
-            var redriven = 0
-            var stuckGroups = 0
-            for (row in stuck) {
-                if (isGroupConversation(row.conversationId)) {
-                    // له ملف معلق محفوظ؟ أُعيد تحميله أعلاه — لا حاجة لإعادة هنا.
-                    // بلا ملف (نسخة قديمة كانت SENT زوراً): يُبقى SENDING لعامل الاستعادة
-                    // بدل إسقاطه أو تعليمه SENT — لا فقدان بعد الموت.
-                    stuckGroups++
-                    continue
-                }
-                val target = runCatching { repository.getConversation(row.conversationId)?.peerId }
-                    .getOrNull()?.takeUnless { it.isBlank() } ?: row.conversationId
-                pendingSends.add(PendingSend(target, row.conversationId, row.messageType, row.encryptedPlaintext, row.id))
-                redriven++
-            }
-            if (stuckGroups > 0) {
-                android.util.Log.i("RedConnectionService", "$stuckGroups group message(s) stuck in SENDING — awaiting persisted redrive/recovery (never marked SENT)")
-                runCatching { com.red.sovereign.core.workers.MessageRecoveryWorker.enqueue(applicationContext) }
-            }
-            if (redriven > 0) {
-                android.util.Log.i("RedConnectionService", "re-driving $redriven unsent 1:1 message(s)")
-                if (connected) drainSends() else socket.connect()
-            } else if (restoredGroups > 0) {
-                if (connected) { drainGroupSends(); drainGroupPayloadSends() } else socket.connect()
-            }
-        }
+        scope.launch { redriveStuckFromStore() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(CONNECTION_NOTIFICATION, connectionNotification(getString(com.red.sovereign.R.string.status_connecting)))
+        ConnectionStatusRepository.publish(ConnectionStatusRepository.ServerUiState.CONNECTING)
+        if (intent?.action == ACTION_REDRIVE_STUCK) {
+            // عامل الاستعادة يوقظ الدفع دون قتل/إعادة إنشاء الخدمة — idempotent بذات clientId.
+            scope.launch { redriveStuckFromStore() }
+            if (!connected) socket.connect()
+            return START_STICKY
+        }
         if (intent?.action == ACTION_MARK_READ) {
             val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: return START_STICKY
             // كان يُنفَّذ على الخيط الرئيسي (onStartCommand) وكان
@@ -336,6 +311,49 @@ class RedConnectionService : Service() {
             } catch (_: Exception) { runCatching { f.delete() } }
         }
         return n
+    }
+
+    /**
+     * إعادة دفع العالق SENDING من المخزن — نفس منطق الإقلاع، قابل للاستدعاء
+     * والخدمة حيّة (ACTION_REDRIVE_STUCK) فيُغطى الفردي بعد الموت دون إعادة تشغيل.
+     * idempotent: نفس clientId/uuid فيُزيل الخادم التكرار عبر unique index.
+     */
+    private suspend fun redriveStuckFromStore() {
+        val restoredGroups = runCatching { loadPersistedGroupPendings() }.getOrDefault(0)
+        if (restoredGroups > 0) {
+            android.util.Log.i("RedConnectionService", "restored $restoredGroups persisted group pending(s)")
+        }
+        val stuck = runCatching { repository.getUnsentOutgoing() }.getOrDefault(emptyList())
+        if (stuck.isEmpty()) {
+            if (restoredGroups > 0 && connected) { drainGroupSends(); drainGroupPayloadSends() } else if (restoredGroups > 0) socket.connect()
+            return
+        }
+        var redriven = 0
+        var stuckGroups = 0
+        for (row in stuck) {
+            if (isGroupConversation(row.conversationId)) {
+                stuckGroups++
+                continue
+            }
+            // نضج 10s حتى لا نسبق إرسالاً حياً (SENDING→QUEUED→SERVER_ACK دورة لحظية).
+            if (System.currentTimeMillis() - row.createdAt < 10_000L) continue
+            // تجنب التكرار الذاكري لنفس clientId (idempotent).
+            if (pendingSends.any { it.clientId == row.id }) continue
+            val target = runCatching { repository.getConversation(row.conversationId)?.peerId }
+                .getOrNull()?.takeUnless { it.isBlank() } ?: row.conversationId
+            pendingSends.add(PendingSend(target, row.conversationId, row.messageType, row.encryptedPlaintext, row.id))
+            redriven++
+        }
+        if (stuckGroups > 0) {
+            android.util.Log.i("RedConnectionService", "$stuckGroups group message(s) stuck in SENDING — awaiting persisted redrive/recovery (never marked SENT)")
+            runCatching { com.red.sovereign.core.workers.MessageRecoveryWorker.enqueue(applicationContext) }
+        }
+        if (redriven > 0) {
+            android.util.Log.i("RedConnectionService", "re-driving $redriven unsent 1:1 message(s)")
+            if (connected) drainSends() else socket.connect()
+        } else if (restoredGroups > 0) {
+            if (connected) { drainGroupSends(); drainGroupPayloadSends() } else socket.connect()
+        }
     }
 
     private fun drainSends() {
@@ -1003,6 +1021,8 @@ class RedConnectionService : Service() {
         private const val CONNECTION_NOTIFICATION = 7001
         private const val ACTION_SEND_PAYLOAD = "com.red.sovereign.SEND_PAYLOAD"
         const val ACTION_MARK_READ = "com.red.sovereign.MARK_READ"
+        /** إعادة دفع العالق SENDING (يُرسلها MessageRecoveryWorker — تعمل والخدمة حيّة بلا إعادة تشغيل). */
+        const val ACTION_REDRIVE_STUCK = "com.red.sovereign.REDRIVE_STUCK"
         private const val ACTION_SEND_GROUP_TEXT = "com.red.sovereign.SEND_GROUP_TEXT"
         private const val ACTION_SEND_GROUP_PAYLOAD = "com.red.sovereign.SEND_GROUP_PAYLOAD"
         const val ACTION_SEND_TYPING = "com.red.sovereign.SEND_TYPING"

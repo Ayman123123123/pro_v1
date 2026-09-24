@@ -341,7 +341,12 @@ class MediaService(
     }
 
     private fun validateKey(key: String) {
-        require(key.matches(Regex("^(?:users|thumbs/users)/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.[a-z0-9]{2,5}$"))) { "Invalid media key" }
+        require(key.isNotBlank() && key.length <= 512) { "Invalid media key" }
+        require(!key.contains("..") && !key.contains("\\") && !key.startsWith("/") && key.none { it.code < 0x20 }) { "Invalid media key" }
+        val ok = key.matches(
+            Regex("^(?:users/[0-9a-fA-F-]{36}/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|thumbs/(?:users/[0-9a-fA-F-]{36}/)?[A-Za-z0-9][A-Za-z0-9_.-]{0,191}|sovereign-backups/[0-9a-fA-F-]{36}/[A-Za-z0-9][A-Za-z0-9_.-]{0,127})$")
+        )
+        require(ok) { "Invalid media key" }
     }
 
     companion object {

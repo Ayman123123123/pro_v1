@@ -88,6 +88,13 @@ class IncomingCallActivity : ComponentActivity() {
                 android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
         )
         bindIntent(intent)
+        // الشاشة الكاملة للخلفية فقط: المقدمة تُغطيها overlays الموحدة + الإشعار —
+        // إطلاقها فوق MainActivity يكدّس شاشتين لنفس الرنين. تُعرض فقط عند مهمة
+        // ميتة (isTaskRoot) أو فوق القفل؛ وإلا نُغلق ونترك الـ overlay.
+        if (!shouldShowFullScreen()) {
+            finish()
+            return
+        }
         setContent {
             IncomingCallScreen(viewModel = viewModel, onFinish = { finishToMainIfRoot() })
         }
@@ -116,6 +123,18 @@ class IncomingCallActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         bindIntent(intent)
+        // نفس قاعدة الخلفية-فقط عند وصول رنين ثانٍ فوق نشاط قائم.
+        if (!shouldShowFullScreen()) {
+            finish()
+            return
+        }
+    }
+
+    /** الخلفية فقط: مهمة ميتة (جذر) أو قفل الشاشة — وإلا الـ overlay الموحد يكفي. */
+    private fun shouldShowFullScreen(): Boolean {
+        if (isTaskRoot) return true
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+        return km?.isKeyguardLocked == true
     }
 
     private fun bindIntent(intent: Intent?) {
@@ -142,6 +161,14 @@ class IncomingCallActivity : ComponentActivity() {
                 viewModel.mode = "VIDEO"
                 viewModel.inviter = viewModel.peer
             }
+            CALL_TYPE_ZOOM -> {
+                viewModel.meetingId = intent?.getStringExtra(ZoomGroupCallService.EXTRA_MEETING_ID).orEmpty()
+                viewModel.myUserId = intent?.getStringExtra(ZoomGroupCallService.EXTRA_MY_USER_ID).orEmpty()
+                viewModel.peer = intent?.getStringExtra(ZoomGroupCallService.EXTRA_HOST_NAME).orEmpty()
+                viewModel.zoomHostId = intent?.getStringExtra(ZoomGroupCallService.EXTRA_HOST_ID).orEmpty()
+                viewModel.mode = if (intent?.getBooleanExtra(ZoomGroupCallService.EXTRA_IS_VIDEO, false) == true) "VIDEO" else "VOICE"
+                viewModel.inviter = viewModel.peer
+            }
             else -> {
                 viewModel.roomId = intent?.getStringExtra(ConferenceService.EXTRA_ROOM_ID).orEmpty()
                 viewModel.userId = intent?.getStringExtra(ConferenceService.EXTRA_USER_ID).orEmpty()
@@ -158,6 +185,7 @@ class IncomingCallActivity : ComponentActivity() {
         const val CALL_TYPE_GROUP = "group"
         const val CALL_TYPE_CONFERENCE = "conference"
         const val CALL_TYPE_LIVESTREAM = "livestream"
+        const val CALL_TYPE_ZOOM = "zoom"
         const val EXTRA_CALL_ID = "call_id"
         const val EXTRA_PEER = "peer"
         const val EXTRA_MODE = "mode"

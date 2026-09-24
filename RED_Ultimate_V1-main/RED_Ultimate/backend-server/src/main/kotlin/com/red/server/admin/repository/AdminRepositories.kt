@@ -65,6 +65,7 @@ interface AdminSessionRepository : JpaRepository<AdminSession, UUID> {
     fun findByAdminIdAndIsActiveOrderByLastActiveAtDesc(adminId: UUID, isActive: Boolean): List<AdminSession>
     fun findBySessionTokenHash(sessionTokenHash: String): AdminSession?
     fun findByIsActiveAndExpiresAtBefore(isActive: Boolean, expiresAt: Instant): List<AdminSession>
+    fun findByIsActiveAndExpiresAtAfter(isActive: Boolean, expiresAt: Instant): List<AdminSession>
 
     @Query("SELECT s FROM AdminSession s WHERE s.isActive = TRUE AND s.adminId = :adminId ORDER BY s.lastActiveAt DESC")
     fun findActiveSessionsForAdmin(@Param("adminId") adminId: UUID): List<AdminSession>

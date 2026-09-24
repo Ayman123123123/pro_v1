@@ -137,8 +137,10 @@ class DashboardDataScheduler(
         val nextDayStart = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()
 
         val totalUsers = users.count()
-        val pending = users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.PENDING).size
-        val banned = users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.BANNED).size
+        // العدّ في قاعدة البيانات (countByStatus) — النسخة السابقة كانت تجرّ
+        // جدول المستخدمين كاملاً إلى الذاكرة عبر findAllByStatus(...).size.
+        val pending = users.countByStatus(AccountStatus.PENDING).toInt()
+        val banned = users.countByStatus(AccountStatus.BANNED).toInt()
         val newUsers = runCatching {
             jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users WHERE created_at >= ?", Int::class.java, dayStart) ?: 0
         }.getOrDefault(0)

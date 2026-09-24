@@ -325,7 +325,7 @@ class ContentService(
 
     @Transactional
     fun unsaveMessage(userId: UUID, messageId: String): Boolean {
-        val count = savedMessages.count()
+        if (!savedMessages.existsByUserIdAndMessageId(userId, messageId)) return false
         savedMessages.deleteByUserIdAndMessageId(userId, messageId)
         return true
     }

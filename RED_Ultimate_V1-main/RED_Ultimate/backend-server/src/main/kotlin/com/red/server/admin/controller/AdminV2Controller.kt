@@ -98,6 +98,16 @@ class AdminV2Controller(
                 user.displayName.contains(search, ignoreCase = true) ||
                 user.redId.contains(search, ignoreCase = true))
         }
+        // الترشيح بعد الجلب (المستودع خارج النطاق): عند وجود مرشحات يجب أن
+        // تعكس الأرقام الصفحة المرشحة لا الصفحة الخام — وإلا تكذب اللوحة.
+        val hasFilters = status != null || role != null || search != null
+        val totalElements = if (hasFilters) {
+            // تقريب صادق لصفحة واحدة: لا ندّعي إجمالياً لا نملكه.
+            (page.toLong() * size + filtered.size)
+        } else allUsers.totalElements
+        val totalPages = if (hasFilters) {
+            if (size > 0) ((page.toLong() * size + filtered.size + size - 1) / size).toInt() else 0
+        } else allUsers.totalPages
 
         val adminId = UUID.fromString(authentication.name)
         service.recordAudit(

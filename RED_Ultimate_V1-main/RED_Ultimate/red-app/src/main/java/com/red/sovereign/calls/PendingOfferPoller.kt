@@ -170,6 +170,16 @@ class PendingOfferPoller(
                     // الأحدث أولاً: من لديه طابع يُرن الأجدد قبل الأقدم.
                     val ordered = offers.sortedByDescending { it.createdAtMs ?: it.createdAt ?: Long.MIN_VALUE }
                     for (offer in ordered) {
+                        if (rangAny) {
+                            // إشعار واحد في الدفعة: الأحدث رنّ — أي عرض آخر داخل نافذة الرنين
+                            // يُتجاوز بلا رنين ثانٍ؛ وخارج النافذة يمرّ لتُسجَّل فائتته أدناه.
+                            val ts = offer.createdAtMs
+                                ?: offer.createdAt?.let { if (it < 1_000_000_000_000L) it * 1000 else it }
+                            if (ts != null && CallRingPolicy.shouldRingNow(ts, System.currentTimeMillis())) {
+                                Log.d(TAG, "already rang one offer this batch — keep single ring, skip callId=${offer.callId}")
+                                continue
+                            }
+                        }
                         if (handleOneOffer(app, offer, myId)) rangAny = true
                     }
                     return rangAny
@@ -226,6 +236,7 @@ class PendingOfferPoller(
                 }
                 upperId.startsWith("FRND_") -> return OfferKind.FRIENDS
                 upperId.startsWith("CONF_") -> return OfferKind.CONFERENCE
+                upperId.startsWith("SPACE_") -> return OfferKind.CONFERENCE
                 upperId.startsWith("LIVE_") -> return OfferKind.LIVE
                 upperId.startsWith("ZOOM_") || upperId.startsWith("MEET_") -> return OfferKind.ZOOM
             }
@@ -240,6 +251,7 @@ class PendingOfferPoller(
             }
             if (!offer.streamId.isNullOrBlank()) return OfferKind.LIVE
             return when (upperMode) {
+                "VOICE", "VIDEO", "AUDIO" -> OfferKind.ONE_TO_ONE
                 "GROUP" -> OfferKind.GROUP
                 "GROUP_VIDEO" -> OfferKind.GROUP_VIDEO
                 "GROUP_VOICE", "GROUP_AUDIO" -> OfferKind.GROUP_VOICE
@@ -297,12 +309,20 @@ class PendingOfferPoller(
                 Log.d(TAG, "pending offer already ringing — skip duplicate callId=${offer.callId}")
                 return true
             }
+            // إشعار واحد: رنين مختلف قائم (دفعة سابقة أو WS سابق) — لا ترنّ ثانياً بجانبه.
+            CallRingRegistry.active()?.let { activeId ->
+                if (activeId != offer.callId) {
+                    Log.d(TAG, "another call ringing ($activeId) — keep single ring, skip callId=${offer.callId}")
+                    return false
+                }
+            }
             return when (kind) {
-                OfferKind.ONE_TO_ONE, OfferKind.FRIENDS -> ringOneToOne(app, offer, myId)
+                OfferKind.ONE_TO_ONE -> ringOneToOne(app, offer, myId)
+                // FRND_ أصدقاء/SFU يخدمها ZoomGroupCallService (RoomSeparationPolicy) — كانت تُوجَّه خطأً لمسار 1:1.
+                OfferKind.FRIENDS, OfferKind.ZOOM -> ringZoom(app, offer, myId)
                 OfferKind.GROUP, OfferKind.GROUP_VIDEO, OfferKind.GROUP_VOICE -> ringGroup(app, offer, myId)
                 OfferKind.CONFERENCE -> ringConference(app, offer, myId)
                 OfferKind.LIVE -> ringLive(app, offer, myId)
-                OfferKind.ZOOM -> ringZoom(app, offer, myId)
             }
         }
 
@@ -455,7 +475,7 @@ class PendingOfferPoller(
                 OfferKind.GROUP -> "GROUP"
                 OfferKind.GROUP_VIDEO -> "GROUP"
                 OfferKind.GROUP_VOICE -> "GROUP"
-                OfferKind.FRIENDS -> if (offer.mode.equals("VIDEO", ignoreCase = true)) "VIDEO" else "VOICE"
+                OfferKind.FRIENDS -> "GROUP"
                 OfferKind.ZOOM -> "GROUP"
                 OfferKind.CONFERENCE -> if (offer.mode.equals("SPACE", ignoreCase = true)) "SPACE" else "GROUP"
                 OfferKind.LIVE -> "LIVE"

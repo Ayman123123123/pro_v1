@@ -133,7 +133,12 @@ function authenticate(header) {
   const expected = crypto.createHmac('sha256', key).update(`${parts[0]}.${parts[1]}`).digest();
   const supplied = base64UrlDecode(parts[2]);
   if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) throw new Error('Unauthorized');
-  const claims = JSON.parse(base64UrlDecode(parts[1]).toString('utf8'));
+  let claims;
+  try {
+    claims = JSON.parse(base64UrlDecode(parts[1]).toString('utf8'));
+  } catch {
+    throw new Error('Unauthorized');
+  }
   // سماح انحراف الساعة 120s (LAN بلا NTP) — يطابق clockSkewSeconds في JwtService
   if (!claims.sub || !claims.redId || !claims.exp || claims.exp * 1000 <= Date.now() - 120000) throw new Error('Expired or invalid token');
   return claims;
@@ -309,10 +314,10 @@ function cleanupPeer(context) {
   const { roomId, peerId, room, peer } = context;
   if (!room || !peer) return;
 
-  // Close all media objects
-  for (const consumer of peer.consumers.values()) consumer.close();
-  for (const producer of peer.producers.values()) producer.close();
-  for (const transport of peer.transports.values()) transport.close();
+  // Close all media objects (copy first: close() fires 'close' which mutates the maps)
+  for (const consumer of [...peer.consumers.values()]) consumer.close();
+  for (const producer of [...peer.producers.values()]) producer.close();
+  for (const transport of [...peer.transports.values()]) transport.close();
 
   room.peers.delete(peerId);
   broadcast(room, peerId, { type: 'peerLeft', peerId });
@@ -390,7 +395,13 @@ wss.on('connection', (ws, _req, claims) => {
   ws.on('message', async raw => {
     let message;
     try {
-      message = JSON.parse(raw.toString());
+      const text = raw.toString();
+      if (text.length > 65536) throw new Error('Message too large');
+      try {
+        message = JSON.parse(text);
+      } catch {
+        throw new Error('Invalid message format');
+      }
       const { type, requestId } = message;
 
       // ── join ────────────────────────────────────────────────────
@@ -399,7 +410,8 @@ wss.on('connection', (ws, _req, claims) => {
         const roomId = String(message.roomId || '');
         if (!/^[A-Za-z0-9_-]{4,128}$/.test(roomId)) throw new Error('Invalid roomId');
         // أمان: التذكرة مربوطة بغرفة محددة (claim sfuGroupId) — لا يُسمح بالانضمام لغرفة غير الغرفة المصرَّح بها
-        if (!claims.sfuGroupId || String(claims.sfuGroupId) !== roomId) throw new Error('Ticket not bound to this room');
+        // يقبل roomId الخام أو GROUP_CALL_<group> (يتطابق مع AuthManager.validateRoomAccess في src/).
+        if (!claims.sfuGroupId || (String(claims.sfuGroupId) !== roomId && `GROUP_CALL_${claims.sfuGroupId}` !== roomId)) throw new Error('Ticket not bound to this room');
 
         const room = await roomFor(roomId);
         const peerId = claims.redId;
@@ -408,7 +420,7 @@ wss.on('connection', (ws, _req, claims) => {
         const existing = room.peers.get(peerId);
         if (existing) {
           existing.ws.close(4001, 'replaced');
-          for (const t of existing.transports.values()) t.close();
+          for (const t of [...existing.transports.values()]) t.close();
         }
 
         const peer = {
@@ -472,6 +484,8 @@ wss.on('connection', (ws, _req, claims) => {
         if (claims.sfuCanProduce !== true) throw new Error('Produce not permitted by ticket');
         const transport = peer.transports.get(message.transportId);
         if (!transport) throw new Error('Transport not found');
+        if (message.kind !== 'audio' && message.kind !== 'video') throw new Error('Invalid kind: expected audio|video');
+        if (!message.rtpParameters || !Array.isArray(message.rtpParameters.codecs) || message.rtpParameters.codecs.length === 0) throw new Error('Invalid rtpParameters: missing codecs');
 
         // Rate limiting: max N producers per kind per peer
         const kindCount = [...peer.producers.values()].filter(p => p.kind === message.kind).length;
@@ -508,6 +522,7 @@ wss.on('connection', (ws, _req, claims) => {
 
       // ── consume ─────────────────────────────────────────────────
       if (type === 'consume') {
+        if (claims.sfuCanConsume === false) throw new Error('Consume not permitted by ticket');
         const transport = peer.transports.get(message.transportId);
         if (!transport) throw new Error('Transport not found');
 
@@ -599,9 +614,12 @@ wss.on('connection', (ws, _req, claims) => {
       if (type === 'setConsumerPreferredLayers') {
         const consumer = peer.consumers.get(message.consumerId);
         if (!consumer) throw new Error('Consumer not found');
+        const spatialLayer = message.spatialLayer ?? 2;
+        const temporalLayer = message.temporalLayer ?? 2;
+        if (!Number.isInteger(spatialLayer) || !Number.isInteger(temporalLayer) || spatialLayer < 0 || spatialLayer > 3 || temporalLayer < 0 || temporalLayer > 3) throw new Error('Invalid message format');
         await consumer.setPreferredLayers({
-          spatialLayer: message.spatialLayer ?? 2,
-          temporalLayer: message.temporalLayer ?? 2
+          spatialLayer,
+          temporalLayer
         });
         return send(ws, requestId, { status: 'preferredLayersSet', consumerId: consumer.id });
       }
