@@ -300,7 +300,6 @@ data class GroupMessageDocument(
     val replyToMessageUuid: String? = null,
     val forwardedFromConversationId: String? = null,
     var forwardCount: Int = 0,
-    val forwardedFromConversationId: String? = null,
     val reactions: List<MessageReaction> = emptyList(),
     @Indexed var isPinned: Boolean = false,
     var pinnedAt: Instant? = null,

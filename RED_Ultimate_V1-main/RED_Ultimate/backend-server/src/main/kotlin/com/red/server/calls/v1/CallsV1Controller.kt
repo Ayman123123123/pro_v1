@@ -11,8 +11,8 @@ import org.springframework.web.bind.annotation.RestController
  * call. No active Android/admin client calls this route. Return an explicit 410
  * rather than resurrecting fabricated delivery semantics or accepting requests
  * that claim success without creating a real call. Historical code is in Git.
- *
- * This does not deprecate /api/v1/messages or /api/v1/media.
+ * The similarly incomplete v1 messages/media facades are retired separately;
+ * active /api/messages and /api/media routes remain available.
  */
 @RestController
 @RequestMapping("/api/v1/calls")

@@ -114,6 +114,48 @@ jobs:
             '{output:{title:"Docker failure excerpt",summary:$s}}' > /tmp/out.json
           gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/out.json
 
+  database-migrations:
+    name: Fresh PostgreSQL migration chain
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: write
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: red_ci
+          POSTGRES_PASSWORD: disposable-ci-only
+          POSTGRES_DB: red_migration_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U red_ci -d red_migration_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify numeric migration order
+        run: python3 scripts/test_list_flyway_migrations.py
+      - name: Apply every SQL migration on empty PostgreSQL 17
+        env:
+          PGUSER: red_ci
+          PGDATABASE: red_migration_ci
+          PGPASSWORD: disposable-ci-only
+        run: |
+          set -o pipefail
+          bash scripts/test-flyway-postgres.sh 2>&1 | tee /tmp/pg-migrations.log
+      - name: Publish migration failure to check output
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CR_ID=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+            --jq '.jobs[] | select(.name=="Fresh PostgreSQL migration chain") | .check_run_url | split("/") | last')
+          EXCERPT=$(tail -n 40 /tmp/pg-migrations.log 2>/dev/null || echo "Migration job failed before SQL ran")
+          jq -n --arg s "$EXCERPT" '{output:{title:"Fresh database migration failure",summary:$s}}' > /tmp/migration-out.json
+          gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/migration-out.json
+
   backend:
     name: Backend tests (JDK 21)
     runs-on: ubuntu-latest
