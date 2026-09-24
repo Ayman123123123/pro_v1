@@ -48,12 +48,14 @@ class RnNoiseProcessor {
     fun process(input: FloatArray, output: FloatArray): Float {
         if (!nativeLoaded || statePtr == 0L) {
             // Fallback: just copy input to output
-            output.copyOf(input)
+            output.fill(0f)
+            input.copyInto(output, endIndex = minOf(input.size, output.size))
             return 1.0f
         }
         if (input.size != frameSize || output.size != frameSize) {
             Log.e(TAG, "Invalid frame size: input=${input.size}, output=${output.size}, expected=$frameSize")
-            output.copyOf(input)
+            output.fill(0f)
+            input.copyInto(output, endIndex = minOf(input.size, output.size))
             return 1.0f
         }
         return nativeProcess(statePtr, input, output)

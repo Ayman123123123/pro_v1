@@ -29,6 +29,12 @@ interface MediaUploadDao {
 @Dao
 @TypeConverters(RedTypeConverters::class)
 interface RedDao {
+    // Diagnostics only: counts do not decrypt or recreate missing messages.
+    @Query("SELECT COUNT(*) FROM messages")
+    suspend fun countAllMessages(): Long
+
+    @Query("SELECT COUNT(*) FROM local_history")
+    suspend fun countAllLocalHistory(): Long
     // --- Messages & History ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: MessageEntity)

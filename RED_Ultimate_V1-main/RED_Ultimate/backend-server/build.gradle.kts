@@ -31,6 +31,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    // OpenApiConfig constructs swagger-core model objects; springdoc is not on
+    // the runtime classpath. Keep the model dependency explicit rather than
+    // relying on a version-catalog alias that is never added to dependencies.
+    implementation("io.swagger.core.v3:swagger-models:2.2.28")
 
     // Database
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")

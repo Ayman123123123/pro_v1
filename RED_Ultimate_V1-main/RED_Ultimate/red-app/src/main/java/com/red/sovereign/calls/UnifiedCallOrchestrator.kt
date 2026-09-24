@@ -182,7 +182,7 @@ object UnifiedCallOrchestrator {
                     inviteeNames = info.participants,
                     isVideo = false,
                     hostName = info.peerName,
-                    groupId = info.groupId
+                    groupId = info.groupId.orEmpty()
                 )
             }
             CallTypeUnified.GROUP_VIDEO -> {
@@ -193,7 +193,7 @@ object UnifiedCallOrchestrator {
                     inviteeNames = info.participants,
                     isVideo = true,
                     hostName = info.peerName,
-                    groupId = info.groupId
+                    groupId = info.groupId.orEmpty()
                 )
             }
             CallTypeUnified.CONFERENCE -> {
@@ -205,7 +205,7 @@ object UnifiedCallOrchestrator {
                     streamId = info.callId,
                     userId = info.peerId,
                     isBroadcaster = true,
-                    title = info.title,
+                    title = info.title.orEmpty().ifBlank { "بث مباشر يونس" },
                     isPrivate = info.isPrivate
                 )
             }
@@ -226,7 +226,8 @@ object UnifiedCallOrchestrator {
             is CallStateUnified.Incoming -> {
                 when (current.info.type) {
                     CallTypeUnified.ONE_TO_ONE_AUDIO, CallTypeUnified.ONE_TO_ONE_VIDEO -> {
-                        YounesCallService.accept(context, callId)
+                        YounesCallService.accept(context, cameraOn = current.info.isVideo,
+                            isVideo = current.info.isVideo, callId = callId)
                     }
                     CallTypeUnified.GROUP_AUDIO, CallTypeUnified.GROUP_VIDEO -> {
                         // GroupCallService.accept
@@ -252,7 +253,7 @@ object UnifiedCallOrchestrator {
             
             when (info.type) {
                 CallTypeUnified.ONE_TO_ONE_AUDIO, CallTypeUnified.ONE_TO_ONE_VIDEO -> {
-                    YounesCallService.end(context)
+                    YounesCallService.stop(context)
                 }
                 CallTypeUnified.GROUP_AUDIO, CallTypeUnified.GROUP_VIDEO -> {
                     GroupCallService.end(context)
