@@ -190,6 +190,8 @@ jobs:
           CR_ID=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
             --jq '.jobs[] | select(.name=="Backend tests (JDK 21)") | .check_run_url | split("/") | last')
           EXCERPT=$(python3 scripts/ci-error-excerpt.py /tmp/gradle-test.log)
+          TESTS=$(python3 scripts/ci-junit-failures.py "${{ env.PROJECT }}/backend-server/build/test-results/test")
+          EXCERPT=$(printf '%s\n%s' "$EXCERPT" "$TESTS")
           jq -n --arg s "$(printf '%s' "$EXCERPT" | head -c 20000)" \
             '{output:{title:"Backend failure excerpt",summary:$s}}' > /tmp/out.json
           gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/out.json
@@ -288,6 +290,8 @@ jobs:
           CR_ID=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
             --jq '.jobs[] | select(.name=="Android 17 build and unit tests") | .check_run_url | split("/") | last')
           EXCERPT=$(python3 scripts/ci-error-excerpt.py /tmp/gradle-android.log)
+          TESTS=$(python3 scripts/ci-junit-failures.py "${{ env.PROJECT }}/red-app/build/test-results/testDebugUnitTest")
+          EXCERPT=$(printf '%s\n%s' "$EXCERPT" "$TESTS")
           jq -n --arg s "$(printf '%s' "$EXCERPT" | head -c 20000)" \
             '{output:{title:"Android failure excerpt",summary:$s}}' > /tmp/out.json
           gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/out.json
@@ -352,6 +356,11 @@ jobs:
 
       - name: SQL migration validation
         run: python3 scripts/sql_validator.py RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/resources/db/migration
+
+      - name: CI diagnostics regression tests
+        run: |
+          python3 scripts/test_ci_error_excerpt.py
+          python3 scripts/test_ci_junit_failures.py
 
       - name: API contract smoke test (offline, frontend <-> backend)
         run: python3 scripts/api_smoke_test.py
