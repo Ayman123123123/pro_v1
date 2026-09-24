@@ -8,19 +8,11 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 
 /**
- * 🌐 إعدادات WebSocket الموحدة - تعمل على كل الشبكات المحلية وكل الشبكات
- *
- * أفضل من واتساب وتيليجرام:
- * - دعم كل الشبكات المحلية: 192.168.x.x, 10.x.x.x, 172.16-31.x.x
- * - رنين موثوق حتى في الخلفية عبر FCM + WebSocket + Mailbox
- * - مسارات متعددة للتسليم لضمان الوصول
- * - دعم P2P LAN بدون إنترنت
- * - CORS مفتوح للشبكات المحلية
- *
- * (2026-09-24) قُرر حذف RedAgentWebSocketHandler التجريبي بدل تسجيله:
- * صفر مرجع خلفي/عميل (سجل وكلاء الأندرويد محلي فقط)، غير مسجل هنا، ويبثّ
- * أي حمولة بلا مصادقة. إن أُعيد إحياؤه يُسجَّل خلف jwtHandshakeInterceptor
- * + فحص دور ADMIN داخل المعالج (نمط AdminLogHandler) لا المصافحة وحدها.
+ * Authenticated WebSocket signaling routes actually registered in this build.
+ * LAN discovery, cancelled telephony and background push are not WebSocket
+ * handlers here; do not advertise routes that the server cannot serve.
+ * RedAgentWebSocketHandler remains unregistered because it relayed arbitrary
+ * payloads without an explicit authorization policy.
  */
 @Configuration
 @EnableWebSocket
@@ -44,10 +36,7 @@ class WebSocketConfig(
             "/ws/conference",
             "/ws/livestream",
             "/ws/typing",
-            "/ws/admin/logs",
-            "/ws/lan",
-            "/ws/pstn",
-            "/ws/dinstar"
+            "/ws/admin/logs"
         )
     }
 

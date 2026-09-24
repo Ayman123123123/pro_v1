@@ -57,7 +57,10 @@ class StoryService(
                 mediaType = mediaType,
                 caption = caption,
                 visibility = request.visibility,
-                allowedUserIds = request.allowedUserIds,
+                // Android's audience picker sends RED IDs; authorization uses
+                // account UUIDs. Resolve at publication rather than silently
+                // publishing a story nobody selected can actually open.
+                allowedUserIds = resolveAudience(userId, request),
                 backgroundColor = backgroundColor,
                 durationMs = durationMs,
                 expiresAt = Instant.now().plus(24, ChronoUnit.HOURS),
@@ -167,14 +170,34 @@ class StoryService(
         .and("expiresAt").gt(Instant.now()).and("deletedAt").`is`(null)), StoryDocument::class.java)
         ?: throw NoSuchElementException("Story not found")
 
-    /** Same authorization rule is duplicated in MediaAccessService for direct media URLs. */
+    private fun resolveAudience(ownerId: UUID, request: CreateStoryRequest): Set<String> {
+        if (request.visibility != StoryVisibility.SELECTED) return emptySet()
+        require(request.allowedUserIds.size in 1..100) { "Select 1-100 story viewers" }
+        return request.allowedUserIds.map { raw ->
+            val identifier = raw.trim()
+            require(identifier.isNotBlank()) { "Invalid story viewer" }
+            val uuid = runCatching { UUID.fromString(identifier) }.getOrNull()
+            val account = if (uuid != null) users.findById(uuid).orElse(null)
+                          else users.findByRedId(identifier.uppercase())
+            requireNotNull(account) { "Unknown story viewer" }
+            require(account.id != ownerId) { "The owner cannot be a selected viewer" }
+            account.id.toString()
+        }.toSet()
+    }
+
+    /** Direct story URLs use the same block-first rule in MediaAccessService. */
     private fun canAccess(viewerId: UUID, story: StoryDocument): Boolean {
-        if (story.ownerId == viewerId.toString() || story.visibility == StoryVisibility.EVERYONE) return true
-        if (story.visibility == StoryVisibility.SELECTED) return viewerId.toString() in story.allowedUserIds
-        val owner = UUID.fromString(story.ownerId)
+        if (story.ownerId == viewerId.toString()) return true
+        val owner = runCatching { UUID.fromString(story.ownerId) }.getOrNull() ?: return false
+        // A block in either direction overrides EVERYONE, SELECTED and old
+        // audience grants. Check it *before* returning from any visibility branch.
         val blocked = jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?))", Boolean::class.java, owner, viewerId, viewerId, owner) == true
         if (blocked) return false
-        return jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM red_contacts a JOIN red_contacts b ON a.owner_id=b.contact_id AND a.contact_id=b.owner_id WHERE a.owner_id=? AND a.contact_id=?)", Boolean::class.java, owner, viewerId) == true
+        return when (story.visibility) {
+            StoryVisibility.EVERYONE -> true
+            StoryVisibility.SELECTED -> viewerId.toString() in story.allowedUserIds
+            else -> jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM red_contacts a JOIN red_contacts b ON a.owner_id=b.contact_id AND a.contact_id=b.owner_id WHERE a.owner_id=? AND a.contact_id=?)", Boolean::class.java, owner, viewerId) == true
+        }
     }
 
     private fun response(story: StoryDocument, views: Long) = StoryResponse(

@@ -55,6 +55,39 @@ class MediaAccessServiceTest {
     }
 
     @Test
+    fun `a block defeats a stale explicit grant for foreign media`() {
+        val blockedOwner = UUID.randomUUID()
+        val key = "users/$blockedOwner/file.mp4"
+        // With this return value the first block check is true. A previous
+        // implementation returned on the grant before consulting user_blocks.
+        whenever(jdbc.queryForObject(any<String>(), eq(Boolean::class.java),
+            eq(blockedOwner), eq(owner), eq(owner), eq(blockedOwner))).thenReturn(true)
+        val error = assertThrows(ResponseStatusException::class.java) {
+            service.requireDownloadAllowed(owner, key)
+        }
+        assertEquals(HttpStatus.FORBIDDEN, error.statusCode)
+    }
+
+    @Test
+    fun `a public story is not downloadable after its owner blocks the viewer`() {
+        val storyOwner = UUID.randomUUID()
+        val key = "users/$storyOwner/story.mp4"
+        val story = StoryDocument(
+            id = UUID.randomUUID().toString(), ownerId = storyOwner.toString(),
+            ownerRedId = "red-owner", ownerUsername = "owner", ownerDisplayName = "Owner",
+            mediaKey = key, mediaType = "video/mp4", caption = null,
+            visibility = StoryVisibility.EVERYONE, expiresAt = Instant.now().plusSeconds(3600)
+        )
+        whenever(mongo.findOne(any<Query>(), eq(StoryDocument::class.java))).thenReturn(story)
+        whenever(jdbc.queryForObject(any<String>(), eq(Boolean::class.java),
+            eq(storyOwner), eq(owner), eq(owner), eq(storyOwner))).thenReturn(true)
+        val error = assertThrows(ResponseStatusException::class.java) {
+            service.requireDownloadAllowed(owner, key)
+        }
+        assertEquals(HttpStatus.FORBIDDEN, error.statusCode)
+    }
+
+    @Test
     fun `unreferenced foreign media is forbidden`() {
         whenever(mongo.exists(any<Query>(), eq(StoryDocument::class.java))).thenReturn(false)
         val error = assertThrows(ResponseStatusException::class.java) {

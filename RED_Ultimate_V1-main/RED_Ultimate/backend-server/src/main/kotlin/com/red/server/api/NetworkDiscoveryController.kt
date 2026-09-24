@@ -11,11 +11,8 @@ import java.net.NetworkInterface
 /**
  * متحكم اكتشاف الشبكة - يساعد التطبيق على اكتشاف الخادم على كل الشبكات المحلية
  * 
- * أفضل من واتساب وتيليجرام:
- * - يعرض كل عناوين IP المحلية للخادم
- * - يدعم mDNS/NSD advertisement
- * - يعمل على كل الشبكات المحلية
- * - توقيع يونس للتحقق
+ * يعرض عناوين الشبكة المرئية للخادم ومسارات API المتاحة؛ لا يوفّر
+ * هذا المتحكم إعلان mDNS أو خادماً لاتصالات P2P مستقلاً بذاته.
  */
 @RestController
 @RequestMapping("/api/network")
@@ -79,10 +76,10 @@ class NetworkDiscoveryController(
                 "authorityEndpoint" to "/api/identity/authority"
             ),
             "capabilities" to mapOf(
-                "supportsAllLocalNetworks" to true,
-                "supportsP2PLan" to true,
-                "supportsMdns" to true,
-                "supportsIpScan" to true,
+                "supportsAllLocalNetworks" to false, // not certified by a discovery handshake
+                "supportsP2PLan" to false, // no authenticated server-side P2P handler
+                "supportsMdns" to false, // this endpoint does not advertise a service
+                "supportsIpScan" to false, // /lan-peers currently returns no discovered peers
                 "networks" to listOf("WIFI", "ETHERNET", "USB_TETHER", "VPN", "HOTSPOT", "BLUETOOTH", "MOBILE")
             ),
             "message" to "RED Sovereign - Works on all local networks and all networks"
@@ -109,12 +106,9 @@ class NetworkDiscoveryController(
             "features" to listOf(
                 "E2EE private chats with Signal Protocol PQXDH + Kyber",
                 "Group E2EE with Sender Keys",
-                "9 call types: 1-1 audio/video, group 32, conference 100, live, space, PSTN, LAN P2P",
-                "Works on all local networks: WiFi, Ethernet, USB, VPN, Hotspot, Bluetooth",
-                "P2P LAN calls without internet",
-                "Multi-path call delivery with ringing",
-                "Modern UI Liquid Glass 2026",
-                "Better than WhatsApp and Telegram"
+                "Individual audio/video, group and conference signaling",
+                "Live streams and audio spaces",
+                "Network discovery information for authenticated clients"
             )
         ))
     }

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Ratchet the cancelled Firebase/telephony scopes without erasing historical code.
+"""Ratchet cancelled-scope additions and protect the retired server boundary.
 
-The previous DoD claimed zero banned words in shipped source, but failed on >2,000
-pre-existing references (including comments). It never represented a passing CI gate.
-This checks *new* source/dependencies against a Git base; legacy scope remains a
-separate, explicitly reported retirement task. Never use a missing base as PASS.
+The prior zero-word grep was not an executable DoD: historical migrations,
+client copy and comments include the words. Runtime PSTN/DINSTAR Kotlin was
+selectively removed after its accidental 22 September restoration; guard that
+specific boundary, and check *new* integrations against a real Git review base.
+Never use a missing base as PASS. Historical migrations are kept for Flyway.
 """
 
 from __future__ import annotations
@@ -82,6 +83,20 @@ def main() -> int:
         elif line.startswith("+") and not line.startswith("+++") and ADDED_RUNTIME.search(line[1:]):
             violations.append(f"new cancelled-scope integration in {path}: {line[1:].strip()}")
 
+    # V52 dropped the gateway schema. A filename-level fence catches a wholesale
+    # restoration even if it happens outside a Git diff (e.g. CI dispatch). The
+    # only exception is the intentional 410 compatibility endpoint.
+    backend = ROOT / PRODUCT / "backend-server/src/main/kotlin"
+    legacy_stub = backend / "com/red/server/auth/PstnAuthorizationController.kt"
+    for file in backend.rglob("*.kt"):
+        if re.search(r"pstn|dinstar|sms|ussd|gatewaysim", file.name, re.I) and file != legacy_stub:
+            violations.append(f"cancelled server runtime source: {file.relative_to(ROOT)}")
+    if not legacy_stub.is_file() or "HttpStatus.GONE" not in legacy_stub.read_text(encoding="utf-8"):
+        violations.append("retired admin PSTN endpoint must return HTTP 410")
+    account = backend / "com/red/server/auth/model/UserAccount.kt"
+    if "pstn_number" in account.read_text(encoding="utf-8"):
+        violations.append("UserAccount maps a column dropped in V52: pstn_number")
+
     # Irrespective of Git base, no real Firebase SDK is linked by shipped code.
     for root in SOURCE_ROOTS:
         if not (ROOT / root).is_dir():
@@ -100,8 +115,8 @@ def main() -> int:
         for item in sorted(set(violations)):
             print("  -", item)
         return 1
-    print(f"PASS: no new cancelled-scope integration relative to {base[:12]}; no Firebase SDK in shipped code")
-    print("NOTE: pre-existing PSTN/DINSTAR sources and obsolete FCM claims still require separately staged retirement; this is a ratchet, NOT a zero-debt certificate")
+    print(f"PASS: no new cancelled-scope integration relative to {base[:12]}; retired server boundary and Firebase SDK check pass")
+    print("NOTE: historical migrations, dormant clients and unverified marketing claims remain outside this static gate; it is not a zero-debt certificate")
     return 0
 
 

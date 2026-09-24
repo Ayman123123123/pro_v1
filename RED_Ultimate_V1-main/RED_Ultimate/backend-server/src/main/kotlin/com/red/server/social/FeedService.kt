@@ -8,7 +8,9 @@ import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -26,8 +28,8 @@ class FeedService(
         val text = request.text.trim()
         require(text.isNotEmpty() && text.length <= 10_000) { "Post text must contain 1-10000 characters" }
         require(request.media.size <= 10) { "A post may contain at most 10 media objects" }
-        request.parentId?.let { require(activePost(it) != null) { "Parent post not found" } }
-        request.quotePostId?.let { require(activePost(it) != null) { "Quoted post not found" } }
+        request.parentId?.let { requireVisible(userId, it) }
+        request.quotePostId?.let { requireVisible(userId, it) }
         val poll = buildPoll(request)
         // 🔗 Auto-fetch link card for first URL in text (with SSRF protection)
         val linkCard = Regex("""https?://[^\s]+|www\.[^\s]+""").find(text)?.value?.let { url ->
@@ -53,7 +55,8 @@ class FeedService(
         val hidden = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), HiddenPost::class.java).map(HiddenPost::postId)
         val muted = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), MutedAuthor::class.java).map(MutedAuthor::authorId)
         if (hidden.isNotEmpty()) criteria.and("id").nin(hidden)
-        if (muted.isNotEmpty()) criteria.and("authorId").nin(muted)
+        val excludedAuthors = (muted + blockedAuthorIds(userId)).distinct()
+        if (excludedAuthors.isNotEmpty()) criteria.and("authorId").nin(excludedAuthors)
         val friendIds = mutualFriendIds(userId) + userId.toString()
         // canonical() يوحّد FOLLOWING⇒FRIENDS وYEMEN⇒PUBLIC، فلا يتفرّع
         // المنطق أربع مرات ولا يُنسى فرعٌ عند إضافة قيمة. النسخ
@@ -69,7 +72,10 @@ class FeedService(
             )
             FeedScope.FRIENDS -> {
                 if (friendIds.size == 1) return FeedResponse(emptyList(), null)
-                criteria.and("visibility").`is`(PostVisibility.FRIENDS).and("authorId").`in`(friendIds)
+                // Keep allow and deny author filters in separate AND branches;
+                // calling criteria.and("authorId") twice fails in Mongo Criteria.
+                criteria.andOperator(Criteria.where("visibility").`is`(PostVisibility.FRIENDS)
+                    .and("authorId").`in`(friendIds))
             }
             // canonical() لا يُرجع المهجورتين أبدًا؛ الفرع لازم لشمول when.
             FeedScope.FOLLOWING, FeedScope.YEMEN -> Unit
@@ -102,14 +108,17 @@ class FeedService(
         userId
     ).filterNotNull()
 
-    fun thread(postId: String): List<PostDocument> {
-        require(activePost(postId) != null) { "Post not found" }
+    fun thread(userId: UUID, postId: String): List<PostDocument> {
+        requireVisible(userId, postId)
+        val blocked = blockedAuthorIds(userId).toSet()
+        val friends = mutualFriendIds(userId).toSet()
         return mongo.find(Query(Criteria().orOperator(Criteria.where("id").`is`(postId), Criteria.where("parentId").`is`(postId)).and("deletedAt").`is`(null))
             .with(Sort.by(Sort.Direction.ASC, "createdAt")), PostDocument::class.java)
+            .filter { canView(userId, it, friends, blocked) }
     }
 
     fun react(userId: UUID, postId: String, request: ReactionRequest): PostDocument {
-        require(activePost(postId) != null) { "Post not found" }
+        requireVisible(userId, postId)
         val type = request.type.uppercase()
         require(type in setOf("LIKE", "LOVE", "SUPPORT", "INSIGHTFUL")) { "Unsupported reaction" }
         val id = "$postId:$userId:$type"
@@ -121,11 +130,11 @@ class FeedService(
             mongo.remove(Query(Criteria.where("id").`is`(id)), PostReaction::class.java)
             mongo.updateFirst(Query(Criteria.where("id").`is`(postId)), Update().inc("reactionCounts.$type", -1), PostDocument::class.java)
         }
-        return requireNotNull(activePost(postId))
+        return requireVisible(userId, postId)
     }
 
     fun vote(userId: UUID, postId: String, request: PollVoteRequest): PostDocument {
-        val post = requireNotNull(activePost(postId)) { "Post not found" }
+        val post = requireVisible(userId, postId)
         val poll = requireNotNull(post.poll) { "Post has no poll" }
         require(poll.expiresAt == null || poll.expiresAt.isAfter(Instant.now())) { "Poll is closed" }
         require(poll.options.any { it.id == request.optionId }) { "Poll option not found" }
@@ -134,7 +143,7 @@ class FeedService(
         mongo.save(PollVote(voteId, postId, userId.toString(), request.optionId))
         mongo.updateFirst(Query(Criteria.where("id").`is`(postId).and("poll.options.id").`is`(request.optionId)),
             Update().inc("poll.options.$.votes", 1), PostDocument::class.java)
-        return requireNotNull(activePost(postId))
+        return requireVisible(userId, postId)
     }
 
     /**
@@ -142,7 +151,7 @@ class FeedService(
      * مرة واحدة. التكرار يُرجع المنشور الحالي دون تغيير.
      */
     fun repost(userId: UUID, postId: String): PostDocument {
-        val post = requireNotNull(activePost(postId)) { "Post not found" }
+        val post = requireVisible(userId, postId)
         require(post.parentId == null) { "Only top-level posts can be reposted" }
         val repostId = "$postId:$userId"
         if (!mongo.exists(Query(Criteria.where("id").`is`(repostId)), Repost::class.java)) {
@@ -150,7 +159,7 @@ class FeedService(
             mongo.updateFirst(Query(Criteria.where("id").`is`(postId)),
                 Update().inc("repostCount", 1), PostDocument::class.java)
         }
-        return requireNotNull(activePost(postId))
+        return requireVisible(userId, postId)
     }
 
     fun follow(userId: UUID, targetRedId: String) {
@@ -179,7 +188,7 @@ class FeedService(
     }
 
     fun hide(userId: UUID, postId: String) {
-        require(activePost(postId) != null) { "Post not found" }
+        requireVisible(userId, postId)
         mongo.save(HiddenPost("$userId:$postId", userId.toString(), postId))
     }
 
@@ -190,7 +199,7 @@ class FeedService(
     }
 
     fun report(userId: UUID, postId: String, request: HidePostRequest) {
-        require(activePost(postId) != null) { "Post not found" }
+        requireVisible(userId, postId)
         val reason = request.reason?.trim()?.takeIf { it.isNotEmpty() } ?: "OTHER"
         require(reason.length <= 200) { "Report reason is too long" }
         mongo.save(PostReport("$postId:$userId", postId, userId.toString(), reason.uppercase()))
@@ -201,6 +210,32 @@ class FeedService(
         require(post.authorId == userId.toString()) { "Only the author can delete this post" }
         mongo.updateFirst(Query(Criteria.where("id").`is`(postId)), Update().set("deletedAt", Instant.now()).set("text", ""), PostDocument::class.java)
     }
+
+    /** Same audience policy for direct reads, writes and replies. A 404 does not
+     * reveal whether a private/blocked post exists to an ineligible viewer. */
+    private fun requireVisible(viewer: UUID, postId: String): PostDocument {
+        val post = activePost(postId) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Post not found")
+        if (post.authorId == viewer.toString()) return post
+        val friends = if (post.visibility == PostVisibility.FRIENDS) mutualFriendIds(viewer).toSet() else emptySet()
+        if (!canView(viewer, post, friends, blockedAuthorIds(viewer).toSet())) {
+            throw ResponseStatusException(HttpStatus.NOT_FOUND, "Post not found")
+        }
+        return post
+    }
+
+    private fun canView(viewer: UUID, post: PostDocument, friends: Set<String>, blocked: Set<String>): Boolean =
+        post.authorId == viewer.toString() || (post.authorId !in blocked && when (post.visibility) {
+            PostVisibility.PUBLIC -> true
+            PostVisibility.FRIENDS -> post.authorId in friends
+            // No trusted region/consent evidence exists for LOCAL_YEMEN yet.
+            PostVisibility.LOCAL_YEMEN -> false
+        })
+
+    private fun blockedAuthorIds(viewer: UUID): List<String> = jdbc.queryForList(
+        """SELECT CASE WHEN blocker_id = ? THEN blocked_id::text ELSE blocker_id::text END
+           FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?""",
+        String::class.java, viewer, viewer, viewer
+    ).filterNotNull()
 
     private fun activePost(id: String) = mongo.findOne(Query(Criteria.where("id").`is`(id).and("deletedAt").`is`(null)), PostDocument::class.java)
     private fun buildPoll(request: CreatePostRequest): Poll? {

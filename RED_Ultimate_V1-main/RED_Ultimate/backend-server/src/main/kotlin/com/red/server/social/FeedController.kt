@@ -28,7 +28,8 @@ class FeedController(private val feed: FeedService) {
     fun create(@Valid @RequestBody request: CreatePostRequest, auth: Authentication) = feed.create(UUID.fromString(auth.name), request)
 
     @GetMapping("/posts/{postId}/thread")
-    fun thread(@PathVariable postId: String) = feed.thread(postId)
+    fun thread(@PathVariable postId: String, auth: Authentication) =
+        feed.thread(UUID.fromString(auth.name), postId)
 
     @PostMapping("/posts/{postId}/reactions")
     fun react(@PathVariable postId: String, @RequestBody request: ReactionRequest, auth: Authentication) =

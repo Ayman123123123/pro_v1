@@ -111,6 +111,13 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.POST, "/api/admin/content/sticker-packs/*/install").authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/api/admin/content/sticker-packs/*/install").authenticated()
 
+                    // V52 removed the gateway schema. The 22 September restore
+                    // accidentally reintroduced its controllers without that schema.
+                    // Fail closed for old gateway clients; do not route them through
+                    // the generic authenticated /api/** rule or fake a dial/SMS.
+                    .requestMatchers("/api/pstn", "/api/pstn/**", "/api/admin/dinstar", "/api/admin/dinstar/**",
+                        "/api/admin/pstn", "/api/admin/pstn/**", "/api/sms", "/api/sms/**",
+                        "/api/dinstar", "/api/dinstar/**", "/api/ussd", "/api/ussd/**").denyAll()
                     // Admin endpoints (including the legacy live-stream admin namespace)
                     .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**", "/api/live/admin/**").hasRole("ADMIN")
                     // Social features
