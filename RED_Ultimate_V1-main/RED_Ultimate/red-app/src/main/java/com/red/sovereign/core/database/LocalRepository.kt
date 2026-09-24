@@ -123,6 +123,8 @@ class LocalRepository(context: Context) {
     suspend fun getConversation(id: String) = dao.getConversation(id)
     suspend fun getConversationByPeerId(peerId: String) = dao.getConversationByPeerId(peerId)
     suspend fun totalUnreadCount(): Int = runCatching { dao.totalUnreadCount() }.getOrDefault(0)
+    /** تدفّق حي لمجموع غير المقروء — لشارة تبويب الدردشات (Room Invalidation). */
+    fun observeTotalUnread(): Flow<Int> = dao.observeTotalUnread()
     suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, pinned)
     suspend fun setArchived(id: String, archived: Boolean) = dao.setArchived(id, archived)
     suspend fun setMutedUntil(id: String, until: Long) = dao.setMutedUntil(id, until)

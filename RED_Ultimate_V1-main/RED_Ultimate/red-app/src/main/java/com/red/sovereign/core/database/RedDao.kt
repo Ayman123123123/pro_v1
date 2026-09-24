@@ -78,6 +78,10 @@ interface RedDao {
     @Query("SELECT COALESCE(SUM(unreadCount), 0) FROM conversations")
     suspend fun totalUnreadCount(): Int
 
+    /** تدفّق حي لمجموع غير المقروء — ينبض تلقائياً عند أي تغيير في جدول المحادثات. */
+    @Query("SELECT COALESCE(SUM(unreadCount), 0) FROM conversations")
+    fun observeTotalUnread(): Flow<Int>
+
     @Query("UPDATE conversations SET unreadCount = 0 WHERE id = :id")
     suspend fun clearUnread(id: String)
 

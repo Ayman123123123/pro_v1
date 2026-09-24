@@ -12,6 +12,7 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
+import kotlinx.coroutines.flow.collect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -207,6 +208,13 @@ fun ModernRedDashboard(
     // مكالمات موحدة - 9 أنواع + 6 مسارات رنين مضمونة
     val callState by UnifiedCallOrchestrator.state.collectAsState()
     
+    // شارة غير المقروء الحقيقية: تدفّق حي من قاعدة البيانات المحلية (Room Invalidation) —
+    // تُحدَّث فوراً عند وصول رسالة أو قراءتها دون أي Polling.
+    val localRepo = remember(context) { com.red.sovereign.core.database.LocalRepository(context) }
+    val unreadChats by produceState(initialValue = 0, localRepo) {
+        localRepo.observeTotalUnread().collect { value = it }
+    }
+    
     // تبديل تلقائي لتبويب المكالمات عند وجود مكالمة - UX أسطوري
     LaunchedEffect(callState) {
         if (callState !is CallStateUnified.Idle && callState !is CallStateUnified.Ended) {
@@ -227,7 +235,7 @@ fun ModernRedDashboard(
                         directory.refreshPresence()
                     }
                 },
-                unreadChats = 0, // سيتم حسابه من المحادثات
+                unreadChats = unreadChats,
                 missedCalls = callHistory.calls.count { it.status == "MISSED" },
                 hazeState = hazeState
             )

@@ -170,5 +170,30 @@ chat-*.txt
 **/apk-output/
 *.apk
 *.aab
-*.ap_RED_Ultimate_V1-main/RED_Ultimate/**/screenshotTest*/**/*.png
+*.ap_
+RED_Ultimate_V1-main/RED_Ultimate/**/screenshotTest*/**/*.png
 RED_Ultimate_V1-main/RED_Ultimate/**/screenshotTest*/**/*.jpg
+
+# ═══ تحصين النظافة — 2026-09-24 (بعد جلي الجذور) ═══
+# سجلات بناء وتشخيص مؤقتة لا مكان لها في Git
+RED_Ultimate_V1-main/RED_Ultimate/build_*.txt
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/compile_*.txt
+RED_Ultimate_V1-main/RED_Ultimate/backend-server/test_out.txt
+RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/*_build.txt
+RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/role-check-output.txt
+RED_Ultimate_V1-main/RED_Ultimate/errs.txt
+RED_Ultimate_V1-main/RED_Ultimate/recovered.txt
+RED_Ultimate_V1-main/RED_Ultimate/scratch_*.txt
+RED_Ultimate_V1-main/RED_Ultimate/rebuild_log.txt
+# نفايات استنساخ واجهات DINSTAR الويب (sipcfg*.html وhemshaft)
+RED_Ultimate_V1-main/RED_Ultimate/sip*.html
+RED_Ultimate_V1-main/RED_Ultimate/sipaudio.txt
+RED_Ultimate_V1-main/RED_Ultimate/menu.html
+RED_Ultimate_V1-main/RED_Ultimate/portlist.html
+RED_Ultimate_V1-main/RED_Ultimate/frame.html
+RED_Ultimate_V1-main/RED_Ultimate/sys.html
+RED_Ultimate_V1-main/RED_Ultimate/dinstar_route_*.html
+# أيقونات تجريبية مكررة خارج red-app/artwork (المصدر القانوني الوحيد)
+/icon-gallery/
+/icon-work/
+/image-search/
