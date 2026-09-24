@@ -193,7 +193,7 @@ fun ModernOneToOneCallScreen(
                 if (durationMs > 0) {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        formatCallDuration(durationMs),
+                        formatCallDurationMillis(durationMs),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -347,7 +347,7 @@ fun NetworkQualityBadge(quality: String) {
     }
 }
 
-fun formatCallDuration(ms: Long): String {
+fun formatCallDurationMillis(ms: Long): String {
     val totalSec = ms / 1000
     val hours = totalSec / 3600
     val minutes = (totalSec % 3600) / 60

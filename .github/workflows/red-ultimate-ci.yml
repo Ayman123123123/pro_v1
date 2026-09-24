@@ -39,6 +39,10 @@ jobs:
     name: Infrastructure and Docker
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # .env.example intentionally has no SFU key. CI supplies an independent,
+    # disposable value to render Compose; never use this value in deployment.
+    env:
+      SFU_TICKET_SECRET: ci-media-only-secret-2026-09-24-do-not-deploy
     permissions:
       contents: read
       checks: write
@@ -165,6 +169,8 @@ jobs:
         working-directory: ${{ env.PROJECT }}/admin_dashboard
         run: |
           npm ci --no-audit --no-fund
+          npm run lint
+          npm run test
           npm run check
           npm run build
 
@@ -253,30 +259,40 @@ jobs:
           if-no-files-found: error
 
   media-sfu:
-    name: Media SFU install and syntax
+    name: Media SFU tests and syntax (Node 24)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: ${{ env.PROJECT }}/media-sfu/package-lock.json
-      - name: Install production dependency and validate server
+      - name: Test ticket isolation and signaling protocol
         working-directory: ${{ env.PROJECT }}/media-sfu
         run: |
           npm ci --omit=dev --no-audit --no-fund
           npm run check
+          node --test protocol.test.js sfu-secret.test.js
 
   sovereign-dod:
-    name: Sovereign DoD guard
+    name: Sovereign scope ratchet
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Run sovereign DoD guard (no Firebase / no telephony scope)
-        run: bash scripts/check-sovereign-dod.sh
+        with:
+          fetch-depth: 2
+      - name: Prevent new cancelled-scope integrations (legacy debt is not cleared)
+        env:
+          DOD_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$DOD_BASE_SHA" && "$DOD_BASE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            git fetch --no-tags --depth=1 origin "$DOD_BASE_SHA"
+          fi
+          bash scripts/check-sovereign-dod.sh
 
   static-guards:
     name: Static guards (offline analysers)

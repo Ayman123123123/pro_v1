@@ -7,6 +7,8 @@ import com.red.server.groups.GroupService
 import com.red.server.websocket.ConferenceWebSocketHandler
 import org.springframework.http.CacheControl
 import org.springframework.http.ResponseEntity
+import org.springframework.http.HttpStatus
+import org.springframework.web.server.ResponseStatusException
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -76,19 +78,23 @@ class SfuTicketController(
         // An active friends/group call (registered in the call signaling handler) also opens its
         // mediasoup room. Without this, friends/group calls could never obtain an SFU ticket and
         // were silently forced to mesh-only.
-        val groupRoomOpen = callSignaling?.groupCallHost(effectiveRoomId) != null ||
-            callSignaling?.groupCallHost(rawTrimmed) != null
-        val legitimateRoom = conferenceRoom != null ||
-            activeCalls.isActiveCall(effectiveRoomId) ||
-            activeCalls.isActiveCall(rawTrimmed) ||
-            groupRoomOpen
-        require(legitimateRoom) { "Room not open for SFU" }
-        val canonicalRoomId = conferenceRoom?.roomId ?: effectiveRoomId
+        val identifiers = listOf(effectiveRoomId, rawTrimmed).distinct()
+        val groupRoomId = identifiers.firstOrNull { callSignaling?.groupCallHost(it) != null }
+        val activeCallId = identifiers.firstOrNull { activeCalls.isActiveCall(it) }
+        if (conferenceRoom == null && groupRoomId == null && activeCallId == null) {
+            throw ResponseStatusException(HttpStatus.NOT_FOUND, "Room not open for SFU")
+        }
+        // Sign the actual registered room, not an unresolved alias (or a different room).
+        val canonicalRoomId = conferenceRoom?.roomId ?: groupRoomId ?: activeCallId!!
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
-        if (conferenceRoom != null) {
-            require(conferenceRooms.canJoin(canonicalRoomId, authentication.name, user.redId)) { "Not authorized for this meeting" }
+        val authorized = when {
+            conferenceRoom != null -> conferenceRooms.isParticipant(canonicalRoomId, authentication.name) &&
+                conferenceRooms.canJoin(canonicalRoomId, authentication.name, user.redId)
+            groupRoomId != null -> callSignaling?.isGroupCallParticipant(groupRoomId, user.redId) == true
+            else -> activeCalls.isParticipant(activeCallId!!, user.redId)
         }
+        if (!authorized) throw ResponseStatusException(HttpStatus.FORBIDDEN, "Not a room participant")
         val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
         val deviceId = requireNotNull(jwt.deviceId(accessToken)) { "An approved device token is required" }
         // LEGENDARY Phase 7: مساحات الصوت — المستمع تذكرة استهلاك فقط (يمنع نشر عميل معَدَّل
@@ -209,7 +215,8 @@ class SfuTicketSigner(
             add(System.getenv("RED_ENV") ?: "")
             add(System.getenv("APP_ENV") ?: "")
         }.joinToString(" ").lowercase()
-        return profiles.contains("prod")
+        return profiles.split(Regex("[,;\\s]+"))
+            .any { it in setOf("prod", "production", "staging", "docker") }
     }
 
     private val signingKey: SecretKey by lazy {

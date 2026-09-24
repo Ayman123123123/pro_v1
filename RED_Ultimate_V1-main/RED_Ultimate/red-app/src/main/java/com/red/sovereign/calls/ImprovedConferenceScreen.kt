@@ -33,7 +33,7 @@ import com.red.sovereign.ui.theme.*
 @Composable
 fun ImprovedConferenceScreen(
     conferenceTitle: String,
-    participants: List<ConferenceParticipant>,
+    participants: List<ConferenceCardParticipant>,
     activeSpeakerId: String?,
     isMuted: Boolean,
     isCameraOn: Boolean,
@@ -119,7 +119,7 @@ fun ImprovedConferenceScreen(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(participants.filter { it.id != activeSpeakerId }.take(100)) { participant ->
-                    ConferenceParticipantTile(participant, isActive = participant.id == activeSpeakerId, isHost = isHost, onMute = { onMuteParticipant(participant.id) }, onRemove = { onRemoveParticipant(participant.id) })
+                    ConferenceCardParticipantTile(participant, isActive = participant.id == activeSpeakerId, isHost = isHost, onMute = { onMuteParticipant(participant.id) }, onRemove = { onRemoveParticipant(participant.id) })
                 }
             }
             
@@ -174,8 +174,8 @@ fun ImprovedConferenceScreen(
 }
 
 @Composable
-private fun ConferenceParticipantTile(
-    participant: ConferenceParticipant,
+private fun ConferenceCardParticipantTile(
+    participant: ConferenceCardParticipant,
     isActive: Boolean,
     isHost: Boolean,
     onMute: () -> Unit,
@@ -216,7 +216,7 @@ private fun ConferenceParticipantTile(
     }
 }
 
-data class ConferenceParticipant(
+data class ConferenceCardParticipant(
     val id: String,
     val name: String,
     val isMuted: Boolean = false,

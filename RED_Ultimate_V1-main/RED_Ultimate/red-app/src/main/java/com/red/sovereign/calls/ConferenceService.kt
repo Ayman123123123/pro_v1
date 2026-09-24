@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.red.sovereign.MainActivity
+import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.CoroutineScope
@@ -108,6 +109,10 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
     private var mesh: MeshRtcSession? = null
     private var sfu: SfuMediaClient? = null
     private var mediaStarted = false
+    @Volatile private var needsRestRejoin = false
+    // Keep the password only in service memory for a private-room reconnect; never
+    // persist it or include it in logs, signaling frames or notifications.
+    private var joinPassword: String? = null
     private var recordingManager: CallRecordingManager? = null
     private var roomId = ""
     private var userId = ""
@@ -197,6 +202,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 val roomDesc = intent.getStringExtra(EXTRA_DESC).orEmpty()
                 val roomPass = intent.getStringExtra(EXTRA_PASSWORD)?.takeIf { it.isNotBlank() }
                 val joinPass = intent.getStringExtra(EXTRA_JOIN_PASSWORD)?.takeIf { it.isNotBlank() }
+                joinPassword = joinPass
+                needsRestRejoin = false
                 ConferenceRuntime.isVideoEnabled = hasVideo
                 startedAsHost = asHost
                 ConferenceRuntime.isSpeaker = asHost || hasVideo
@@ -205,8 +212,9 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
                 promote()
                 scope.launch {
-                    registerRoom(!hasVideo, invitees, asHost, roomTitle, roomPrivate, roomDesc, roomPass, joinPass)
-                    signaling.connect(roomId)
+                    if (registerRoom(!hasVideo, invitees, asHost, roomTitle, roomPrivate, roomDesc, roomPass, joinPass)) {
+                        signaling.connect(roomId)
+                    }
                 }
             }
             ACTION_LEAVE -> leave()
@@ -220,6 +228,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 if (roomId.isNotBlank()) {
                     stopRingtone()
                     startedAsHost = false
+                    joinPassword = null
+                    needsRestRejoin = false
                     ConferenceRuntime.isVideoEnabled = hasVideo
                     ConferenceRuntime.isSpeaker = hasVideo
                     ConferenceRuntime.selfRole = if (hasVideo) "SPEAKER" else "LISTENER"
@@ -227,8 +237,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                     ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
                     promote()
                     scope.launch {
-                        registerRoom(!hasVideo, emptyList(), false)
-                        signaling.connect(roomId)
+                        if (registerRoom(!hasVideo, emptyList(), false)) signaling.connect(roomId)
                     }
                 }
             }
@@ -376,30 +385,46 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         reconnectAttempt = 0
         reconnectJob?.cancel()
         reconnectJob = null
-        scope.launch {
-            if (!mediaStarted) {
-                mediaStarted = true
-                val kind = if (ConferenceRuntime.isVideoEnabled) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
-                if (roomId.isNotBlank() && roomId.length in 4..128) {
-                    sfu = SfuMediaClient(this@ConferenceService, TokenStore(this@ConferenceService), this@ConferenceService)
-                    val sfuClient = sfu
-                    if (sfuClient != null && attachSfuWithRetry(sfuClient, roomId)) {
-                        sfu?.publish(kind)
-                        ConferenceRuntime.mediaPath = "SFU"
-                        ConferenceRuntime.eglContext = sfu?.eglContext
-                        ConferenceRuntime.localVideo = sfu?.localVideo
-                        applyListenerMute()
-                        markConferenceReady()
-                    } else {
-                        android.util.Log.w("ConferenceService", "SFU_UNAVAILABLE — fallback to MESH")
-                        sfu?.release(); sfu = null
-                        startMesh(kind)
-                    }
-                } else {
-                    startMesh(kind)
+        // The backend releases a seat when its last socket disconnects. Re-acquire
+        // REST membership before sending JOIN; otherwise a reconnect loops forever
+        // on JOIN_ROOM_FIRST. A first connection already registered via ACTION_JOIN.
+        if (needsRestRejoin) {
+            scope.launch {
+                if (registerRoom(!ConferenceRuntime.isVideoEnabled, emptyList(), asHost = false,
+                        joinPassword = joinPassword) && signaling.isConnected) {
+                    needsRestRejoin = false
+                    signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled, ConferenceRuntime.isSpeaker)
                 }
             }
+        } else {
             signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled, ConferenceRuntime.isSpeaker)
+        }
+    }
+
+    private fun startMediaAfterAdmission() {
+        if (mediaStarted) return
+        mediaStarted = true
+        scope.launch {
+            val kind = if (ConferenceRuntime.isVideoEnabled) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
+            if (roomId.isNotBlank() && roomId.length in 4..128) {
+                sfu = SfuMediaClient(this@ConferenceService, TokenStore(this@ConferenceService), this@ConferenceService)
+                val sfuClient = sfu
+                if (sfuClient != null && attachSfuWithRetry(sfuClient, roomId)) {
+                    // Listeners only consume; their ticket cannot produce.
+                    if (ConferenceRuntime.isSpeaker) sfuClient.publish(kind)
+                    ConferenceRuntime.mediaPath = "SFU"
+                    ConferenceRuntime.eglContext = sfuClient.eglContext
+                    ConferenceRuntime.localVideo = sfuClient.localVideo
+                    applyListenerMute()
+                    markConferenceReady()
+                } else {
+                    android.util.Log.w("ConferenceService", "SFU_UNAVAILABLE — fallback to MESH")
+                    sfu?.release(); sfu = null
+                    startMesh(kind)
+                }
+            } else {
+                startMesh(kind)
+            }
         }
     }
 
@@ -415,7 +440,17 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         mesh = MeshRtcSession(this@ConferenceService, userId, this@ConferenceService)
         ConferenceRuntime.mediaPath = "MESH"
         scope.launch {
-            mesh?.start(kind)
+            val started = mesh?.start(kind)
+            if (started !is ApiResult.Success) {
+                mediaStarted = false
+                ConferenceRuntime.state = ConferenceUiState.Error("تعذّر تشغيل وسائط المؤتمر")
+                return@launch
+            }
+            val peers = ConferenceRuntime.participants.map { it.userId }.filter { it.isNotBlank() && it != userId }
+            peers.forEach { mesh?.attachPeer(it) }
+            if (!startedAsHost) peers.forEach { peer ->
+                if (MeshNegotiation.shouldOfferTo(peer, userId, isNewcomer = true)) mesh?.offerTo(peer)
+            }
             ConferenceRuntime.eglContext = mesh?.eglContext
             ConferenceRuntime.localVideo = mesh?.localVideo
             applyListenerMute()
@@ -660,15 +695,28 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             // JOIN. حذف إحدى الخطوتين يترك participant بلا مقعد مسجَّل أو بلا إشارة.
             "admitted" -> {
                 ConferenceRuntime.lobbyState = ""
+                ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
                 val asSpace = !ConferenceRuntime.isVideoEnabled
                 scope.launch {
-                    runCatching { registerRoom(asSpace, emptyList(), asHost = false) }
-                        .onFailure { android.util.Log.w("ConferenceService", "post-admit room registration failed: ${it.message}") }
-                    signaling.connect(roomId)
+                    if (registerRoom(asSpace, emptyList(), asHost = false)) {
+                        if (signaling.isConnected) {
+                            signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled, ConferenceRuntime.isSpeaker)
+                        } else signaling.connect(roomId)
+                    }
                 }
             }
-            "denied" -> ConferenceRuntime.lobbyState = "denied"
-            "waiting" -> ConferenceRuntime.lobbyState = "waiting"
+            "denied" -> {
+                ConferenceRuntime.lobbyState = "denied"
+                ConferenceRuntime.state = ConferenceUiState.Error("رفض المضيف طلب الدخول")
+                scope.launch {
+                    kotlinx.coroutines.delay(2500)
+                    if (ConferenceRuntime.state is ConferenceUiState.Error) leave()
+                }
+            }
+            "waiting" -> {
+                ConferenceRuntime.lobbyState = "waiting"
+                ConferenceRuntime.state = ConferenceUiState.WaitingApproval(roomId)
+            }
             else -> Unit // queue/list: بيانات المضيف، لا حالة لهذا المتصل
         }
     }
@@ -677,6 +725,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         ConferenceRuntime.participants = participants
         val role = selfRole.ifBlank { if (startedAsHost) "HOST" else "LISTENER" }
         applySelfRole(role)
+        startMediaAfterAdmission()
         val remotes = participants.map { it.userId }.filter { it.isNotBlank() && it != userId }
         remotes.forEach { mesh?.attachPeer(it) }
         if (!startedAsHost) remotes.forEach { peer ->
@@ -746,12 +795,16 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
     override fun onDisconnected() {
         when (ConferenceRuntime.state) {
             is ConferenceUiState.Active, is ConferenceUiState.Connecting -> {
+                needsRestRejoin = true
                 ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
                 scheduleSignalingReconnect()
             }
-            // منتظر في اللوبي وانقطع الاتصال؟ أعد المحاولة — سيعود لقائمة الانتظار
-            // ويصل المضيف طلب جديد (الخادم أسقط جلسته القديمة بـLOBBY_LEFT).
-            is ConferenceUiState.WaitingApproval -> scheduleSignalingReconnect()
+            // A pending lobby socket must reconnect too; admission can arrive on
+            // another device while this one is offline. No media until ROOM_STATE.
+            is ConferenceUiState.WaitingApproval -> {
+                needsRestRejoin = true
+                scheduleSignalingReconnect()
+            }
             else -> leave()
         }
     }
@@ -776,18 +829,26 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         }
     }
 
+    private fun awaitingSignaling(): Boolean =
+        ConferenceRuntime.state is ConferenceUiState.Active ||
+            ConferenceRuntime.state is ConferenceUiState.Connecting ||
+            ConferenceRuntime.state is ConferenceUiState.WaitingApproval
+
     private fun scheduleSignalingReconnect() {
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
-            while (reconnectAttempt < 5 &&
-                (ConferenceRuntime.state is ConferenceUiState.Active || ConferenceRuntime.state is ConferenceUiState.Connecting)) {
+            while (reconnectAttempt < 5 && awaitingSignaling()) {
                 val base = (1000L * (1 shl reconnectAttempt.coerceAtMost(5))).coerceAtMost(30_000L)
                 reconnectAttempt++
                 kotlinx.coroutines.delay((Math.random() * base).toLong().coerceAtLeast(300L))
-                if (ConferenceRuntime.state !is ConferenceUiState.Active &&
-                    ConferenceRuntime.state !is ConferenceUiState.Connecting) break
+                if (!awaitingSignaling()) break
                 runCatching { signaling.reconnect(roomId) }
                 kotlinx.coroutines.delay(4_000)
+            }
+            if (reconnectAttempt >= 5 && !signaling.isConnected && awaitingSignaling()) {
+                ConferenceRuntime.state = ConferenceUiState.Error("تعذّرت إعادة الاتصال بالمؤتمر")
+                kotlinx.coroutines.delay(2500)
+                if (ConferenceRuntime.state is ConferenceUiState.Error) leave()
             }
         }
     }
@@ -827,8 +888,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         }
     }
 
-    private suspend fun registerRoom(isSpace: Boolean, invitees: List<String>, asHost: Boolean, title: String = "", isPrivate: Boolean = true, description: String = "", password: String? = null, joinPassword: String? = null) {
-        if (roomId.isBlank()) return
+    private suspend fun registerRoom(isSpace: Boolean, invitees: List<String>, asHost: Boolean, title: String = "", isPrivate: Boolean = true, description: String = "", password: String? = null, joinPassword: String? = null): Boolean {
+        if (roomId.isBlank()) return false
         val api = AuthorizedApiClient(TokenStore(this))
         if (asHost) {
             val safeTitle = title.trim().ifBlank { if (isSpace) "مساحة صوتية" else "مؤتمر فيديو" }
@@ -840,19 +901,31 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 .put("isPrivate", isPrivate)
                 .apply { if (!password.isNullOrBlank()) put("password", password) }
                 .toString()
-            api.request("POST", "/api/conference/create", create)
+            val created = api.request("POST", "/api/conference/create", create)
+            if (created is ApiResult.Error) {
+                ConferenceRuntime.state = ConferenceUiState.Error("تعذر إنشاء الغرفة: ${created.message}")
+                return false
+            }
         }
         val joinBody = if (!asHost && !joinPassword.isNullOrBlank()) {
             org.json.JSONObject().put("password", joinPassword).toString()
         } else "{}"
-        api.request("POST", "/api/conference/$roomId/join", joinBody)
-        if (!asHost) return
+        val joined = api.request("POST", "/api/conference/$roomId/join", joinBody)
+        if (joined is ApiResult.Error) {
+            ConferenceRuntime.state = ConferenceUiState.Error("تعذر الانضمام: ${joined.message}")
+            return false
+        }
+        // A 202 waiting response deliberately continues to WebSocket JOIN so that
+        // lobby approval reaches this device. Media only starts on ROOM_STATE.
+        if (!asHost) return true
         val others = invitees.filter { it.isNotBlank() && it != userId }
         if (others.isNotEmpty()) {
             val ids = org.json.JSONArray()
             others.forEach { ids.put(it) }
-            api.request("POST", "/api/conference/$roomId/invite", org.json.JSONObject().put("memberIds", ids).toString())
+            val invited = api.request("POST", "/api/conference/$roomId/invite", org.json.JSONObject().put("memberIds", ids).toString())
+            if (invited is ApiResult.Error) android.util.Log.w("ConferenceService", "Room opened but invitations failed: ${invited.message}")
         }
+        return true
     }
 
     private var statsJob: kotlinx.coroutines.Job? = null
@@ -909,6 +982,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         stopNetworkWatcher()
         val closingRoomId = roomId
         val closingUserId = userId
+        joinPassword = null
+        needsRestRejoin = false
         saveConferenceCallLogLocally()
         if (closingRoomId.isNotBlank()) {
             runCatching { signaling.leave(closingRoomId, closingUserId) }

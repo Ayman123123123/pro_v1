@@ -25,10 +25,9 @@ if (RTC_MAX_PORT - RTC_MIN_PORT + 1 < 10) {
 const WORKER_COUNT = Math.max(1, Number(process.env.MEDIASOUP_WORKERS || Math.min(4, os.cpus().length)));
 const ANNOUNCED_IP = process.env.MEDIASOUP_ANNOUNCED_IP || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
-// Dedicated HMAC secret for SFU media tickets (issued by backend JwtService.issueSfuTicket).
-// Prefer SFU_TICKET_SECRET; fall back to JWT_SECRET when unset/empty so existing
-// deployments keep working unchanged (identical tag when the variable is absent).
-const SFU_TICKET_SECRET = process.env.SFU_TICKET_SECRET || JWT_SECRET;
+// A distinct key is mandatory even in the default Docker profile; never accept an API JWT as a media ticket.
+const { requireDedicatedSfuSecret } = require('./sfu-secret');
+const SFU_TICKET_SECRET = requireDedicatedSfuSecret(JWT_SECRET, process.env.SFU_TICKET_SECRET);
 
 // Empty room cleanup delay (ms) — prevents immediate cleanup on brief disconnects
 const ROOM_CLEANUP_DELAY_MS = Number(process.env.ROOM_CLEANUP_DELAY_MS || 30_000);
@@ -37,7 +36,6 @@ const ROOM_CLEANUP_DELAY_MS = Number(process.env.ROOM_CLEANUP_DELAY_MS || 30_000
 const MAX_PRODUCERS_PER_KIND = Number(process.env.MAX_PRODUCERS_PER_KIND || 4);
 
 if (!JWT_SECRET || JWT_SECRET.length < 32) throw new Error('JWT_SECRET must contain at least 32 characters');
-if (!SFU_TICKET_SECRET || SFU_TICKET_SECRET.length < 32) throw new Error('SFU_TICKET_SECRET must contain at least 32 characters');
 if (!ANNOUNCED_IP) console.warn('MEDIASOUP_ANNOUNCED_IP is unset; LAN/WAN ICE candidates may be unreachable');
 
 // ─── Codecs ────────────────────────────────────────────────────────────────

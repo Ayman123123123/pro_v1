@@ -38,9 +38,13 @@ class ActiveCallRegistry(private val redis: StringRedisTemplate) {
     fun isInCall(redId: String): Boolean =
         redId.isNotBlank() && active.values.any { redId in it.participants }
 
-    /** هل المكالمة/الغرفة الجماعية مسجّلة ونشطة؟ تُستخدم للتحقق من صحة تذاكر SFU. */
+    /** Whether the registered call exists (not proof of the requester's membership). */
     fun isActiveCall(callId: String): Boolean =
         callId.isNotBlank() && active.containsKey(callId)
+
+    /** Fail closed for arbitrary authenticated accounts that happen to know the call ID. */
+    fun isParticipant(callId: String, redId: String): Boolean =
+        redId.isNotBlank() && active[callId]?.participants?.contains(redId) == true
 
     /** يُحرِّر عضواً واحداً (رفض الدعوة/غادر/لم يرد) — يصبح متاحاً لاستقبال المكالمات. */
     fun releaseMember(callId: String, redId: String) {

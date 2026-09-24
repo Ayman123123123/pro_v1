@@ -76,12 +76,12 @@ import kotlinx.coroutines.launch
 fun CallTransferScreen(
     currentCallId: String = "",
     currentPeer: String = "",
-    contacts: List<ContactInfo> = emptyList(),
+    contacts: List<TransferContactInfo> = emptyList(),
     onBack: () -> Unit = {},
     onTransfer: (String, String) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    var selectedContact by remember { mutableStateOf<ContactInfo?>(null) }
+    var selectedContact by remember { mutableStateOf<TransferContactInfo?>(null) }
     var transferMode by remember { mutableStateOf(TransferMode.BLIND) }
     var isTransferring by remember { mutableStateOf(false) }
     var transferResult by remember { mutableStateOf<TransferResult?>(null) }
@@ -335,7 +335,7 @@ fun CallTransferScreen(
 
 enum class TransferMode { BLIND, ATTENDED }
 
-data class ContactInfo(
+data class TransferContactInfo(
     val id: String,
     val name: String,
     val phone: String,
@@ -375,7 +375,7 @@ fun RowScope.TransferModeButton(mode: TransferMode, selected: Boolean, onClick: 
 }
 
 @Composable
-fun ContactItem(contact: ContactInfo, isSelected: Boolean, onClick: () -> Unit) {
+fun ContactItem(contact: TransferContactInfo, isSelected: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()

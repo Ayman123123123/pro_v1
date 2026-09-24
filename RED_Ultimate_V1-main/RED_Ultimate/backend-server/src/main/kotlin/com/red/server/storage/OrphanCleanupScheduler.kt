@@ -38,13 +38,13 @@ class OrphanCleanupScheduler(
             log.info("Orphan scan — media_files: {} bytes, db_records: {}", stats["media_files"], stats["database_records"])
             val referenced = collectReferencedMediaKeys()
             log.info("Collected {} referenced media keys from MongoDB", referenced.size)
-            // Remove orphaned media objects — dryRun=false after verification
-            val orphans = media.deleteOrphans(referenced, dryRun = false)
-            if (orphans.isNotEmpty()) {
-                log.warn("Deleted {} orphan media keys. First 10: {}", orphans.size, orphans.take(10))
-            } else {
-                log.info("No orphan media keys found ✓")
-            }
+            // This inventory is intentionally incomplete (PostgreSQL grants, chat attachments,
+            // backups, new uploads and subsequent Mongo cursor batches are not covered). Never
+            // delete objects from a partial cross-database snapshot; a missing reference is NOT
+            // evidence of an orphan. Keep the scheduled task observational until a complete,
+            // consistent inventory, age grace period and restore test exist.
+            val candidates = media.deleteOrphans(referenced, dryRun = true)
+            log.warn("Media inventory preview only: {} unverified candidates; automatic deletion is disabled", candidates.size)
         } catch (e: Exception) {
             log.warn("Orphan scan failed: {}", e.message, e)
         }

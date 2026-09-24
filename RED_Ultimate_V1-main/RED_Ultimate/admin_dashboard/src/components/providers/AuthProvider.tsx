@@ -22,26 +22,27 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
  * - authStore.user() يرجع حقول optionals → نحولها إلى User بقيم افتراضية
  */
 function toUser(raw: ReturnType<typeof authStore.user>): User | null {
-  if (!raw) return null;
+  if (!raw || raw.role !== 'ADMIN') return null;
   return {
     id: raw.id || raw.username || 'unknown',
     redId: raw.redId || '',
     username: raw.username || '',
     displayName: raw.displayName || raw.username || '',
     status: 'APPROVED',
-    role: (raw.role as User['role']) || 'ADMIN',
+    role: raw.role as User['role'],
     createdAt: new Date(0).toISOString(),
   };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(toUser(authStore.user()));
-  const [isAuthenticated, setIsAuthenticated] = useState(authStore.isAuthenticated());
+  const [isAuthenticated, setIsAuthenticated] = useState(authStore.isAuthenticated() && !!toUser(authStore.user()));
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    setUser(toUser(authStore.user()));
-    setIsAuthenticated(authStore.isAuthenticated());
+    const storedUser = toUser(authStore.user());
+    setUser(storedUser);
+    setIsAuthenticated(authStore.isAuthenticated() && !!storedUser);
     setIsLoading(false);
   }, []);
 
@@ -61,9 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await adminLogout();
-    setUser(null);
-    setIsAuthenticated(false);
+    try {
+      await adminLogout();
+    } finally {
+      // Even if the server is offline, never leave an authenticated UI onscreen.
+      setUser(null);
+      setIsAuthenticated(false);
+    }
   };
 
   return (

@@ -17,8 +17,7 @@
 const UNAUTHORIZED_MESSAGES = new Set([
   'Unauthorized',
   'Expired or invalid token',
-  'Ticket not bound to this room',
-  'Produce not permitted by ticket'
+  'Ticket not bound to this room'
 ]);
 
 /** مصرّح لكن غير مسموح — النشر بلا صلاحية (بوابة sfuCanProduce). لا يُعاد المحاولة. */

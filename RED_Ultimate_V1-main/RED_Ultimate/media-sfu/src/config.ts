@@ -17,10 +17,7 @@ export const ConfigSchema = z.object({
   workerCount: z.coerce.number().int().min(1).default(() => Math.min(4, cpus().length)),
   announcedIp: z.string().default(''),
   jwtSecret: rejectPlaceholder('JWT_SECRET'),
-  sfuTicketSecret: z.string().min(32).optional().refine(
-    (v) => v === undefined || v.trim().toLowerCase() !== 'change-me' && v.trim().toLowerCase() !== 'changeme' && v.trim().toLowerCase() !== 'change_me',
-    { message: `SFU_TICKET_SECRET must not be the placeholder value 'change-me'` },
-  ),
+  sfuTicketSecret: rejectPlaceholder('SFU_TICKET_SECRET'),
   jwtIssuer: z.string().min(1).optional(),
   jwtAudience: z.string().min(1).optional(),
   roomCleanupDelayMs: z.coerce.number().int().min(1000).default(30_000),
@@ -46,6 +43,8 @@ export const ConfigSchema = z.object({
     endpoint: z.string().optional(),
     exporter: z.enum(['prometheus', 'otlp', 'console']).default('prometheus'),
   }).optional(),
+}).refine((config) => config.sfuTicketSecret !== config.jwtSecret, {
+  path: ['sfuTicketSecret'], message: 'SFU_TICKET_SECRET must differ from JWT_SECRET',
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -58,7 +57,7 @@ export function loadConfig(): Config {
     workerCount: process.env.MEDIASOUP_WORKERS,
     announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP ?? '',
     jwtSecret: process.env.JWT_SECRET ?? '',
-    sfuTicketSecret: process.env.SFU_TICKET_SECRET ?? process.env.JWT_SECRET,
+    sfuTicketSecret: process.env.SFU_TICKET_SECRET ?? '',
     jwtIssuer: process.env.JWT_ISSUER,
     jwtAudience: process.env.JWT_AUDIENCE,
     roomCleanupDelayMs: process.env.ROOM_CLEANUP_DELAY_MS ?? 30_000,

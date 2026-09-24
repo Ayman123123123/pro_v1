@@ -72,7 +72,7 @@ services:
       - SPRING_DATA_REDIS_HOST=cache-redis
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - SFU_TICKET_SECRET=${SFU_TICKET_SECRET:-}
+      - SFU_TICKET_SECRET=${SFU_TICKET_SECRET:?Set a dedicated secret different from JWT_SECRET (at least 32 random characters)}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
       - OPENRELAY_ENABLED=${OPENRELAY_ENABLED:-false}
@@ -151,7 +151,7 @@ services:
           cpus: '1.0'
     environment:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - SFU_TICKET_SECRET=${SFU_TICKET_SECRET:-}
+      - SFU_TICKET_SECRET=${SFU_TICKET_SECRET:?Set a dedicated secret different from JWT_SECRET (at least 32 random characters)}
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
       - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP:-}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}

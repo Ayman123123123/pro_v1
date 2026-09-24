@@ -51,7 +51,8 @@ class JwtService(
             add(System.getenv("RED_ENV") ?: "")
             add(System.getenv("APP_ENV") ?: "")
         }.joinToString(" ").lowercase()
-        return profiles.contains("prod")
+        return profiles.split(Regex("[,;\\s]+"))
+            .any { it in setOf("prod", "production", "staging", "docker") }
     }
 
     private val expirationMs: Long

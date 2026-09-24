@@ -167,8 +167,13 @@ class ConferenceRoomService(
     /** الجلسة العامة تسمح لأي مستخدم مصادق؛ الخاصة تسمح للمضيف أو للمدعوين فقط. */
     fun canJoin(roomId: String, accountId: String, redId: String): Boolean {
         val room = activeRooms[roomId] ?: return false
+        if (room.endedAt != null || isLobbyBlocked(roomId, accountId)) return false
         if (!room.isPrivate) return true
-        return room.hostId == accountId || roomInvitees[roomId]?.contains(redId) == true
+        // A password/link entrant approved earlier has a valid REST seat without
+        // becoming a permanent invitee. Let that account reconnect, not strangers.
+        return room.hostId == accountId || roomInvitees[roomId]?.contains(redId) == true ||
+            isParticipant(roomId, accountId) || isLobbyCleared(roomId, accountId) ||
+            isWaiting(roomId, accountId)
     }
 
     /** مدعو صراحةً (أو المضيف) — يتجاوز كلمة السر لأن الدعوة نفسها اعتماد. */
@@ -184,19 +189,35 @@ class ConferenceRoomService(
 
     fun addParticipant(roomId: String, userId: String): Int {
         val set = roomParticipants[roomId] ?: return -1
-        if (!set.contains(userId) && set.size >= MAX_PARTICIPANTS) return -2 // ROOM_FULL
-        set.add(userId)
-        val count = set.size
-        activeRooms[roomId]?.participantCount = count
-        return count
+        // A concurrent REST join/lobby admission must not pass the 100-seat cap.
+        return synchronized(set) {
+            if (activeRooms[roomId] == null || isLobbyBlocked(roomId, userId)) return@synchronized -1
+            if (!set.contains(userId) && set.size >= MAX_PARTICIPANTS) return@synchronized -2
+            set.add(userId)
+            set.size.also { activeRooms[roomId]?.participantCount = it }
+        }
     }
 
     fun isRoomFull(roomId: String): Boolean = getParticipantCount(roomId) >= MAX_PARTICIPANTS
 
     fun removeParticipant(roomId: String, userId: String) {
-        roomParticipants[roomId]?.remove(userId)
-        val count = getParticipantCount(roomId)
-        activeRooms[roomId]?.participantCount = count
+        val set = roomParticipants[roomId] ?: return
+        synchronized(set) {
+            set.remove(userId)
+            activeRooms[roomId]?.participantCount = set.size
+        }
+    }
+
+    /** A host kick revokes the seat, lobby clearance and invitation for this room. */
+    fun blockParticipant(roomId: String, accountId: String, redId: String): Boolean {
+        val room = activeRooms[roomId] ?: return false
+        if (room.hostId == accountId) return false
+        lobbyBlocked.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }.add(accountId)
+        lobbyCleared[roomId]?.remove(accountId)
+        roomInvitees[roomId]?.remove(redId)
+        leaveLobby(roomId, accountId)
+        removeParticipant(roomId, accountId)
+        return true
     }
 
     fun getParticipantCount(roomId: String): Int = roomParticipants[roomId]?.size ?: 0
@@ -217,6 +238,10 @@ class ConferenceRoomService(
         roomInvitees.remove(roomId)
         activeRooms.remove(roomId)
         lockedRooms.remove(roomId)
+        roomLobby.remove(roomId)
+        lobbyCleared.remove(roomId)
+        lobbyBlocked.remove(roomId)
+        revokeCallLinks(roomId)
         if (removed) log.info("Conference room {} closed", roomId)
         return removed
     }
@@ -301,6 +326,14 @@ class ConferenceRoomService(
      *  يجب أن لا يعيده إلى الطابور فيُحرم نصف الحديث من سماعه. */
     fun isLobbyCleared(roomId: String, accountId: String): Boolean = lobbyCleared[roomId]?.contains(accountId) == true
 
+    /** A private-room password or call link grants access for this room's lifetime,
+     *  not just while the last socket holds a seat. Host kick revokes this grant. */
+    fun rememberPrivateAdmission(roomId: String, accountId: String) {
+        if (activeRooms[roomId]?.isPrivate == true && isParticipant(roomId, accountId)) {
+            lobbyCleared.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }.add(accountId)
+        }
+    }
+
     fun isLobbyBlocked(roomId: String, accountId: String): Boolean = lobbyBlocked[roomId]?.contains(accountId) == true
 
     /** المضيف والمدعو صراحةً لا يمران بالطابور: الدعوة نفسها اعتماد. */
@@ -325,6 +358,9 @@ class ConferenceRoomService(
         roomLobby[roomId]?.values?.sortedBy { it.requestedAt } ?: emptyList()
 
     fun lobbyCount(roomId: String): Int = roomLobby[roomId]?.size ?: 0
+
+    fun isWaiting(roomId: String, accountId: String): Boolean =
+        roomLobby[roomId]?.containsKey(accountId) == true
 
     fun leaveLobby(roomId: String, accountId: String): Boolean = roomLobby[roomId]?.remove(accountId) != null
 
@@ -397,6 +433,7 @@ class ConferenceController(
     private val notifications: NotificationService,
     private val history: CallHistoryService,
     private val callSignaling: com.red.server.websocket.CallWebSocketHandler,
+    private val conferenceSignaling: com.red.server.websocket.ConferenceWebSocketHandler,
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private val aliases: RoomAliasService? = null
 ) {
@@ -500,8 +537,13 @@ class ConferenceController(
         // المدعو/المضيف يتجاوز كلمة السر (الدعوة اعتماد) — كلمة السر للعامة المحمية فقط.
         // (كان المدعو لغرفة خاصة بكلمة سر يُرفض 403 بلا طريق دخول).
         val member = roomService.isInvited(storedId, authentication.name, user.redId)
-        val authorized = roomService.canJoin(storedId, authentication.name, user.redId) &&
-            (member || roomService.verifyPassword(storedId, request.password))
+        val alreadyAdmitted = roomService.isParticipant(storedId, authentication.name) ||
+            roomService.isLobbyCleared(storedId, authentication.name)
+        val passwordAccepted = record.passwordHash != null &&
+            roomService.verifyPassword(storedId, request.password)
+        val authorized = record.endedAt == null && !roomService.isLobbyBlocked(storedId, authentication.name) &&
+            ((roomService.canJoin(storedId, authentication.name, user.redId) &&
+                (member || alreadyAdmitted || !record.isPrivate)) || passwordAccepted)
         if (!authorized) {
             return ResponseEntity.status(403).body(JoinRoomResponse(
                 authorized = false,
@@ -513,21 +555,37 @@ class ConferenceController(
         val hostBypass = record.hostId == authentication.name
         val alreadyIn = roomService.getParticipantCount(storedId) > 0 &&
             roomService.isParticipant(storedId, authentication.name)
-        if (roomService.isLocked(storedId) && !hostBypass && !member && !alreadyIn) {
+        if (roomService.isLocked(storedId) && !hostBypass && !member && !alreadyAdmitted) {
             return ResponseEntity.status(423).body(JoinRoomResponse(
                 authorized = false,
                 roomId = storedId,
                 errorMessage = "الغرفة مقفلة من المضيف — اطلب منه فتحها أو دعوتك"
             ))
         }
-        if (roomService.isRoomFull(storedId)) {
+        // REST and WS must share the same lobby gate. Previously REST added a seat
+        // immediately, so WS saw isParticipant=true and bypassed host approval.
+        if (roomService.isLobbyEnabled(storedId) && !member && !alreadyIn &&
+            !roomService.isLobbyCleared(storedId, authentication.name)) {
+            roomService.enterLobby(storedId, authentication.name, user.redId, user.displayName, viaLink = false)
+            val position = roomService.lobbyQueue(storedId).indexOfFirst { it.accountId == authentication.name } + 1
+            return ResponseEntity.status(202).body(JoinRoomResponse(
+                authorized = false, roomId = storedId, waiting = true,
+                lobbyPosition = position.coerceAtLeast(1)
+            ))
+        }
+        if (!alreadyIn && roomService.isRoomFull(storedId)) {
             return ResponseEntity.status(429).body(JoinRoomResponse(
                 authorized = false,
                 roomId = storedId,
                 errorMessage = "الغرفة ممتلئة (حتى ${ConferenceRoomService.MAX_PARTICIPANTS} مشارك)"
             ))
         }
-        roomService.addParticipant(storedId, authentication.name)
+        if (roomService.addParticipant(storedId, authentication.name) < 0) {
+            return ResponseEntity.status(429).body(JoinRoomResponse(
+                authorized = false, roomId = storedId, errorMessage = "الغرفة ممتلئة"
+            ))
+        }
+        if (passwordAccepted) roomService.rememberPrivateAdmission(storedId, authentication.name)
         return ResponseEntity.ok(JoinRoomResponse(
             authorized = true,
             roomId = record.roomId,
@@ -550,6 +608,7 @@ class ConferenceController(
         roomService.removeParticipant(stored, authentication.name)
         // توافق: إزالة من المفتاح الآخر أيضاً عند اختلاف المستعار عن المخزن.
         if (stored != roomId.trim()) roomService.removeParticipant(roomId.trim(), authentication.name)
+        conferenceSignaling.evictAccount(stored, authentication.name)
         return ResponseEntity.ok(mapOf("roomId" to stored, "participantCount" to roomService.getParticipantCount(stored)))
     }
 
@@ -574,7 +633,9 @@ class ConferenceController(
         val effective = aliases?.resolve(roomId) ?: roomId.trim()
         val record = roomService.getRoom(effective) ?: roomService.getRoom(roomId.trim()) ?: throw NoSuchElementException("Room not found")
         require(record.hostId == authentication.name) { "ONLY_HOST_CAN_CLOSE" }
-        return ResponseEntity.ok(mapOf("roomId" to record.roomId, "closed" to roomService.closeRoom(record.roomId)))
+        val closed = roomService.closeRoom(record.roomId)
+        if (closed) conferenceSignaling.closeSignalingRoom(record.roomId)
+        return ResponseEntity.ok(mapOf("roomId" to record.roomId, "closed" to closed))
     }
 
     @PostMapping("/{roomId}/invite")
@@ -672,7 +733,22 @@ class ConferenceController(
         val resolved = roomService.resolveCallLink(token)
             ?: return ResponseEntity.status(404).body(JoinRoomResponse(authorized = false, roomId = "", errorMessage = "الرابط منتهٍ أو ملغى"))
         val (link, record) = resolved
-        if (roomService.isRoomFull(record.roomId) && !roomService.isLobbyCleared(record.roomId, authentication.name)) {
+        if (roomService.isLobbyBlocked(record.roomId, authentication.name)) {
+            return ResponseEntity.status(403).body(JoinRoomResponse(
+                authorized = false, roomId = record.roomId, errorMessage = "لا تملك صلاحية العودة إلى هذه الغرفة"
+            ))
+        }
+        val accountId = UUID.fromString(authentication.name)
+        val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        if (roomService.isLocked(record.roomId) &&
+            !roomService.isInvited(record.roomId, authentication.name, user.redId) &&
+            !roomService.isParticipant(record.roomId, authentication.name) &&
+            !roomService.isLobbyCleared(record.roomId, authentication.name)) {
+            return ResponseEntity.status(423).body(JoinRoomResponse(
+                authorized = false, roomId = record.roomId, errorMessage = "الغرفة مقفلة من المضيف"
+            ))
+        }
+        if (roomService.isRoomFull(record.roomId) && !roomService.isParticipant(record.roomId, authentication.name)) {
             return ResponseEntity.status(429).body(JoinRoomResponse(
                 authorized = false,
                 roomId = record.roomId,
@@ -682,8 +758,6 @@ class ConferenceController(
         if (!roomService.redeemCallLink(token)) {
             return ResponseEntity.status(410).body(JoinRoomResponse(authorized = false, roomId = record.roomId, errorMessage = "استُنفد عدد استخدامات الرابط"))
         }
-        val accountId = UUID.fromString(authentication.name)
-        val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         val pending = roomService.enterLobby(
             roomId = record.roomId,
             accountId = authentication.name,
@@ -692,7 +766,7 @@ class ConferenceController(
             viaLink = true
         )
         if (pending != null) {
-            signaling.notifyLobbyWaiting(record.roomId)
+            conferenceSignaling.notifyLobbyWaiting(record.roomId)
             return ResponseEntity.accepted().body(JoinRoomResponse(
                 authorized = false,
                 waiting = true,
@@ -705,7 +779,12 @@ class ConferenceController(
                 allowScreenShare = record.allowScreenShare
             ))
         }
-        roomService.addParticipant(record.roomId, authentication.name)
+        if (roomService.addParticipant(record.roomId, authentication.name) < 0) {
+            return ResponseEntity.status(429).body(JoinRoomResponse(
+                authorized = false, roomId = record.roomId, errorMessage = "الغرفة ممتلئة"
+            ))
+        }
+        roomService.rememberPrivateAdmission(record.roomId, authentication.name)
         return ResponseEntity.ok(JoinRoomResponse(
             authorized = true,
             roomId = record.roomId,
@@ -750,7 +829,7 @@ class ConferenceController(
         val record = hostOnly(roomId, authentication.name)
         val targets = request.accountIds.ifEmpty { roomService.lobbyQueue(record.roomId).map { it.accountId } }
         val admitted = roomService.admitFromLobby(record.roomId, targets)
-        if (admitted.isNotEmpty()) signaling.notifyLobbyAdmitted(record.roomId, admitted)
+        if (admitted.isNotEmpty()) conferenceSignaling.notifyLobbyAdmitted(record.roomId, admitted)
         return ResponseEntity.ok(mapOf(
             "roomId" to record.roomId,
             "admitted" to admitted,
@@ -766,7 +845,7 @@ class ConferenceController(
     ): ResponseEntity<Map<String, Any?>> {
         val record = hostOnly(roomId, authentication.name)
         val denied = roomService.denyFromLobby(record.roomId, request.accountIds, block = request.block)
-        if (denied.isNotEmpty()) signaling.notifyLobbyDenied(record.roomId, denied)
+        if (denied.isNotEmpty()) conferenceSignaling.notifyLobbyDenied(record.roomId, denied)
         return ResponseEntity.ok(mapOf(
             "roomId" to record.roomId,
             "denied" to denied,
@@ -783,12 +862,19 @@ class ConferenceController(
         authentication: Authentication
     ): ResponseEntity<Map<String, Any?>> {
         val record = hostOnly(roomId, authentication.name)
+        val awaiting = if (request.waitingRoomEnabled == false) roomService.lobbyQueue(record.roomId).map { it.accountId }
+            else emptyList()
         val updated = roomService.updateRoomFlags(
             roomId = record.roomId,
             waitingRoom = request.waitingRoomEnabled,
             mutedByDefault = request.mutedByDefault,
             allowScreenShare = request.allowScreenShare
         ) ?: return ResponseEntity.status(404).body(mapOf("error" to "ROOM_NOT_OPEN"))
+        if (awaiting.isNotEmpty()) {
+            val admitted = awaiting.filter { roomService.isParticipant(record.roomId, it) }
+            conferenceSignaling.notifyLobbyAdmitted(record.roomId, admitted)
+            conferenceSignaling.notifyLobbyDenied(record.roomId, awaiting - admitted.toSet())
+        }
         return ResponseEntity.ok(mapOf(
             "roomId" to updated.roomId,
             "waitingRoomEnabled" to updated.waitingRoomEnabled,

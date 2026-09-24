@@ -3,6 +3,7 @@ package com.red.server.websocket
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
+import com.red.server.calls.ConferenceRoomService
 
 import tools.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Component
@@ -26,7 +27,9 @@ import java.util.concurrent.ConcurrentHashMap
 class ConferenceWebSocketHandler(
     private val objectMapper: ObjectMapper,
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private val roomAliases: RoomAliasService? = null
+    private val roomAliases: RoomAliasService? = null,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val conferenceRooms: ConferenceRoomService? = null
 ) : TextWebSocketHandler() {
     private val rooms = ConcurrentHashMap<String, MutableSet<WebSocketSession>>()
     private val sessionToRoom = ConcurrentHashMap<String, String>()
@@ -43,6 +46,14 @@ class ConferenceWebSocketHandler(
      */
     private val roomLobby = ConcurrentHashMap<String, Boolean>()
     private val roomWaiting = ConcurrentHashMap<String, MutableSet<WebSocketSession>>()
+    /** One REST queue entry per account, but every waiting device must receive the decision. */
+    private val lobbySessions = ConcurrentHashMap<String, ConcurrentHashMap<String, MutableSet<WebSocketSession>>>()
+
+    private fun isPrivileged(accountId: String, redId: String, roomId: String): Boolean =
+        conferenceRooms?.let { rooms ->
+            rooms.isInvited(roomId, accountId, redId) ||
+                rooms.isLobbyCleared(roomId, accountId) || rooms.isParticipant(roomId, accountId)
+        } == true
 
     /**
      * الأيدي المرفوعة: roomId ← مجموعة من رفعوا أيديهم.
@@ -84,8 +95,26 @@ class ConferenceWebSocketHandler(
             sendError(session, signal.roomId, "INVALID_ROOM_ID", "roomId is required and must match ${ROOM_ID.pattern}")
             return
         }
+        val signalType = signal.type.uppercase()
+        val waiting = lobbySessions[signal.roomId]?.values?.any { session in it } == true ||
+            roomWaiting[signal.roomId]?.contains(session) == true
+        if (signalType != "JOIN" && rooms[signal.roomId]?.contains(session) != true &&
+            !(signalType == "LEAVE" && waiting)) {
+            sendError(session, signal.roomId, "FORBIDDEN", "Join this room before sending signals")
+            return
+        }
+        // A REST leave, host close or kick must immediately revoke control/data-plane
+        // access even if the socket has not yet received the close notification.
+        if (signalType != "JOIN" && signalType != "LEAVE" && conferenceRooms != null) {
+            val account = session.attributes["accountId"] as? String ?: userId
+            if (conferenceRooms.getRoom(signal.roomId) == null ||
+                !conferenceRooms.isParticipant(signal.roomId, account)) {
+                sendError(session, signal.roomId, "FORBIDDEN", "Room membership required")
+                return
+            }
+        }
 
-        when (signal.type.uppercase()) {
+        when (signalType) {
             "JOIN" -> handleJoin(session, userId, signal)
             // CONSUME وICO والتفاوض متاحة للجميع — المستمع يحتاجها ليسمع.
             "OFFER", "ANSWER", "ICE", "CONSUME" -> relay(session, signal)
@@ -98,7 +127,7 @@ class ConferenceWebSocketHandler(
                 // شاشةٌ في غرفة أُغلقت فيها المشاركة: رفضٌ صريح، لا إخفاءٌ في الواجهة فقط.
                 val sharingScreen = signal.payload["kind"]?.toString() == "screen" ||
                     signal.payload["source"]?.toString() == "screen"
-                if (sharingScreen && conferenceRooms.getRoom(signal.roomId)?.allowScreenShare == false) {
+                if (sharingScreen && conferenceRooms?.getRoom(signal.roomId)?.allowScreenShare == false) {
                     sendError(session, signal.roomId, "SCREEN_SHARE_DISABLED", "Host disabled screen sharing")
                 } else if (role in PUBLISHERS) relay(session, signal) else sendError(
                     session, signal.roomId, "NOT_ON_STAGE",
@@ -159,10 +188,29 @@ class ConferenceWebSocketHandler(
 
     private fun handleJoin(session: WebSocketSession, userId: String, signal: IncomingConferenceSignal) {
         val accountId = session.attributes["accountId"] as? String ?: userId
+        if (sessionToRoom[session.id]?.let { it != signal.roomId } == true) {
+            sendError(session, signal.roomId, "FORBIDDEN", "Leave the previous room first")
+            return
+        }
         // بوابة غرفة الانتظار قبل أي مقعد: من في الطابور لا يُحسب مشاركًا ولا تُقبل وسائطه،
         // وإلا صار الطابور ستارًا تجميليًا يستهلك سعة الغرفة ويغذي الـ SFU.
-        if (conferenceRooms.isLobbyEnabled(signal.roomId) && !isPrivileged(accountId, userId, signal.roomId)) {
-            val entry = conferenceRooms.enterLobby(
+        val backingRooms = conferenceRooms
+        if (backingRooms != null) {
+            val record = backingRooms.getRoom(signal.roomId)
+            if (record == null || record.endedAt != null ||
+                !backingRooms.canJoin(signal.roomId, accountId, userId) ||
+                backingRooms.isLobbyBlocked(signal.roomId, accountId)) {
+                sendError(session, signal.roomId, "FORBIDDEN", "Room unavailable or membership required")
+                return
+            }
+        }
+        if (backingRooms != null && backingRooms.isLobbyEnabled(signal.roomId) &&
+            !isPrivileged(accountId, userId, signal.roomId)) {
+            if (backingRooms.isLobbyBlocked(signal.roomId, accountId)) {
+                sendError(session, signal.roomId, "FORBIDDEN", "You cannot join this room")
+                return
+            }
+            val entry = backingRooms.enterLobby(
                 roomId = signal.roomId,
                 accountId = accountId,
                 redId = userId,
@@ -170,15 +218,16 @@ class ConferenceWebSocketHandler(
                 viaLink = signal.payload["viaLink"]?.toString() == "true"
             )
             if (entry != null) {
-                lobbySessions.computeIfAbsent(signal.roomId) { ConcurrentHashMap() }[accountId] = session
+                lobbySessions.computeIfAbsent(signal.roomId) { ConcurrentHashMap() }
+                    .computeIfAbsent(accountId) { ConcurrentHashMap.newKeySet() }.add(session)
                 sessionToRoom[session.id] = signal.roomId
                 session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
                     "type" to "LOBBY",
                     "roomId" to signal.roomId,
                     "payload" to mapOf(
                         "state" to "waiting",
-                        "position" to conferenceRooms.lobbyQueue(signal.roomId).indexOfFirst { it.accountId == accountId }.let { if (it < 0) 1 else it + 1 }.toString(),
-                        "waiting" to conferenceRooms.lobbyCount(signal.roomId).toString()
+                        "position" to backingRooms.lobbyQueue(signal.roomId).indexOfFirst { it.accountId == accountId }.let { if (it < 0) 1 else it + 1 }.toString(),
+                        "waiting" to backingRooms.lobbyCount(signal.roomId).toString()
                     )
                 ))))
                 broadcastLobbyCount(signal.roomId)
@@ -186,11 +235,18 @@ class ConferenceWebSocketHandler(
             }
             // مُذَّن سابقًا (إعادة اتصال) أو مدعو: يُسمح به فورًا ويُخرج من الطابور إن كان فيه.
             lobbySessions[signal.roomId]?.remove(accountId)
-            conferenceRooms.leaveLobby(signal.roomId, accountId)
+            backingRooms.leaveLobby(signal.roomId, accountId)
+        }
+        // REST validates password, lobby approval and seat availability. A raw WebSocket
+        // frame must not be an alternative join path for a public or private room.
+        if (backingRooms != null && !backingRooms.isParticipant(signal.roomId, accountId)) {
+            sendError(session, signal.roomId, "JOIN_ROOM_FIRST", "Join via the room API first")
+            return
         }
         val room = rooms.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }
-        // حدّ السعة مُنفذ (كان يقبل عدداً غير محدود فيخنق الـ mesh): 100 مشارك كحد X العملي.
-        if (room.size >= MAX_PARTICIPANTS && room.none { (it.attributes["userId"] as? String) == userId }) {
+        // Capacity counts accounts, not sockets: phone + tablet occupy one REST seat.
+        val occupants = room.mapNotNull { it.attributes["userId"] as? String }.toSet()
+        if (occupants.size >= MAX_PARTICIPANTS && userId !in occupants) {
             sendError(session, signal.roomId, "ROOM_FULL", "Room is full (max $MAX_PARTICIPANTS)")
             return
         }
@@ -198,7 +254,7 @@ class ConferenceWebSocketHandler(
         // معروفاً → يُحتجَز بانتظار موافقة المضيف بدل الدخول. أول منضّم (يصبح المضيف)
         // والعودة بعد انقطاع (لها دور محفوظ) تتجاوزان الانتظار دائماً.
         val existingRoles = roomRoles[signal.roomId]
-        if (roomLobby[signal.roomId] == true && roomHosts[signal.roomId] != null &&
+        if (backingRooms == null && roomLobby[signal.roomId] == true && roomHosts[signal.roomId] != null &&
             existingRoles?.containsKey(userId) != true
         ) {
             val waiting = roomWaiting.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }
@@ -219,16 +275,18 @@ class ConferenceWebSocketHandler(
             return
         }
         val roles = roomRoles.computeIfAbsent(signal.roomId) { ConcurrentHashMap() }
-        synchronized(room) { room.add(session) }
+        val alreadyOnline = synchronized(room) {
+            val present = room.any { (it.attributes["accountId"] as? String ?: it.attributes["userId"] as? String) == accountId }
+            room.add(session)
+            present
+        }
         sessionToRoom[session.id] = signal.roomId
 
-        // First participant becomes HOST if no host yet
-        if (roomHosts[signal.roomId] == null) {
-            roomHosts[signal.roomId] = userId
-            roles[userId] = "HOST"
-        } else {
-            roles.putIfAbsent(userId, "LISTENER")
-        }
+        // REST owns host identity. Never elect the first WebSocket guest as HOST.
+        val restHost = backingRooms?.getRoom(signal.roomId)?.hostRedId
+        if (restHost != null) roomHosts[signal.roomId] = restHost
+        else roomHosts.putIfAbsent(signal.roomId, userId)
+        roles.putIfAbsent(userId, if (roomHosts[signal.roomId] == userId) "HOST" else "LISTENER")
         val myRole = roles[userId] ?: "LISTENER"
         val isHost = roomHosts[signal.roomId] == userId
 
@@ -244,7 +302,9 @@ class ConferenceWebSocketHandler(
                 "hasAudio" to (signal.payload["hasAudio"] ?: "true")
             )
         ))
-        room.filter { it.id != session.id }.forEach { runCatching { it.sendMessage(TextMessage(joinMsg)) } }
+        if (!alreadyOnline) room.filter { it.id != session.id }.forEach {
+            runCatching { it.sendMessage(TextMessage(joinMsg)) }
+        }
 
         // Send room state to newcomer — includes roles (+ lobby state/waiting list)
         // buildRoomState تُعيد TextMessage جاهزة — لا غلاف إضافي (لا يوجد
@@ -264,7 +324,9 @@ class ConferenceWebSocketHandler(
         userId: String
     ): TextMessage {
         val roles = roomRoles[roomId] ?: ConcurrentHashMap<String, String>()
-        val peers = room.filter { it.id != session.id }.mapNotNull { it.attributes["userId"] as? String }
+        val peers = room.filter { it.id != session.id }
+            .mapNotNull { it.attributes["userId"] as? String }
+            .filter { it != userId }.distinct()
         val statePayload = mutableMapOf<String, String>()
         peers.forEachIndexed { i, p -> statePayload["user_$i"] = p }
         val hands = roomHands[roomId] ?: emptySet<String>()
@@ -282,7 +344,7 @@ class ConferenceWebSocketHandler(
         }
         statePayload["host"] = roomHosts[roomId] ?: userId
         statePayload["self_role"] = roles[userId] ?: "LISTENER"
-        statePayload["lobby"] = (roomLobby[roomId] == true).toString()
+        statePayload["lobby"] = (conferenceRooms?.isLobbyEnabled(roomId) ?: (roomLobby[roomId] == true)).toString()
         val waiting = waitingIds(roomId)
         statePayload["waiting_count"] = waiting.size.toString()
         waiting.forEachIndexed { i, w -> statePayload["waiting_user_$i"] = w }
@@ -295,7 +357,8 @@ class ConferenceWebSocketHandler(
 
     /** هويات المنتظرين في لوبي غرفة — مرتبة لثبات القائمة بين الواجهات. */
     private fun waitingIds(roomId: String): List<String> =
-        roomWaiting[roomId]?.mapNotNull { it.attributes["userId"] as? String }?.sorted().orEmpty()
+        conferenceRooms?.lobbyQueue(roomId)?.map { it.redId }?.sorted()
+            ?: roomWaiting[roomId]?.mapNotNull { it.attributes["userId"] as? String }?.sorted().orEmpty()
 
     // ─────────────────────── غرفة الانتظار (Lobby) ───────────────────────
 
@@ -309,6 +372,8 @@ class ConferenceWebSocketHandler(
         when (signal.type.uppercase()) {
             "LOBBY_SET" -> {
                 val enabled = signal.payload["enabled"] == "true"
+                val queued = conferenceRooms?.lobbyQueue(roomId)?.map { it.accountId }.orEmpty()
+                conferenceRooms?.updateRoomFlags(roomId, waitingRoom = enabled)
                 roomLobby[roomId] = enabled
                 rooms[roomId]?.filter { it.isOpen }?.forEach {
                     runCatching {
@@ -320,11 +385,31 @@ class ConferenceWebSocketHandler(
                     }
                 }
                 // إيقاف اللوبي يقبل كل المنتظرين — لا يُتركون بلا إجابة إلى الأبد.
-                if (!enabled) admitAll(roomId)
+                if (!enabled) {
+                    val admitted = queued.filter { conferenceRooms?.isParticipant(roomId, it) == true }
+                    if (admitted.isNotEmpty()) notifyLobbyAdmitted(roomId, admitted)
+                    val full = queued - admitted.toSet()
+                    if (full.isNotEmpty()) notifyLobbyDenied(roomId, full)
+                    admitAll(roomId)
+                }
             }
-            "LOBBY_APPROVE" -> (signal.payload["targetUserId"] as? String)?.takeIf { it.isNotBlank() }?.let { admit(roomId, it) }
-            "LOBBY_APPROVE_ALL" -> admitAll(roomId)
-            "LOBBY_DENY" -> (signal.payload["targetUserId"] as? String)?.takeIf { it.isNotBlank() }?.let { deny(roomId, it) }
+            "LOBBY_APPROVE" -> (signal.payload["targetUserId"] as? String)?.takeIf { it.isNotBlank() }?.let { target ->
+                val accountId = conferenceRooms?.lobbyQueue(roomId)?.find { it.accountId == target || it.redId == target }?.accountId
+                if (accountId != null) {
+                    notifyLobbyAdmitted(roomId, conferenceRooms?.admitFromLobby(roomId, listOf(accountId)).orEmpty())
+                } else if (conferenceRooms == null) admit(roomId, target)
+            }
+            "LOBBY_APPROVE_ALL" -> {
+                val accountIds = conferenceRooms?.lobbyQueue(roomId)?.map { it.accountId }.orEmpty()
+                if (conferenceRooms != null) notifyLobbyAdmitted(roomId, conferenceRooms.admitFromLobby(roomId, accountIds))
+                else admitAll(roomId)
+            }
+            "LOBBY_DENY" -> (signal.payload["targetUserId"] as? String)?.takeIf { it.isNotBlank() }?.let { target ->
+                val accountId = conferenceRooms?.lobbyQueue(roomId)?.find { it.accountId == target || it.redId == target }?.accountId
+                if (accountId != null) {
+                    notifyLobbyDenied(roomId, conferenceRooms?.denyFromLobby(roomId, listOf(accountId)).orEmpty())
+                } else if (conferenceRooms == null) deny(roomId, target)
+            }
         }
     }
 
@@ -399,6 +484,51 @@ class ConferenceWebSocketHandler(
         room.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(msg)) } }
     }
 
+    /** Notify host sockets after a REST call has entered the authoritative waiting queue. */
+    fun notifyLobbyWaiting(roomId: String) {
+        conferenceRooms?.lobbyQueue(roomId)?.forEach { notifyHostsOfWaiting(roomId, it.redId) }
+        broadcastLobbyCount(roomId)
+    }
+
+    /** REST already granted seats; waiting sockets may now re-register and send JOIN. */
+    fun notifyLobbyAdmitted(roomId: String, accountIds: List<String>) {
+        accountIds.forEach { accountId ->
+            val waiting = lobbySessions[roomId]?.remove(accountId).orEmpty()
+            val redId = waiting.firstOrNull()?.attributes?.get("userId") as? String ?: accountId
+            waiting.forEach { sendLobbyResult(it, roomId, "admitted") }
+            announceLobbyDecision(roomId, "LOBBY_APPROVED", redId)
+        }
+        broadcastLobbyCount(roomId)
+    }
+
+    fun notifyLobbyDenied(roomId: String, accountIds: List<String>) {
+        accountIds.forEach { accountId ->
+            val waiting = lobbySessions[roomId]?.remove(accountId).orEmpty()
+            val redId = waiting.firstOrNull()?.attributes?.get("userId") as? String ?: accountId
+            waiting.forEach { sendLobbyResult(it, roomId, "denied") }
+            announceLobbyDecision(roomId, "LOBBY_DENIED", redId)
+        }
+        broadcastLobbyCount(roomId)
+    }
+
+    private fun sendLobbyResult(session: WebSocketSession?, roomId: String, state: String) {
+        if (session?.isOpen != true) return
+        val frame = objectMapper.writeValueAsString(mapOf(
+            "type" to "LOBBY", "roomId" to roomId,
+            "payload" to mapOf("state" to state, "waiting" to (conferenceRooms?.lobbyCount(roomId) ?: 0).toString())
+        ))
+        runCatching { session.sendMessage(TextMessage(frame)) }
+    }
+
+    private fun broadcastLobbyCount(roomId: String) {
+        val room = rooms[roomId] ?: return
+        val frame = objectMapper.writeValueAsString(mapOf(
+            "type" to "LOBBY_COUNT", "roomId" to roomId,
+            "payload" to mapOf("waiting" to waitingIds(roomId).size.toString())
+        ))
+        room.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(frame)) } }
+    }
+
     /** بلّغ مضيفي الغرفة (وألاحق المضيف لاحقاً عبر ROOM_STATE) بمنتظر جديد. */
     private fun notifyHostsOfWaiting(roomId: String, waitingUserId: String) {
         val room = rooms[roomId] ?: return
@@ -453,8 +583,20 @@ class ConferenceWebSocketHandler(
             }
         }
 
-        // Apply role changes atomically
         val targetId = signal.payload["targetUserId"]?.toString()
+        val targetSessions = rooms[roomId]?.filter { it.attributes["userId"] == targetId }.orEmpty()
+        if (type in setOf("APPROVE_SPEAKER", "DEMOTE_LISTENER", "GRANT_COHOST", "REVOKE_COHOST", "KICK_USER", "MUTE_USER") &&
+            (targetId.isNullOrBlank() || targetSessions.isEmpty() || targetId == roomHosts[roomId])) {
+            sendError(session, roomId, "FORBIDDEN", "Target must be an active non-host participant")
+            return
+        }
+        if (type == "KICK_USER" && conferenceRooms != null && targetId != null) {
+            val targetAccountId = targetSessions.firstOrNull()?.attributes?.get("accountId") as? String
+            if (targetAccountId.isNullOrBlank() || !conferenceRooms.blockParticipant(roomId, targetAccountId, targetId)) {
+                sendError(session, roomId, "FORBIDDEN", "Cannot kick the host or an unknown participant")
+                return
+            }
+        }
         if (targetId != null) {
             when (type) {
                 // الترقية تُسقط طلب الرفع: تُركت اليد مرفوعة بعد الموافقة
@@ -516,18 +658,12 @@ class ConferenceWebSocketHandler(
                 signal.payload + mapOf("kicked" to true)
             } else signal.payload
         ))
-        val recipients = if (type == "KICK_USER" && targetId != null) {
-            // inform everyone including kicked user so they can leave gracefully
-            room.filter { it.isOpen }
-        } else {
-            room.filter { it.isOpen }
-        }
-        recipients.forEach { runCatching { it.sendMessage(TextMessage(outbound)) } }
-
-        // If kick, remove session(s) of target
+        // The kicked user sees the decision before their sockets are revoked.
+        room.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(outbound)) } }
         if (type == "KICK_USER" && targetId != null) {
-            room.filter { (it.attributes["userId"] as? String) == targetId }.forEach {
-                runCatching { it.close() }
+            targetSessions.forEach { kicked ->
+                departRoom(kicked, roomId)
+                runCatching { kicked.close() }
             }
         }
     }
@@ -557,7 +693,28 @@ class ConferenceWebSocketHandler(
         room.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(outbound)) } }
     }
 
+    private fun removeWaitingSession(roomId: String, accountId: String, session: WebSocketSession): Boolean {
+        val byAccount = lobbySessions[roomId] ?: return false
+        val devices = byAccount[accountId] ?: return false
+        if (!devices.remove(session)) return false
+        if (devices.isEmpty() && byAccount.remove(accountId, devices)) {
+            conferenceRooms?.leaveLobby(roomId, accountId)
+        }
+        return true
+    }
+
     private fun handleLeave(session: WebSocketSession, signal: IncomingConferenceSignal) {
+        val waitingAccountId = session.attributes["accountId"] as? String
+            ?: session.attributes["userId"] as? String ?: ""
+        if (removeWaitingSession(signal.roomId, waitingAccountId, session)) {
+            sessionToRoom.remove(session.id)
+            val redId = session.attributes["userId"] as? String
+            if (redId != null && lobbySessions[signal.roomId]?.containsKey(waitingAccountId) != true) {
+                announceLobbyDecision(signal.roomId, "LOBBY_LEFT", redId)
+            }
+            broadcastLobbyCount(signal.roomId)
+            return
+        }
         // مغادرٌ من لوبي الانتظار؟ نظّف قائمته دون بثّ PARTICIPANT_LEFT
         // (لم يكن داخل الغرفة أصلاً) وأبلغ المضيفين لإسقاط سطره من الواجهة.
         roomWaiting[signal.roomId]?.let { waiting ->
@@ -569,106 +726,101 @@ class ConferenceWebSocketHandler(
                 return
             }
         }
-        val room = rooms[signal.roomId] ?: return
-        synchronized(room) { room.remove(session) }
-        sessionToRoom.remove(session.id)
-        val userId = session.attributes["userId"] as? String ?: return
-        // المغادر يخرج من كل الحالات القائمة، وإلا بقيت يده مرفوعة في
-        // قائمة المضيف وبقي كتمه ساريًا لو عاد بجلسة جديدة.
-        roomHands[signal.roomId]?.remove(userId)
-        roomMuted[signal.roomId]?.remove(userId)
-        // الحضور والطابور مفاتيحهما accountId (هكذا تكتبهما REST)، فحذفهما بـ redId صامتٌ
-        // ولا يحرّر شيئًا: يبقى المقعد محجوزًا حتى تمتلئ الغرفة ولا يدخل أحد بعدها.
-        val accountId = session.attributes["accountId"] as? String ?: userId
-        conferenceRooms.removeParticipant(signal.roomId, accountId)
-        lobbySessions[signal.roomId]?.remove(accountId)
-        conferenceRooms.leaveLobby(signal.roomId, accountId)
-        val leaveMsg = objectMapper.writeValueAsString(mapOf(
-            "type" to "PARTICIPANT_LEFT",
-            "roomId" to signal.roomId,
-            "payload" to mapOf("userId" to userId)
-        ))
-        room.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
-        // If host left, elect new host from remaining if any
-        if (roomHosts[signal.roomId] == userId) {
-            val remaining = room.firstOrNull()?.attributes?.get("userId") as? String
-            if (remaining != null) {
-                roomHosts[signal.roomId] = remaining
-                roomRoles[signal.roomId]?.set(remaining, "HOST")
-                // notify new host election
-                val hostMsg = objectMapper.writeValueAsString(mapOf(
-                    "type" to "HOST_CHANGED",
-                    "roomId" to signal.roomId,
-                    "payload" to mapOf("userId" to remaining)
-                ))
-                room.forEach { runCatching { it.sendMessage(TextMessage(hostMsg)) } }
-            } else {
-                roomRoles.remove(signal.roomId)
-                roomHosts.remove(signal.roomId)
-                roomHands.remove(signal.roomId)
-                roomMuted.remove(signal.roomId)
-            }
-        }
-        if (room.isEmpty()) {
-            rooms.remove(signal.roomId)
-            roomRoles.remove(signal.roomId)
-            roomHosts.remove(signal.roomId)
-            roomHands.remove(signal.roomId)
-            roomMuted.remove(signal.roomId)
-            roomLobby.remove(signal.roomId)
-            roomWaiting.remove(signal.roomId)
-            evictReactionKeys(signal.roomId)
-        }
+        departRoom(session, signal.roomId)
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: org.springframework.web.socket.CloseStatus) {
         val roomId = sessionToRoom.remove(session.id) ?: return
-        val room = rooms[roomId] ?: return
-        synchronized(room) { room.remove(session) }
         val userId = session.attributes["userId"] as? String ?: return
         val accountId = session.attributes["accountId"] as? String ?: userId
+        if (removeWaitingSession(roomId, accountId, session)) {
+            if (lobbySessions[roomId]?.containsKey(accountId) != true) {
+                announceLobbyDecision(roomId, "LOBBY_LEFT", userId)
+            }
+            broadcastLobbyCount(roomId)
+            return
+        }
+        if (roomWaiting[roomId]?.remove(session) == true) return
+        departRoom(session, roomId)
+    }
+
+    /** Only the last socket of an account releases its REST seat and announces departure. */
+    private fun departRoom(session: WebSocketSession, roomId: String) {
+        val room = rooms[roomId] ?: return
+        val userId = session.attributes["userId"] as? String ?: return
+        val accountId = session.attributes["accountId"] as? String ?: userId
+        val lastDevice = synchronized(room) {
+            if (!room.remove(session)) return
+            room.none { (it.attributes["accountId"] as? String ?: it.attributes["userId"] as? String) == accountId }
+        }
+        sessionToRoom.remove(session.id)
+        if (!lastDevice) return
         roomHands[roomId]?.remove(userId)
         roomMuted[roomId]?.remove(userId)
-        conferenceRooms.removeParticipant(roomId, accountId)
-        lobbySessions[roomId]?.remove(accountId)
-        conferenceRooms.leaveLobby(roomId, accountId)
+        conferenceRooms?.removeParticipant(roomId, accountId)
+        conferenceRooms?.leaveLobby(roomId, accountId)
         val leaveMsg = objectMapper.writeValueAsString(mapOf(
-            "type" to "PARTICIPANT_LEFT",
-            "roomId" to roomId,
+            "type" to "PARTICIPANT_LEFT", "roomId" to roomId,
             "payload" to mapOf("userId" to userId)
         ))
-        room.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
-        if (roomHosts[roomId] == userId) {
-            val remaining = room.firstOrNull()?.attributes?.get("userId") as? String
-            if (remaining != null) {
-                roomHosts[roomId] = remaining
-                roomRoles[roomId]?.set(remaining, "HOST")
-                // تعميم انتخاب المضيف الجديد (كان في مسار LEAVE وحده) — وإلا فانقطاع
-                // سوكت المضيف يترك غرفةً بلا مضيف معروف لدى بقية العملاء أبدياً.
-                val remainingSessions = room.toList()
-                val hostMsg = objectMapper.writeValueAsString(mapOf(
-                    "type" to "HOST_CHANGED",
-                    "roomId" to roomId,
-                    "payload" to mapOf("userId" to remaining)
-                ))
-                remainingSessions.forEach { runCatching { it.sendMessage(TextMessage(hostMsg)) } }
-            } else {
-                roomRoles.remove(roomId)
-                roomHosts.remove(roomId)
-                roomHands.remove(roomId)
-                roomMuted.remove(roomId)
-            }
+        room.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
+
+        // A REST-backed room always retains its original host. Electing an arbitrary
+        // remaining WS user would mint host/stage privileges absent from REST policy.
+        if (conferenceRooms == null && roomHosts[roomId] == userId && room.isNotEmpty()) {
+            val successor = room.firstNotNullOfOrNull { it.attributes["userId"] as? String } ?: return
+            roomHosts[roomId] = successor
+            roomRoles[roomId]?.set(successor, "HOST")
+            val changed = objectMapper.writeValueAsString(mapOf(
+                "type" to "HOST_CHANGED", "roomId" to roomId,
+                "payload" to mapOf("userId" to successor)
+            ))
+            room.forEach { runCatching { it.sendMessage(TextMessage(changed)) } }
         }
         if (room.isEmpty()) {
-            rooms.remove(roomId)
+            rooms.remove(roomId, room)
             roomRoles.remove(roomId)
             roomHosts.remove(roomId)
             roomHands.remove(roomId)
             roomMuted.remove(roomId)
-            roomLobby.remove(roomId)
             roomWaiting.remove(roomId)
             evictReactionKeys(roomId)
         }
+    }
+
+    /** A REST leave revokes all of this account's WS devices without evicting other members. */
+    fun evictAccount(roomId: String, accountId: String) {
+        lobbySessions[roomId]?.remove(accountId)?.forEach { waiting ->
+            sendLobbyResult(waiting, roomId, "denied")
+            sessionToRoom.remove(waiting.id)
+            runCatching { waiting.close() }
+        }
+        rooms[roomId]?.filter { (it.attributes["accountId"] as? String ?: it.attributes["userId"] as? String) == accountId }
+            ?.forEach { session ->
+                departRoom(session, roomId)
+                runCatching { session.close() }
+            }
+    }
+
+    /** Host REST close revokes every socket and clears the remaining in-memory stage/lobby. */
+    fun closeSignalingRoom(roomId: String) {
+        rooms.remove(roomId)?.forEach { session ->
+            sendError(session, roomId, "ROOM_CLOSED", "Room closed by host")
+            sessionToRoom.remove(session.id)
+            runCatching { session.close() }
+        }
+        lobbySessions.remove(roomId)?.values?.flatten()?.forEach { session ->
+            sendLobbyResult(session, roomId, "denied")
+            sessionToRoom.remove(session.id)
+            runCatching { session.close() }
+        }
+        roomRoles.remove(roomId)
+        roomHosts.remove(roomId)
+        roomHands.remove(roomId)
+        roomMuted.remove(roomId)
+        roomLobby.remove(roomId)
+        roomWaiting.remove(roomId)
+        evictReactionKeys(roomId)
     }
 
     /** تنظيف مفاتيح حدّ التفاعلات عند موت الغرفة — وإلا تراكمت بلا حد في الذاكرة. */

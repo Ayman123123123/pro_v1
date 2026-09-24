@@ -73,6 +73,8 @@ class ConferenceSignalingClient(
         }
         fun onParticipantLeft(userId: String)
         fun onParticipantJoined(participant: ConferenceParticipant)
+        /** REST-backed lobby lifecycle: waiting / admitted / denied. */
+        fun onLobbyState(state: String, waiting: Int) = Unit
         /**
          * غرفة الانتظار: حالة اللوبي + قائمة المنتظرين — من ROOM_STATE
          * (كما يصل للمضيف الجديد أو العائد بعد الانقطاع فلا تفقد القائمة).

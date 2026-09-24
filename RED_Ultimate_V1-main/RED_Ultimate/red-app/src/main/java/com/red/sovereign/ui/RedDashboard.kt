@@ -2935,7 +2935,7 @@ private fun ChatHubScreen(
 }
 
 @Composable
-private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, contacts: List<com.red.sovereign.contacts.PublicRedProfile>, onlineIds: Set<String> = emptySet(), myDisplayName: String = "", onExplore: () -> Unit) {
+internal fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, contacts: List<com.red.sovereign.contacts.PublicRedProfile>, onlineIds: Set<String> = emptySet(), myDisplayName: String = "", onExplore: () -> Unit) {
     var showStatsScreen by remember { mutableStateOf(false) }
     var showScheduledCallsScreen by remember { mutableStateOf(false) }
     var showLanScreen by remember { mutableStateOf(false) }

@@ -70,7 +70,7 @@ class OpenApiConfig {
                 )
                 .addSecuritySchemes("idempotencyKey", SecurityScheme()
                     .type(SecurityScheme.Type.APIKEY)
-                    .in(SecurityScheme.In.HEADER)
+                    .`in`(SecurityScheme.In.HEADER)
                     .name("Idempotency-Key")
                     .description("Optional idempotency key for write operations (max 64 chars)")
                 )

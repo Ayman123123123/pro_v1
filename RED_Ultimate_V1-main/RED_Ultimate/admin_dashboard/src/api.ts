@@ -7,6 +7,8 @@ function csrfToken(): string | undefined {
 }
 
 const USER_KEY = 'red_admin_user';
+// Prevent an in-flight refresh from restoring access after logout (or another login).
+let authGeneration = 0;
 
 export const authStore = {
   access: () => sessionStorage.getItem(ACCESS_KEY),
@@ -15,12 +17,14 @@ export const authStore = {
     try { return JSON.parse(sessionStorage.getItem(USER_KEY) || 'null'); } catch { return null; }
   },
   set(access: string, refresh?: string, user?: unknown) {
+    authGeneration++;
     sessionStorage.setItem(ACCESS_KEY, access);
     if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
     else localStorage.removeItem(REFRESH_KEY);
     if (user) sessionStorage.setItem(USER_KEY, JSON.stringify(user));
   },
   clear() {
+    authGeneration++;
     sessionStorage.removeItem(ACCESS_KEY);
     sessionStorage.removeItem(USER_KEY);
     localStorage.removeItem(REFRESH_KEY);
@@ -87,6 +91,7 @@ async function readJson(res: Response) {
 let rotating: Promise<boolean> | null = null;
 
 async function performRotate(): Promise<boolean> {
+  const generation = authGeneration;
   const refreshToken = authStore.refresh();
   const csrf = csrfToken();
   // Browser admin sessions keep the refresh secret in an HttpOnly cookie
@@ -102,8 +107,10 @@ async function performRotate(): Promise<boolean> {
       headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-RED-CSRF': csrf } : {}) },
       body: JSON.stringify({ refreshToken: refreshToken || '' })
     });
+    if (generation !== authGeneration) return false;
     if (!response.ok) { authStore.clear(); return false; }
     const data = await response.json();
+    if (generation !== authGeneration) return false;
     if (!data.accessToken) { authStore.clear(); return false; }
     authStore.set(data.accessToken, data.refreshToken || undefined, authStore.user() || undefined);
     return true;
@@ -125,12 +132,14 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
   const headers = new Headers(init.headers);
   headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
   const access = authStore.access();
+  const generation = authGeneration;
   if (access) headers.set('Authorization', `Bearer ${access}`);
   const response = await fetch(path, { ...init, headers, credentials: init.credentials || 'same-origin' });
-  if (response.status === 401 && retry) {
+  if (response.status === 401 && retry && generation === authGeneration) {
     const refreshed = await rotate();
     if (refreshed) return apiFetch(path, init, false);
-    authStore.clear();
+    // Do not clear a newer login or discard a refresh token on a network outage.
+    // A rejected refresh already called authStore.clear() inside performRotate.
   }
   return response;
 }
@@ -276,21 +285,34 @@ export async function adminLogin(username: string, password: string) {
   if (user?.role !== 'ADMIN') {
     throw new Error('هذا الحساب ليس مسؤولاً. ادخل بـ RED_ADMIN_USERNAME من ملف .env');
   }
-  authStore.set(String(data.accessToken || ''), typeof data.refreshToken === 'string' ? data.refreshToken : undefined, data.user);
+  if (typeof data.accessToken !== 'string' || !data.accessToken) {
+    throw new Error('الخادم لم يرجع رمز وصول صالحاً');
+  }
+  authStore.set(data.accessToken, typeof data.refreshToken === 'string' ? data.refreshToken : undefined, data.user);
   return data;
 }
 
-export async function adminLogout() {
+export async function adminLogout(): Promise<void> {
+  // Admin web refresh is HttpOnly: there may be no JavaScript refreshToken at all.
+  // Always call the backend with the cookie and CSRF token. Never use apiFetch here:
+  // its 401 retry would rotate the very session we are trying to invalidate.
   const refreshToken = authStore.refresh();
-  if (refreshToken) {
-    const csrf = csrfToken();
-    await apiFetch('/api/auth/logout', {
+  const csrf = csrfToken();
+  authStore.clear(); // invalidate locally first; abort any in-flight rotate via generation
+  let response: Response;
+  try {
+    response = await fetch('/api/auth/logout', {
       method: 'POST',
-      headers: csrf ? { 'X-RED-CSRF': csrf } : undefined,
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-RED-CSRF': csrf } : {}) },
       body: JSON.stringify({ refreshToken: refreshToken || '' })
-    }).catch(() => {}); // Best-effort; clear tokens regardless
+    });
+  } catch {
+    throw new Error('خرجت من هذا الجهاز، لكن تعذّر الاتصال بالخادم لإبطال الجلسة. حاول مجدداً عند عودة الشبكة.');
   }
-  authStore.clear();
+  if (!response.ok) {
+    throw new Error('خرجت من هذا الجهاز، لكن لم يؤكد الخادم إبطال الجلسة. أبلغ المسؤول إن استمرت المشكلة.');
+  }
 }
 
 // ━━━━━━━━━━━━━━━━ 🔔 Notifications ━━━━━━━━━━━━━━━━

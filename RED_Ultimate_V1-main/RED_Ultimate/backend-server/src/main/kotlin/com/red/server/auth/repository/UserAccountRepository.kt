@@ -37,12 +37,6 @@ interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecifica
 
     fun countByCreatedAtAfter(after: Instant): Long
 
-    // Public directory search: username OR displayName substring (case-insensitive).
-    fun findAllByUsernameContainingIgnoreCaseOrDisplayNameContainingIgnoreCase(
-        username: String,
-        displayName: String
-    ): List<UserAccount>
-
 }
 
 fun UserAccountRepository.searchForAdmin(

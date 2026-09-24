@@ -138,7 +138,6 @@ export function useApiQuery<T>(
     } finally {
       if (mounted.current && requestId.current === id) setIsLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, key, keepPrevious]);
 
   useEffect(() => {

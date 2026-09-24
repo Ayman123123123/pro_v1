@@ -32,6 +32,9 @@ function redDevApiFallback(): Plugin {
     name: 'red-dev-api-fallback',
     apply: 'serve',
     configureServer(server) {
+      // Vitest uses the Vite plugin pipeline, but must not start mock servers or
+      // leave a probe interval running after the unit tests finish.
+      if (process.env.VITEST) return;
       // eslint-disable-next-line no-console
       void ensureProbe().then((real) =>
         console.log(real

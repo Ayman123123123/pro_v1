@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, Link, useLoaderData, useRouter } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { LayoutDashboard, Users, BarChart3, Shield, Settings, Lock, LogOut, User, Menu, X, Sun, Moon, Monitor, Bell, ChevronDown, ChevronRight, Boxes, FileText, Newspaper, ScrollText, CheckCircle2, Megaphone, Flag, PhoneCall, Archive, Activity, Database, Gauge, KeyRound } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useSidebar } from '@/components/providers/SidebarProvider';
@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/useToast';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -50,8 +51,7 @@ const navGroupLabels: Record<string, string> = {
   system: 'النظام',
 };
 
-export const Route = createFileRoute('/_layout')({
-  component: () => {
+function AdminLayout() {
     const { user, isAuthenticated, isLoading, logout } = useAuth();
     const { isOpen, isCollapsed, toggleSidebar, setSidebarOpen, toggleCollapse } = useSidebar();
     const { theme, resolvedTheme, setTheme } = useTheme();
@@ -68,12 +68,18 @@ export const Route = createFileRoute('/_layout')({
     }, [isLoading, isAuthenticated, navigate]);
 
     const filteredNavItems = navItems.filter((item) =>
-      !item.roles || !user?.role || item.roles.includes(user.role)
+      !item.roles || item.roles.includes(user?.role || '')
     );
 
-    const handleLogout = () => {
-      logout();
+    const handleLogout = async () => {
       setMobileMenuOpen(false);
+      try {
+        await logout();
+      } catch (error) {
+        toast.error('تعذّر تأكيد إبطال الجلسة', error instanceof Error ? error.message : undefined);
+      } finally {
+        void navigate({ to: '/login', replace: true });
+      }
     };
 
     const toggleTheme = () => {
@@ -88,6 +94,9 @@ export const Route = createFileRoute('/_layout')({
       dark: <Moon className="h-4 w-4" />,
       system: <Monitor className="h-4 w-4" />,
     };
+
+    // Do not paint private/admin data while the redirect effect is pending.
+    if (isLoading || !isAuthenticated || !user) return null;
 
     return (
       <TooltipProvider>
@@ -278,7 +287,6 @@ export const Route = createFileRoute('/_layout')({
         </div>
       </TooltipProvider>
     );
-  },
-});
+}
 
-import { useState } from 'react';
+export const Route = createFileRoute('/_layout')({ component: AdminLayout });

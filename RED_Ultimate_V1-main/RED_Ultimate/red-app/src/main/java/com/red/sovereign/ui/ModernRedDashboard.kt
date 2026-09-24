@@ -35,6 +35,10 @@ import com.red.sovereign.media.VoiceMessageViewModel
 import com.red.sovereign.ui.components.*
 import com.red.sovereign.ui.screens.*
 import com.red.sovereign.ui.theme.*
+import com.red.sovereign.settings.SettingsPage
+import com.red.sovereign.settings.SettingsViewModel
+import com.red.sovereign.settings.YounesSettingsSheet
+import com.red.sovereign.features.explore.RedExploreScreen
 
 /**
  * لوحة تحكم يونس الحديثة - أفضل من واتساب وتيليجرام
@@ -75,33 +79,28 @@ fun ModernRedDashboard(
     val isExpanded = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded
     
     var currentSection by remember { mutableStateOf(ModernSection.CHATS) }
-    var showCallDialer by remember { mutableStateOf(false) }
     var showCreateGroup by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var showDinstar by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
     
     // ViewModels - الأصلية التي تعمل 100% بدون تكرار - أحدث وأفضل
     val groups: GroupViewModel = viewModel()
     val directory: DirectoryViewModel = viewModel()
     val callHistory: CallHistoryViewModel = viewModel()
-    val safety: com.red.sovereign.crypto.SafetyViewModel = viewModel()
+    val settings: SettingsViewModel = viewModel()
+    var settingsPage by remember { mutableStateOf(SettingsPage.ROOT) }
+    val openSettings: (SettingsPage) -> Unit = { page -> settingsPage = page; showSettings = true }
     val attachments: AttachmentViewModel = viewModel()
     val voiceMessages: VoiceMessageViewModel = viewModel()
     
     // شبكة موحدة - كل الشبكات: WiFi/Ethernet/USB/VPN/Hotspot/BT/Mobile + P2P
     val networkInfo by UnifiedNetworkManager.currentNetwork.collectAsState()
     val isOnline by UnifiedNetworkManager.isOnline.collectAsState()
-    
-    // مكالمات موحدة - 9 أنواع + 6 مسارات رنين مضمونة
-    val callState by UnifiedCallOrchestrator.state.collectAsState()
-    
-    // تبديل تلقائي لتبويب المكالمات عند وجود مكالمة - UX أسطوري
-    LaunchedEffect(callState) {
-        if (callState !is CallStateUnified.Idle && callState !is CallStateUnified.Ended) {
-            currentSection = ModernSection.CALLS
-        }
+
+    LaunchedEffect(CallRuntime.state) {
+        if (CallRuntime.state !is CallUiState.Idle) currentSection = ModernSection.CALLS
     }
-    
+
     Scaffold(
         containerColor = YounesMidnight,
         bottomBar = {
@@ -109,7 +108,6 @@ fun ModernRedDashboard(
                 currentSection = currentSection,
                 onSectionSelected = { section ->
                     currentSection = section
-                    showDinstar = false
                     if (section == ModernSection.CALLS) {
                         callHistory.load()
                         directory.refreshPresence()
@@ -123,10 +121,7 @@ fun ModernRedDashboard(
         floatingActionButton = {
             ModernFabForSection(
                 section = currentSection,
-                onChatClick = { /* فتح جهات الاتصال */ },
-                onGroupClick = { showCreateGroup = true },
-                onCallClick = { showCallDialer = true },
-                onExploreClick = { /* إنشاء محتوى */ }
+                onGroupClick = { showCreateGroup = true }
             )
         }
     ) { padding ->
@@ -145,18 +140,14 @@ fun ModernRedDashboard(
                     networkQuality = networkInfo?.quality?.name ?: "UNKNOWN",
                     isLan = networkInfo?.type?.name?.contains("WIFI") == true,
                     isOnline = isOnline,
-                    onSettings = { showSettings = true },
-                    onSearch = { /* بحث شامل */ }
+                    onSettings = { openSettings(SettingsPage.ROOT) },
+                    onSearch = { showSearch = true }
                 )
                 
                 // محتوى التبويب الحالي
-                when {
-                    showDinstar -> ModernDinstarScreen(
-                        account = account,
-                        viewModel = authViewModel,
-                        onBack = { showDinstar = false }
-                    )
-                    else -> when (currentSection) {
+                if (showSearch) {
+                    RedGlobalSearch(onBack = { showSearch = false })
+                } else when (currentSection) {
                         ModernSection.CHATS -> ModernChatsScreen(
                             account = account,
                             groups = groups,
@@ -178,45 +169,22 @@ fun ModernRedDashboard(
                             contacts = directory.contacts,
                             onlineIds = directory.onlineIds.toSet(),
                             myDisplayName = account.username,
-                            onPstn = { number -> showDinstar = true }
+                            onExplore = { currentSection = ModernSection.EXPLORE }
                         )
                         ModernSection.EXPLORE -> ModernExploreScreen(
                             account = account,
                             onBack = { currentSection = ModernSection.CHATS }
                         )
-                        ModernSection.MORE -> ModernMoreScreen(
-                            account = account,
-                            onDinstar = { showDinstar = true },
-                            onSettings = { showSettings = true }
-                        )
-                    }
+                        ModernSection.MORE -> ModernMoreScreen(onSettingsPage = openSettings)
                 }
             }
         }
     }
     
     // Overlays للمكالمات - تعمل على كل الشاشات
-    UnifiedCallOverlaysModern()
+    UnifiedCallOverlays()
     
     // حوارات
-    if (showCallDialer) {
-        ModernCallDialerDialog(
-            onDismiss = { showCallDialer = false },
-            onCall = { redId, isVideo ->
-                showCallDialer = false
-                val callType = if (isVideo) CallTypeUnified.ONE_TO_ONE_VIDEO else CallTypeUnified.ONE_TO_ONE_AUDIO
-                val info = CallInfo(
-                    callId = "call_${System.currentTimeMillis()}",
-                    type = callType,
-                    peerId = redId,
-                    peerName = redId,
-                    isVideo = isVideo
-                )
-                UnifiedCallOrchestrator.startCall(context, info)
-            }
-        )
-    }
-    
     if (showCreateGroup) {
         ModernCreateGroupDialog(
             onDismiss = { showCreateGroup = false },
@@ -231,15 +199,11 @@ fun ModernRedDashboard(
     }
     
     if (showSettings) {
-        // إعدادات حديثة
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable { showSettings = false }
-        ) {
-            // سيتم تنفيذ شاشة الإعدادات الحديثة
-        }
+        YounesSettingsSheet(
+            account, settings, authViewModel, authViewModel::logout,
+            dismiss = { showSettings = false; settingsPage = SettingsPage.ROOT },
+            initialPage = settingsPage
+        )
     }
 }
 
@@ -363,180 +327,9 @@ fun ModernBottomBar(
 }
 
 @Composable
-fun ModernFabForSection(
-    section: ModernSection,
-    onChatClick: () -> Unit,
-    onGroupClick: () -> Unit,
-    onCallClick: () -> Unit,
-    onExploreClick: () -> Unit
-) {
-    when (section) {
-        ModernSection.CHATS -> ModernFab(
-            icon = Icons.Default.Chat,
-            text = "دردشة",
-            onClick = onChatClick
-        )
-        ModernSection.GROUPS -> ModernFab(
-            icon = Icons.Default.GroupAdd,
-            text = "مجموعة",
-            onClick = onGroupClick
-        )
-        ModernSection.CALLS -> ModernFab(
-            icon = Icons.Default.Dialpad,
-            text = "اتصال",
-            onClick = onCallClick
-        )
-        ModernSection.EXPLORE -> ModernFab(
-            icon = Icons.Default.Add,
-            text = "إنشاء",
-            onClick = onExploreClick
-        )
-        else -> {}
-    }
-}
-
-@Composable
-fun UnifiedCallOverlaysModern() {
-    val callState by UnifiedCallOrchestrator.state.collectAsState()
-    
-    when (val state = callState) {
-        is CallStateUnified.Outgoing -> {
-            // عرض شاشة اتصال صادر
-            CallOverlayModern(
-                peerName = state.info.peerName,
-                peerId = state.info.peerId,
-                callType = state.info.type,
-                ringingState = state.ringingState,
-                isOutgoing = true,
-                onEnd = { /* إنهاء */ }
-            )
-        }
-        is CallStateUnified.Incoming -> {
-            // عرض شاشة اتصال وارد مع رنين
-            CallOverlayModern(
-                peerName = state.info.peerName,
-                peerId = state.info.peerId,
-                callType = state.info.type,
-                ringingState = RingingState.RINGING,
-                isOutgoing = false,
-                onAccept = { /* قبول */ },
-                onDecline = { /* رفض */ }
-            )
-        }
-        is CallStateUnified.Active -> {
-            // عرض شاشة مكالمة نشطة
-            ActiveCallScreenModern(
-                info = state.info,
-                durationMs = state.durationMs,
-                isHeld = state.isHeld
-            )
-        }
-        else -> {}
-    }
-}
-
-@Composable
-fun CallOverlayModern(
-    peerName: String,
-    peerId: String,
-    callType: CallTypeUnified,
-    ringingState: RingingState,
-    isOutgoing: Boolean,
-    onEnd: () -> Unit = {},
-    onAccept: () -> Unit = {},
-    onDecline: () -> Unit = {}
-) {
-    // تنفيذ واجهة مكالمة حديثة
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(YounesMidnight.copy(alpha = 0.95f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = UnifiedCallOrchestrator.getCallTypeIcon(callType),
-                fontSize = 48.sp
-            )
-            Text(
-                text = peerName.ifBlank { peerId },
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            Text(
-                text = when (ringingState) {
-                    RingingState.CONNECTING -> "جاري الاتصال..."
-                    RingingState.RINGING -> "يرن على جهاز المستلم"
-                    RingingState.WAKING_UP -> "جاري إيقاظ الجهاز..."
-                    RingingState.NO_ANSWER -> "لا يوجد رد"
-                    RingingState.BUSY -> "المستلم مشغول"
-                    RingingState.DECLINED -> "تم الرفض"
-                },
-                fontSize = 14.sp,
-                color = YounesMuted
-            )
-            Text(
-                text = UnifiedCallOrchestrator.getCallTypeDescription(callType),
-                fontSize = 11.sp,
-                color = YounesMuted,
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
-            
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (isOutgoing) {
-                    Button(
-                        onClick = onEnd,
-                        colors = ButtonDefaults.buttonColors(containerColor = YounesRose)
-                    ) {
-                        Icon(Icons.Default.CallEnd, "إنهاء")
-                        Spacer(Modifier.width(8.dp))
-                        Text("إنهاء")
-                    }
-                } else {
-                    Button(
-                        onClick = onDecline,
-                        colors = ButtonDefaults.buttonColors(containerColor = YounesSurface2)
-                    ) {
-                        Icon(Icons.Default.CallEnd, "رفض")
-                        Spacer(Modifier.width(8.dp))
-                        Text("رفض")
-                    }
-                    Button(
-                        onClick = onAccept,
-                        colors = ButtonDefaults.buttonColors(containerColor = YounesPrimary)
-                    ) {
-                        Icon(Icons.Default.Call, "قبول")
-                        Spacer(Modifier.width(8.dp))
-                        Text("قبول")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ActiveCallScreenModern(
-    info: CallInfo,
-    durationMs: Long,
-    isHeld: Boolean
-) {
-    // شاشة مكالمة نشطة حديثة
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(YounesMidnight),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("مكالمة نشطة: ${info.peerName}", color = Color.White, fontSize = 18.sp)
-            Text("المدة: ${durationMs / 1000}s", color = YounesMuted)
-            if (isHeld) Text("معلقة", color = YounesAccent)
-        }
+fun ModernFabForSection(section: ModernSection, onGroupClick: () -> Unit) {
+    if (section == ModernSection.GROUPS) {
+        ModernFab(icon = Icons.Default.GroupAdd, text = "مجموعة", onClick = onGroupClick)
     }
 }
 
@@ -601,137 +394,19 @@ fun ModernCallsScreen(
     contacts: List<com.red.sovereign.contacts.PublicRedProfile>,
     onlineIds: Set<String>,
     myDisplayName: String,
-    onPstn: (String?) -> Unit
+    onExplore: () -> Unit
 ) {
-    // إصلاح أسطوري: المكالمات ترن وتتصل - بدون تعارضات
-    // UnifiedCallsScreen موجودة ومحسنة مع 9 أنواع + 6 مسارات رنين + P2P+SFU
-    // YounesCallService موجود ويضمن الرنين عبر FCM+Telecom+LAN
-    com.red.sovereign.ui.UnifiedCallsScreen(
-        ownUserId = ownUserId,
-        history = history,
-        contacts = contacts,
-        onlineIds = onlineIds,
-        myDisplayName = myDisplayName,
-        onExplore = {},
-        onPstn = onPstn
-    )
+    // Reuse the call hub that owns permissions and actual service/overlay state.
+    UnifiedCallsScreen(ownUserId, history, contacts, onlineIds, myDisplayName, onExplore)
 }
 
 @Composable
-fun ModernExploreScreen(
-    account: AuthState.Authenticated,
-    onBack: () -> Unit
-) {
-    // استكشاف: قنوات ومجتمعات وبث مباشر - بدون شاشة سوداء
-    // LiveStreamService موجود ومصلح مع cameraError + retry + isAudioOnly
-    // ConferenceService موجود وأفضل من تويتر مع 100 فيديو + breakout + recording
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(YounesMidnight)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("استكشاف سيادي", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        
-        // بث مباشر - بدون شاشة سوداء
-        Card(
-            Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = YounesSurface1)
-        ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .background(Color(0xFFEF4444), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text("مباشر", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text("البث المباشر", fontWeight = FontWeight.Bold, color = Color.White)
-                }
-                Text("بث مباشر مع جمهور غير محدود - بدون شاشة سوداء، EGL مضمون", fontSize = 12.sp, color = YounesMuted)
-                Button(
-                    onClick = { /* بدء بث */ },
-                    colors = ButtonDefaults.buttonColors(containerColor = YounesRose),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.LiveTv, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("بدء بث مباشر")
-                }
-            }
-        }
-        
-        // مؤتمرات - أفضل من تويتر
-        Card(
-            Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = YounesSurface1)
-        ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .background(Color(0xFF7C3AED), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text("أفضل من تويتر", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text("المؤتمرات السيادية", fontWeight = FontWeight.Bold, color = Color.White)
-                }
-                Text("100 مشارك فيديو vs تويتر 13 صوت فقط + غرف فرعية + تسجيل + مشاركة شاشة - شغالة 100%", fontSize = 12.sp, color = YounesMuted)
-                Button(
-                    onClick = { /* إنشاء مؤتمر */ },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.VideoCameraFront, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("إنشاء مؤتمر")
-                }
-            }
-        }
-        
-        // قنوات ومجتمعات
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Card(
-                Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = YounesSurface1)
-            ) {
-                Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.Campaign, null, tint = YounesPrimary, modifier = Modifier.size(28.dp))
-                    Spacer(Modifier.height(8.dp))
-                    Text("القنوات", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-                    Text("عامة وخاصة", fontSize = 11.sp, color = YounesMuted)
-                }
-            }
-            Card(
-                Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = YounesSurface1)
-            ) {
-                Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.Diversity3, null, tint = YounesCobalt, modifier = Modifier.size(28.dp))
-                    Spacer(Modifier.height(8.dp))
-                    Text("المجتمعات", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-                    Text("كبيرة", fontSize = 11.sp, color = YounesMuted)
-                }
-            }
-        }
-    }
+fun ModernExploreScreen(account: AuthState.Authenticated, onBack: () -> Unit) {
+    RedExploreScreen(rememberDashboardTokenStore(), account.redId, onBack)
 }
 
 @Composable
-fun ModernMoreScreen(
-    account: AuthState.Authenticated,
-    onDinstar: () -> Unit,
-    onSettings: () -> Unit
-) {
+fun ModernMoreScreen(onSettingsPage: (SettingsPage) -> Unit) {
     // المزيد: كل الخدمات السيادية - ألوان مقروءة AAA + دعم كل الهواتف
     LazyColumn(
         Modifier
@@ -747,21 +422,20 @@ fun ModernMoreScreen(
         item {
             // بطاقات الخدمات - ألوان عالية التباين AAA مقروءة
             val services = listOf(
-                Triple("الهاتف اليمني 🇾🇪", "اتصال بأرقام يمنية عبر DINSTAR", Icons.Default.SimCard) to onDinstar,
-                Triple("الإعدادات", "الخصوصية والأمان والمظهر", Icons.Default.Settings) to onSettings,
-                Triple("الأجهزة المرتبطة", "إدارة الأجهزة", Icons.Default.Devices) to {},
-                Triple("التخزين", "إدارة التخزين والكاش", Icons.Default.Folder) to {},
-                Triple("المساعدة", "الدعم الفني", Icons.Default.Help) to {}
+                Triple("الإعدادات", "الخصوصية والأمان والمظهر", Icons.Default.Settings) to SettingsPage.ROOT,
+                Triple("الأجهزة المرتبطة", "إدارة الأجهزة", Icons.Default.Devices) to SettingsPage.DEVICES,
+                Triple("التخزين", "إدارة التخزين والكاش", Icons.Default.Folder) to SettingsPage.DATA,
+                Triple("حول التطبيق", "معلومات وإصدار التطبيق", Icons.Default.Info) to SettingsPage.ABOUT
             )
             
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                services.forEach { (info, onClick) ->
+                services.forEach { (info, page) ->
                     val (title, desc, icon) = info
                     Card(
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .clickable(onClick = onClick as () -> Unit),
+                            .clickable { onSettingsPage(page) },
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(containerColor = YounesSurface1)
                     ) {
@@ -792,90 +466,11 @@ fun ModernMoreScreen(
         }
         
         item {
-            // معلومات النظام - أحدث التقنيات + مزامنة سريعة
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = YounesPrimary.copy(alpha = 0.1f))
-            ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, null, tint = YounesAccent, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("نظام موحد أسطوري", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-                    }
-                    Text("✓ مكالمات ترن وتتصل 9 أنواع 6 مسارات - لا تعارضات", fontSize = 11.sp, color = YounesMuted)
-                    Text("✓ مجموعات تنشأ وتظهر كل المميزات", fontSize = 11.sp, color = YounesMuted)
-                    Text("✓ بث لا شاشة سوداء + مؤتمرات أفضل من تويتر 100%", fontSize = 11.sp, color = YounesMuted)
-                    Text("✓ كل قواعد البيانات مطورة + مزامنة سريعة <2s", fontSize = 11.sp, color = YounesMuted)
-                    Text("✓ واجهات أحدث + AAA مقروءة + كل الهواتف + أحدث تقنيات", fontSize = 11.sp, color = YounesMuted)
-                }
-            }
+            Text("تختلف إتاحة الاتصال والوسائط حسب صلاحيات الجهاز واتصال الخادم. " +
+                "هاتف الشبكات الخلوية عبر DINSTAR مؤجل وغير متاح في هذا الإصدار.",
+                color = YounesMuted, fontSize = 12.sp)
         }
     }
-}
-
-@Composable
-fun ModernDinstarScreen(
-    account: AuthState.Authenticated,
-    viewModel: AuthViewModel,
-    onBack: () -> Unit
-) {
-    // الهاتف اليمني - حصري
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(YounesMidnight),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Default.SimCard, null, tint = YounesAccent, modifier = Modifier.size(48.dp))
-            Text("الهاتف اليمني - DINSTAR", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("اتصال بأرقام يمنية: يمن موبايل، سبأفون، YOU، واي", color = YounesMuted, fontSize = 12.sp)
-            Button(onClick = onBack, shape = RoundedCornerShape(10.dp)) {
-                Text("رجوع")
-            }
-        }
-    }
-}
-
-@Composable
-fun ModernCallDialerDialog(
-    onDismiss: () -> Unit,
-    onCall: (String, Boolean) -> Unit
-) {
-    var redId by remember { mutableStateOf("") }
-    var isVideo by remember { mutableStateOf(false) }
-    
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("مكالمة جديدة مشفرة") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = redId,
-                    onValueChange = { redId = it },
-                    label = { Text("معرف يونس RED ID") },
-                    placeholder = { Text("مثال: 10001") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = isVideo, onCheckedChange = { isVideo = it })
-                    Text("مكالمة فيديو")
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onCall(redId, isVideo) },
-                enabled = redId.isNotBlank()
-            ) {
-                Text(if (isVideo) "فيديو" else "صوتي")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
-        }
-    )
 }
 
 @Composable
