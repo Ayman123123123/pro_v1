@@ -1,10 +1,22 @@
 package com.red.sovereign.core.database
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 import androidx.room.Index
 
-@Entity(tableName = "messages", indices = [Index("conversationId"), Index("status"), Index(value = ["conversationId", "createdAt"])])
+@Entity(
+    tableName = "messages",
+    indices = [
+        Index("conversationId"),
+        Index("status"),
+        Index(value = ["conversationId", "createdAt"]),
+        Index("senderId"),
+        Index("sequence"),
+        Index("replyToMessageId"),
+        Index(value = ["conversationId", "status", "createdAt"])
+    ]
+)
 data class MessageEntity(
     @PrimaryKey val id: String,
     val conversationId: String,
@@ -84,7 +96,12 @@ data class MessageEntity(
     tableName = "local_history",
     indices = [
         Index(value = ["conversationId", "createdAt"]),
-        Index(value = ["conversationId", "messageType", "createdAt"])
+        Index(value = ["conversationId", "messageType", "createdAt"]),
+        Index("status"),
+        Index(value = ["conversationId", "status"]),
+        Index(value = ["outgoing", "status", "createdAt"]),
+        Index("senderId"),
+        Index("replyToMessageId")
     ]
 )
 data class LocalHistoryEntity(
@@ -143,7 +160,8 @@ data class LocalHistoryEntity(
     tableName = "conversations",
     indices = [
         Index(value = ["archived", "pinned", "lastMessageTimestamp"]),
-        Index("lastMessageTimestamp")
+        Index("lastMessageTimestamp"),
+        Index(value = ["peerId"], unique = true)
     ]
 )
 data class ConversationEntity(
@@ -157,7 +175,15 @@ data class ConversationEntity(
     val unreadCount: Int = 0
 )
 
-@Entity(tableName = "contacts")
+@Entity(
+    tableName = "contacts",
+    indices = [
+        Index("username"),
+        Index("displayName"),
+        Index(value = ["isFriend", "displayName"]),
+        Index("isBlocked")
+    ]
+)
 data class ContactEntity(
     @PrimaryKey val redId: String,
     val username: String,
@@ -170,7 +196,10 @@ data class ContactEntity(
 
 @Entity(
     tableName = "groups",
-    indices = [Index("createdAt"), Index("archived"), Index("updatedAt")]
+    indices = [
+        Index("createdAt"), Index("archived"), Index("updatedAt"),
+        Index("ownerRedId"), Index("communityId")
+    ]
 )
 data class GroupEntity(
     @PrimaryKey val id: String,
@@ -194,7 +223,8 @@ data class GroupEntity(
     tableName = "call_logs",
     indices = [
         Index("timestamp"),
-        Index(value = ["peerId", "timestamp"])
+        Index(value = ["peerId", "timestamp"]),
+        Index("status")
     ]
 )
 data class CallLogEntity(
@@ -211,7 +241,10 @@ data class CallLogEntity(
     val endedAt: Long? = null
 )
 
-@Entity(tableName = "stories")
+@Entity(
+    tableName = "stories",
+    indices = [Index("expiresAt"), Index("userId"), Index(value = ["userId", "expiresAt"])]
+)
 data class StoryEntity(
     @PrimaryKey val id: String,
     val userId: String,
@@ -239,7 +272,15 @@ data class DraftEntity(
 @Entity(
     tableName = "message_reactions",
     primaryKeys = ["messageId", "senderId"],
-    indices = [Index("conversationId"), Index("messageId")]
+    indices = [Index("conversationId"), Index("messageId"), Index("senderId")],
+    foreignKeys = [
+        ForeignKey(
+            entity = LocalHistoryEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["messageId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ]
 )
 data class MessageReactionEntity(
     val messageId: String,
@@ -279,7 +320,16 @@ fun List<LocalHistoryEntity>.distinctTopics(): List<String> =
  */
 @Entity(
     tableName = "starred_messages",
-    indices = [Index("conversationId"), Index("starredAt")])
+    indices = [Index("conversationId"), Index("starredAt"), Index("senderId")],
+    foreignKeys = [
+        ForeignKey(
+            entity = LocalHistoryEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["messageId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ]
+)
 data class StarredMessageEntity(
     @PrimaryKey val messageId: String,
     val conversationId: String,
@@ -296,7 +346,11 @@ data class StarredMessageEntity(
  */
 @Entity(
     tableName = "media_uploads",
-    indices = [Index(value = ["status", "nextAttemptAt"]), Index(value = ["messageId"], unique = true)]
+    indices = [
+        Index(value = ["status", "nextAttemptAt"]),
+        Index(value = ["messageId"], unique = true),
+        Index("conversationId")
+    ]
 )
 data class MediaUploadEntity(
     @PrimaryKey val messageId: String,

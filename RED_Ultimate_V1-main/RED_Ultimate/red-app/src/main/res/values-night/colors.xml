@@ -36,8 +36,8 @@
     <color name="yns_on_surface">#FFFFFF</color>
     <color name="yns_text_primary">#FFFFFF</color>
     <color name="yns_text_secondary">#9FB0C2</color>
-    <color name="yns_text_tertiary">#7A8FA3</color>
-    <color name="yns_text_disabled">#4A5B70</color>
+    <color name="yns_text_tertiary">#8A9BB0</color>
+    <color name="yns_text_disabled">#6B7E94</color>
 
     <!-- الحدود والفواصل: yns_outline للعنصر التفاعلي، والباقي زخرفي -->
     <color name="yns_outline">#7A8FA3</color>

@@ -96,6 +96,9 @@ class UserStatusService(
         }
         if (!canSee) return null
 
+        // فحص الجمهور الموحّد: المحظور ثنائيًا يرى OFFLINE دائمًا ولا يكشف شيئًا.
+        if (targetRedId != requesterRedId && isBlockedPair(target, requester)) return null
+
         if (type == "INVISIBLE" && targetRedId != requesterRedId) {
             return UserStatusEntry("OFFLINE", null, updatedAt)
         }
@@ -105,13 +108,30 @@ class UserStatusService(
 
     /**
      * فحص ثنائي الاتجاه: هل هما في قائمة جهات اتصال بعضهما؟
-     * يستخدم Redis Set للتخزين المؤقت (membership من contact service)
+     * يستخدم Redis Set للتخزين المؤقت (membership من contact service)،
+     * مع رجوع إلى قاعدة البيانات عند غياب الكاش (إعادة تشغيل/انتهاء)
+     * حتى لا تنكسر مزامنة الظهور والخصوصية بصمت.
      */
     private fun areContacts(userA: String, userB: String): Boolean {
+        if (userA == userB) return true
         val setA = redis.opsForSet().isMember(CONTACTS_SET_PREFIX + userA, userB) ?: false
         val setB = redis.opsForSet().isMember(CONTACTS_SET_PREFIX + userB, userA) ?: false
         // ثنائي الاتجاه — لازم الاثنين
-        return setA && setB
+        if (setA && setB) return true
+        // رجوع DB: صداقة = صفّان متبادلان في red_contacts.
+        return runCatching {
+            val a = users.findByRedId(userA.uppercase()) ?: return@runCatching false
+            val b = users.findByRedId(userB.uppercase()) ?: return@runCatching false
+            AudienceGuard.isMutualContact(jdbc, a.id, b.id)
+        }.getOrDefault(false)
+    }
+
+    /** حظر ثنائي الاتجاه بين حسابين محلولين (أي مجهول = بلا حظر). */
+    private fun isBlockedPair(target: UserAccount, requester: UserAccount?): Boolean {
+        if (requester == null || target.id == requester.id) return false
+        return runCatching {
+            AudienceGuard.isBlockedEitherDirection(jdbc, target.id, requester.id)
+        }.getOrDefault(false)
     }
 
     /** إضافة/إزالة من جهات الاتصال (يُستدعى من ContactService) */

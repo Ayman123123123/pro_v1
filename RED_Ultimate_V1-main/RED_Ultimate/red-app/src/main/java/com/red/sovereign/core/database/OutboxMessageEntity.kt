@@ -37,7 +37,9 @@ import androidx.room.PrimaryKey
         Index(value = ["conversationId"]),
         Index(value = ["idempotencyKey"], unique = true),
         Index(value = ["priority", "nextAttemptAt"]),
-        Index(value = ["status", "createdAt"])
+        Index(value = ["status", "createdAt"]),
+        Index("targetRedId"),
+        Index(value = ["status", "priority", "nextAttemptAt"])
     ]
 )
 data class OutboxMessageEntity(

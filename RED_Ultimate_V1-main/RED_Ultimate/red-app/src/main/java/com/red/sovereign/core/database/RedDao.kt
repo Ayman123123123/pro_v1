@@ -330,6 +330,15 @@ interface RedDao {
     @Query("DELETE FROM local_history WHERE conversationId = :convId")
     suspend fun deleteLocalHistoryByConversation(convId: String)
 
+    @Query("DELETE FROM messages WHERE conversationId = :convId AND createdAt < :cutoff")
+    suspend fun deleteMessagesBefore(convId: String, cutoff: Long): Int
+
+    @Query("DELETE FROM local_history WHERE conversationId = :convId AND createdAt < :cutoff")
+    suspend fun deleteLocalHistoryBefore(convId: String, cutoff: Long): Int
+
+    @Query("SELECT * FROM local_history WHERE conversationId = :convId ORDER BY createdAt ASC LIMIT 1")
+    suspend fun getOldestMessage(convId: String): LocalHistoryEntity?
+
     @Query("DELETE FROM messages WHERE conversationId = :convId")
     suspend fun deleteMessagesByConversation(convId: String)
 
@@ -382,4 +391,35 @@ interface RedDao {
     /** تعبئة/تحديث معاينة الرد دون إعادة إدراج الصف كاملاً. */
     @Query("UPDATE local_history SET replyToMessageId = :replyId, replyToMessageText = :replyText, replyToSenderId = :replySender WHERE id = :id")
     suspend fun updateReplyPreview(id: String, replyId: String?, replyText: String?, replySender: String?)
+
+    // --- Relations (قراءة ذرية للسياق — تمنع اليتم الظاهري) ---
+    @Transaction
+    @Query("SELECT * FROM conversations WHERE id = :convId")
+    suspend fun getConversationWithMessages(convId: String): ConversationWithMessages?
+
+    @Transaction
+    @Query("SELECT * FROM conversations WHERE id = :convId")
+    suspend fun getConversationWithOutbox(convId: String): ConversationWithOutbox?
+
+    @Transaction
+    @Query("SELECT * FROM local_history WHERE id = :messageId LIMIT 1")
+    suspend fun getMessageWithReactions(messageId: String): MessageWithReactions?
+
+    // --- Sync (مؤشر تسلسلي مستقر — لا createdAt متذبذب) ---
+    /** أحدث تسلسل مخزّن لمحادثة — أساس فجوة المزامنة (gap detection). */
+    @Query("SELECT COALESCE(MAX(sequence), 0) FROM messages WHERE conversationId = :convId")
+    suspend fun maxSequenceForConversation(convId: String): Long
+
+    /** رسائل بعد تسلسل معيّن — دفعات المزامنة التصاعدية. */
+    @Query("SELECT * FROM messages WHERE conversationId = :convId AND sequence > :after ORDER BY sequence ASC LIMIT :limit")
+    suspend fun messagesAfterSequence(convId: String, after: Long, limit: Int): List<MessageEntity>
+
+    /** سجل محلي بعد لحظة — مزامنة الأجهزة المتعددة. */
+    @Query("SELECT * FROM local_history WHERE conversationId = :convId AND createdAt > :since ORDER BY createdAt ASC, id ASC LIMIT :limit")
+    suspend fun localHistorySince(convId: String, since: Long, limit: Int): List<LocalHistoryEntity>
+
+    // --- Retention/TTL محلي (تُستدعى من DatabaseMaintenance) ---
+    /** حذف الوسائط المكتملة الأقدم من حد الاحتفاظ. */
+    @Query("DELETE FROM media_uploads WHERE status = 'DONE' AND nextAttemptAt < :cutoff")
+    suspend fun cleanupDoneMediaUploads(cutoff: Long): Int
 }

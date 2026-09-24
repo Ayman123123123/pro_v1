@@ -49,7 +49,11 @@ data class CallResponse(
 @RequestMapping("/api/calls/v2")
 class ModernCallsController(
     private val history: CallHistoryService,
-    private val deliveryService: UnifiedCallDeliveryService
+    private val deliveryService: UnifiedCallDeliveryService,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val jdbc: org.springframework.jdbc.core.JdbcTemplate? = null,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val users: com.red.server.auth.repository.UserAccountRepository? = null
 ) {
 
     /** طباعة النوع المطلوب على نظيره الدائم (CallType لا يملك CONFERENCE/PSTN/LAN). */
@@ -82,6 +86,9 @@ class ModernCallsController(
             "AUDIO_1V1", "VIDEO_1V1", "PSTN", "LAN" -> {
                 require(!request.targetId.isNullOrBlank()) { "Target required for 1-1 call" }
                 require(request.targetId != callerId) { "Cannot call yourself" }
+                // فحص الجمهور الموحّد: حظر ثنائي + خصوصية المكالمات للطرف المستدعى.
+                // الأهداف غير الحسابية (أرقام PSTN) تُتجاوز — لا كيان مستخدم لفحصه.
+                checkCallAudience(callerId, request.targetId)?.let { return it }
             }
         }
 
@@ -255,6 +262,41 @@ class ModernCallsController(
             it.status == CallStatus.RINGING || it.status == CallStatus.ACTIVE
         }
         return ResponseEntity.ok(active)
+    }
+
+    /**
+     * فحص جمهور المكالمة الفردية: يعيد 403 عند الحظر الثنائي أو مخالفة
+     * خصوصية `calls` للمستدعى (NOBODY / CONTACTS بلا صداقة متبادلة)،
+     * وnull عند السماح أو تعذّر الحسم (هدف غير حسابي كأرقام PSTN،
+     * أو غياب حقن الاختيارية في الاختبارات).
+     */
+    private fun checkCallAudience(callerId: String, targetId: String): ResponseEntity<CallResponse>? {
+        val db = jdbc ?: return null
+        val repo = users ?: return null
+        val callerUuid = runCatching { java.util.UUID.fromString(callerId) }.getOrNull() ?: return null
+        val target = runCatching { java.util.UUID.fromString(targetId) }
+            .getOrNull()?.let { runCatching { repo.findById(it).orElse(null) }.getOrNull() }
+            ?: repo.findByRedId(targetId.trim().uppercase()) ?: return null
+        if (target.id == callerUuid) return null // رفض الذات مغطى بـ require أعلاه
+        if (com.red.server.social.AudienceGuard.isBlockedEitherDirection(db, callerUuid, target.id)) {
+            return ResponseEntity.status(403).body(CallResponse("", "BLOCKED", "FORBIDDEN", "Call blocked by audience policy"))
+        }
+        val callsPrivacy = runCatching {
+            db.queryForObject(
+                "SELECT calls FROM user_privacy_settings WHERE user_id=?",
+                String::class.java, target.id
+            )
+        }.getOrNull() ?: "CONTACTS"
+        val allowed = when (callsPrivacy.uppercase()) {
+            "NOBODY" -> false
+            "CONTACTS", "CONTACTS_EXCEPT", "ONLY_SHARE_WITH" ->
+                com.red.server.social.AudienceGuard.isMutualContact(db, callerUuid, target.id)
+            else -> true
+        }
+        if (!allowed) {
+            return ResponseEntity.status(403).body(CallResponse("", "PRIVACY", "FORBIDDEN", "Callee does not accept calls from this account"))
+        }
+        return null
     }
 
     @GetMapping("/types")

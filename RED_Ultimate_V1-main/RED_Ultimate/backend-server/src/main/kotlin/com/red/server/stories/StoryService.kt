@@ -169,11 +169,14 @@ class StoryService(
 
     /** Same authorization rule is duplicated in MediaAccessService for direct media URLs. */
     private fun canAccess(viewerId: UUID, story: StoryDocument): Boolean {
-        if (story.ownerId == viewerId.toString() || story.visibility == StoryVisibility.EVERYONE) return true
-        if (story.visibility == StoryVisibility.SELECTED) return viewerId.toString() in story.allowedUserIds
+        if (story.ownerId == viewerId.toString()) return true
+        // فحص الجمهور الموحّد أولًا: الحظر الثنائي يتغلّب على كل رؤية
+        // (حتى SELECTED والقوائم المسموحة) — لا استثناءات صامتة.
         val owner = UUID.fromString(story.ownerId)
         val blocked = jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?))", Boolean::class.java, owner, viewerId, viewerId, owner) == true
         if (blocked) return false
+        if (story.visibility == StoryVisibility.EVERYONE) return true
+        if (story.visibility == StoryVisibility.SELECTED) return viewerId.toString() in story.allowedUserIds
         return jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM red_contacts a JOIN red_contacts b ON a.owner_id=b.contact_id AND a.contact_id=b.owner_id WHERE a.owner_id=? AND a.contact_id=?)", Boolean::class.java, owner, viewerId) == true
     }
 

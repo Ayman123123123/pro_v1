@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- YOUNES Sovereign — Professional Typography System -->
-    <!-- Cairo for headings (official, authoritative) + Tajawal for body (readable, warm) -->
-    <string name="font_family_cairo">cairo</string>
-    <string name="font_family_tajawal">tajawal</string>
-    <string name="font_family_primary">cairo</string>
-    <string name="font_family_title">cairo</string>
+    <!-- Plex Arabic ثنائي النص (مضمن محليًا) — لا Cairo/Tajawal شبكية -->
+    <string name="font_family_primary">plex_arabic</string>
+    <string name="font_family_title">plex_arabic</string>
+    <string name="font_family_cairo">plex_arabic</string>
+    <string name="font_family_tajawal">plex_arabic</string>
 
-    <!-- Font Size Tokens — Harmonized 1.25 scale -->
-    <dimen name="font_size_caption">11sp</dimen>
+    <!-- Font Size Tokens — حد أدنى مقروء 12sp (كان caption ‏11sp) -->
+    <dimen name="font_size_caption">12sp</dimen>
     <dimen name="font_size_body_small">13sp</dimen>
     <dimen name="font_size_body">15sp</dimen>
     <dimen name="font_size_body_large">17sp</dimen>

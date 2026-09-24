@@ -2,6 +2,7 @@ package com.red.server.auth
 
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.social.AudienceGuard
 import com.red.server.social.UserStatusService
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.data.redis.core.RedisTemplate
@@ -113,14 +114,15 @@ class ContactService(
         }
     }
 
+    /**
+     * صداقة متبادلة فقط (صفّان في الاتجاهين) — علاقة أحادية لا تكفي
+     * لرؤية الحضور أو خصوصية CONTACTS. مطابقة لفحص الجمهور الموحّد.
+     */
     private fun areContacts(aRedId: String, bRedId: String): Boolean {
         if (aRedId == bRedId) return true
         val a = users.findByRedId(aRedId.uppercase()) ?: return false
         val b = users.findByRedId(bRedId.uppercase()) ?: return false
-        val cnt = jdbc.queryForObject("SELECT COUNT(*) FROM red_contacts WHERE owner_id=? AND contact_id=?", Int::class.java, a.id, b.id) ?: 0
-        if (cnt > 0) return true
-        val cnt2 = jdbc.queryForObject("SELECT COUNT(*) FROM red_contacts WHERE owner_id=? AND contact_id=?", Int::class.java, b.id, a.id) ?: 0
-        return cnt2 > 0
+        return AudienceGuard.isMutualContact(jdbc, a.id, b.id)
     }
 
     @Transactional

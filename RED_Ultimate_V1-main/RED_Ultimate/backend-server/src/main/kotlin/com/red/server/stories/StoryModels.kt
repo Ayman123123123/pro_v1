@@ -57,6 +57,8 @@ data class CreateStoryRequest(
     val mediaType: String? = null,
     val backgroundColor: String? = null,
     val durationMs: Long? = null,
+    /** موجة الصوت للقصص الصوتية — يرسلها العميل ويتجاهلها الخادم (توافق عقد). */
+    val waveform: List<Int> = emptyList(),
 )
 data class StoryResponse(
     val id: String, val ownerRedId: String, val ownerUsername: String, val ownerDisplayName: String,

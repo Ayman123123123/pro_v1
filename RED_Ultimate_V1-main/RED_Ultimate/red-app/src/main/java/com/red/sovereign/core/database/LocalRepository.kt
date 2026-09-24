@@ -273,6 +273,10 @@ class LocalRepository(context: Context) {
         dao.deleteConversationRow(convId)
     }
 
+    suspend fun deleteMessagesBefore(convId: String, cutoff: Long): Int = dao.deleteMessagesBefore(convId, cutoff)
+    suspend fun deleteLocalHistoryBefore(convId: String, cutoff: Long): Int = dao.deleteLocalHistoryBefore(convId, cutoff)
+    suspend fun getOldestMessage(convId: String) = dao.getOldestMessage(convId)
+
     // --- Global Search ---
     /**
      * بحث شامل موحد (2026-09-10): نقطة الدخول الوحيدة للبحث النصي.

@@ -61,7 +61,7 @@ jobs:
             --add-host admin-panel:127.0.0.1 \
             -v "$PWD/nginx.conf:/etc/nginx/nginx.conf:ro" \
             -v "$tls:/etc/ssl/red:ro" \
-            nginx:1.27-alpine nginx -t
+            nginx:1.29-alpine nginx -t
 
       - name: Build backend production image with BuildKit cache mount
         working-directory: ${{ env.PROJECT }}
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: ${{ env.PROJECT }}/admin_dashboard/package-lock.json
       - name: Install and run static checks
@@ -112,11 +112,31 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: gradle
-      - uses: android-actions/setup-android@v3
+      # No third-party setup-android action: android-actions/setup-android@v3
+      # crashes on the forced Node.js 24 runtime (deterministic CI failure).
+      # Pinned manual cmdline-tools install instead (15859902 = current Sep 2026).
+      - name: Install Android cmdline-tools (pinned, no third-party action)
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -sSL -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
+          unzip -q /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_SDK_ROOT=$ANDROID_HOME"
+          } >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
       - name: Install API 37 and supported build tools
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-37" "build-tools;36.0.0"
+          # Since API 37 Google publishes minor-suffixed platform packages
+          # (platforms;android-37.0) — the bare android-37 id fails with
+          # "Failed to find package" (deterministic CI failure since Sep 2026).
+          sdkmanager "platforms;android-37.0" "build-tools;36.0.0" \
+            || sdkmanager "platforms;android-37" "build-tools;36.0.0"
       - name: Unit test and assemble canonical app
         working-directory: ${{ env.PROJECT }}
         run: |
@@ -137,7 +157,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: ${{ env.PROJECT }}/media-sfu/package-lock.json
       - name: Install production dependency and validate server

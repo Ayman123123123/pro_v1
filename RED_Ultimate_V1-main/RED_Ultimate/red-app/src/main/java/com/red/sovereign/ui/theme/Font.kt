@@ -1,30 +1,20 @@
 package com.red.sovereign.ui.theme
 
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import com.red.sovereign.R
 
-// IBM Plex Sans Arabic - الخط الرئيسي للعربية
-val PlexArabicFamily = FontFamily(
-    Font(R.font.plex_arabic_regular, FontWeight.Normal),
-    Font(R.font.plex_arabic_regular, FontWeight.Light),
-    Font(R.font.plex_arabic_medium, FontWeight.Medium),
-    Font(R.font.plex_arabic_semibold, FontWeight.SemiBold),
-    Font(R.font.plex_arabic_bold, FontWeight.Bold),
-    Font(R.font.plex_arabic_bold, FontWeight.ExtraBold),
-    Font(R.font.plex_arabic_bold, FontWeight.Black),
-)
+/**
+ * الخطوط — المصدر الوحيد لعائلة Plex Arabic هو RedTheme.kt.
+ *
+ * كان هذا الملف يعرّف `PlexArabicFamily` مرة ثانية (تكرار يمنع الترجمة:
+ * duplicate top-level declaration) ويشير إلى `noto_sans_arabic_*`
+ * غير الموجودة في res/font (فشل بناء مضمون). الآن كل الأسماء هنا
+ * مرادفات آمنة: عربية Plex + احتياطي النظام للرموز فقط.
+ */
 
-// Noto Sans Arabic - fallback
-val NotoArabicFamily = FontFamily(
-    Font(R.font.noto_sans_arabic_regular, FontWeight.Normal),
-    Font(R.font.noto_sans_arabic_medium, FontWeight.Medium),
-    Font(R.font.noto_sans_arabic_bold, FontWeight.Bold),
-)
+// المصدر الوحيد: RedTheme.PlexArabicFamily — لا تعريف مكرر هنا.
 
 // الخط العربي الرئيسي (RTL أولوية)
-val ArabicTypographyFamily = PlexArabicFamily
+val ArabicTypographyFamily: FontFamily = PlexArabicFamily
 
-// Fallback للرموز/الإيموجي
-val EmojiFamily = FontFamily.Default
+// Fallback للرموز/الإيموجي — خط النظام لا ملف مفقود.
+val EmojiFamily: FontFamily = FontFamily.Default

@@ -9,12 +9,12 @@ java {
 }
 
 dependencies {
-    api("com.google.protobuf:protobuf-java:3.25.1")
+    api("com.google.protobuf:protobuf-java:3.25.5")
 }
 
 protobuf {
     protoc {
-        artifact = "com.google.protobuf:protoc:3.25.1"
+        artifact = "com.google.protobuf:protoc:3.25.5"
     }
 }
 

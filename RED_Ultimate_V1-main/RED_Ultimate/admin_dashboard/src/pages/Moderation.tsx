@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,65 +8,98 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useTranslation } from 'react-i18next';
-import { Shield, Flag, Trash2, CheckCircle, XCircle, AlertTriangle, Search, Filter, Eye, MoreVertical } from 'lucide-react';
+import { Shield, Flag, CheckCircle, XCircle, AlertTriangle, Search, Eye, MoreVertical } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { RequireAuth, DemoBanner, EmptyState, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
+import { RequireAuth, EmptyState, LoadingState, ErrorState, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
+import { apiFetch } from '../api';
 
-interface ModerationItem {
+interface AdminReport {
   id: string;
-  type: 'reported' | 'spam' | 'illegal';
-  content: string;
-  author: string;
-  channel: string;
-  reason: string;
-  priority: 'P0' | 'P1' | 'P2';
-  status: 'pending' | 'approved' | 'rejected' | 'deleted';
+  reporterRedId: string;
+  reportedRedId: string | null;
+  category: string;
+  details: string | null;
+  status: string;
   createdAt: string;
-  reportedBy: string;
 }
 
-const mockData: ModerationItem[] = [
-  { id: '1', type: 'reported', content: 'Inappropriate content...', author: 'user123', channel: '#general', reason: 'Harassment', priority: 'P0', status: 'pending', createdAt: '2024-01-15T10:30:00Z', reportedBy: 'user456' },
-  { id: '2', type: 'spam', content: 'Buy now! Click here!', author: 'spammer', channel: '#random', reason: 'Spam detection', priority: 'P1', status: 'pending', createdAt: '2024-01-15T10:25:00Z', reportedBy: 'system' },
-  { id: '3', type: 'illegal', content: 'Illegal content...', author: 'baduser', channel: '#private', reason: 'Illegal activity', priority: 'P0', status: 'pending', createdAt: '2024-01-15T10:20:00Z', reportedBy: 'user789' },
-];
+const STATUSES = ['OPEN', 'REVIEWING', 'RESOLVED', 'DISMISSED'] as const;
+
+async function fetchReports(status: string): Promise<AdminReport[]> {
+  const res = await apiFetch(`/api/admin/moderation/reports?status=${encodeURIComponent(status)}`);
+  const data = await res.json().catch(() => []);
+  if (!res.ok) {
+    const err = (data && typeof data === 'object' ? (data as Record<string, unknown>).error : null) as string | null;
+    throw new Error(err || `HTTP ${res.status}`);
+  }
+  return Array.isArray(data) ? (data as AdminReport[]) : [];
+}
+
+async function updateReport(reportId: string, status: string): Promise<void> {
+  const res = await apiFetch(
+    `/api/admin/moderation/reports/${encodeURIComponent(reportId)}?status=${encodeURIComponent(status)}`,
+    { method: 'PATCH' }
+  );
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = (data && typeof data === 'object' ? (data as Record<string, unknown>).error : null) as string | null;
+    throw new Error(err || `HTTP ${res.status}`);
+  }
+}
 
 export function ModerationPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>('queue');
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterPriority, setFilterPriority] = useState<string>('all');
-  // ✅ 2026-09-24: ربط الإجراءات بحالة محلية بدل console.log
-  const [items, setItems] = useState<ModerationItem[]>(mockData);
-  const [broadcastSent, setBroadcastSent] = useState(false);
-  const [broadcastMsg, setBroadcastMsg] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('OPEN');
+  const [items, setItems] = useState<AdminReport[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
 
-  const filteredData = items.filter(item => {
-    if (filterType !== 'all' && item.type !== filterType) return false;
-    if (filterPriority !== 'all' && item.priority !== filterPriority) return false;
-    if (search && !item.content.toLowerCase().includes(search.toLowerCase()) && !item.author.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-
-  const handleAction = (action: string, item: ModerationItem) => {
-    const next: Record<string, ModerationItem['status']> = {
-      approve: 'approved',
-      reject: 'rejected',
-      delete: 'deleted',
-    };
-    const status = next[action];
-    if (status) {
-      setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, status } : it)));
+  const load = useCallback(async (status = filterStatus) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      setItems(await fetchReports(status));
+    } catch (e) {
+      setItems([]);
+      setLoadError(e instanceof Error ? e.message : 'تعذّر تحميل البلاغات');
+    } finally {
+      setLoading(false);
     }
-    // warn / view: لا تغيير حالة — يُبقي العنصر في الطابور للمراجعة
+  }, [filterStatus]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleAction = async (action: 'review' | 'resolve' | 'dismiss', item: AdminReport) => {
+    const next = action === 'review' ? 'REVIEWING' : action === 'resolve' ? 'RESOLVED' : 'DISMISSED';
+    setActingId(item.id);
+    try {
+      await updateReport(item.id, next);
+      await load();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'تعذّر تحديث البلاغ');
+    } finally {
+      setActingId(null);
+    }
   };
+
+  const filteredData = items.filter((item) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      (item.details ?? '').toLowerCase().includes(q) ||
+      item.reporterRedId.toLowerCase().includes(q) ||
+      (item.reportedRedId ?? '').toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <RequireAuth>
     <div className="space-y-6">
-      <DemoBanner />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('moderation.title')}</h1>
@@ -91,36 +124,30 @@ export function ModerationPage() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <CardTitle>Moderation Queue</CardTitle>
-                  <CardDescription>Review and take action on reported content</CardDescription>
+                  <CardDescription>بلاغات حقيقية من /api/admin/moderation/reports</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search content..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 w-[250px]" />
+                    <Input placeholder="Search reports..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 w-[250px]" />
                   </div>
-                  <Select value={filterType} onValueChange={setFilterType}>
-                    <SelectTrigger className="w-[140px]"><SelectValue placeholder="Type" /></SelectTrigger>
+                  <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v); load(v); }}>
+                    <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="reported">Reported</SelectItem>
-                      <SelectItem value="spam">Spam</SelectItem>
-                      <SelectItem value="illegal">Illegal</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={filterPriority} onValueChange={setFilterPriority}>
-                    <SelectTrigger className="w-[120px]"><SelectValue placeholder="Priority" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="P0">P0 Critical</SelectItem>
-                      <SelectItem value="P1">P1 High</SelectItem>
-                      <SelectItem value="P2">P2 Medium</SelectItem>
+                      {STATUSES.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              {filteredData.length === 0 ? (
+              {loading ? (
+                <LoadingState />
+              ) : loadError ? (
+                <ErrorState message={loadError} onRetry={() => load()} />
+              ) : filteredData.length === 0 ? (
                 <EmptyState message={t('common.noData')} />
               ) : (
               <div className="space-y-3">
@@ -129,41 +156,37 @@ export function ModerationPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2">
-                          <Badge variant={item.priority === 'P0' ? 'destructive' : item.priority === 'P1' ? 'warning' : 'info'}>{item.priority}</Badge>
-                          <Badge variant="outline">{item.type}</Badge>
-                          <Badge variant={item.status === 'pending' ? 'warning' : item.status === 'approved' ? 'success' : 'destructive'}>{item.status}</Badge>
+                          <Badge variant="outline">{item.category}</Badge>
+                          <Badge
+                            variant={item.status === 'OPEN' ? 'warning' : item.status === 'REVIEWING' ? 'info' : item.status === 'RESOLVED' ? 'success' : 'destructive'}
+                          >
+                            {item.status}
+                          </Badge>
                         </div>
-                        <p className="text-muted-foreground mb-2">{item.content}</p>
+                        <p className="text-muted-foreground mb-2">{item.details || t('common.empty')}</p>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>Author: {item.author}</span>
-                          <span>Channel: {item.channel}</span>
-                          <span>Reported by: {item.reportedBy}</span>
-                          <span>{new Date(item.createdAt).toLocaleString()}</span>
+                          <span>Reporter: {item.reporterRedId}</span>
+                          <span>Reported: {item.reportedRedId ?? '—'}</span>
+                          <span>{item.createdAt ? new Date(item.createdAt).toLocaleString() : '—'}</span>
                         </div>
-                        <p className="text-sm mt-1">Reason: {item.reason}</p>
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label={`Moderation actions for ${item.author}`}><MoreVertical className="h-4 w-4" aria-hidden="true" /></Button>
+                          <Button variant="ghost" size="icon" aria-label={`Moderation actions for report ${item.id}`} disabled={actingId === item.id}>
+                            <MoreVertical className="h-4 w-4" aria-hidden="true" />
+                          </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions for {item.author}</DropdownMenuLabel>
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleAction('approve', item)} className="text-green-600">
-                            <CheckCircle className="h-4 w-4 mr-2" /> Approve
+                          <DropdownMenuItem onClick={() => handleAction('review', item)} className="text-blue-600">
+                            <Eye className="h-4 w-4 mr-2" /> Mark reviewing
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleAction('reject', item)} className="text-red-600">
-                            <XCircle className="h-4 w-4 mr-2" /> Reject
+                          <DropdownMenuItem onClick={() => handleAction('resolve', item)} className="text-green-600">
+                            <CheckCircle className="h-4 w-4 mr-2" /> Resolve
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleAction('delete', item)} className="text-red-600">
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleAction('warn', item)} className="text-orange-600">
-                            <AlertTriangle className="h-4 w-4 mr-2" /> Warn User
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleAction('view', item)}>
-                            <Eye className="h-4 w-4 mr-2" /> View Full Content
+                          <DropdownMenuItem onClick={() => handleAction('dismiss', item)} className="text-red-600">
+                            <XCircle className="h-4 w-4 mr-2" /> Dismiss
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -207,26 +230,12 @@ export function ModerationPage() {
               <CardDescription>Send announcements to channels or user segments</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="max-w-2xl space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Target Audience</label>
-                  <Select>
-                    <SelectTrigger><SelectValue placeholder="Select audience" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Users</SelectItem>
-                      <SelectItem value="channel">Specific Channel</SelectItem>
-                      <SelectItem value="segment">User Segment</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2" htmlFor="broadcast-msg">Message</label>
-                  <textarea id="broadcast-msg" className="w-full min-h-[150px] p-4 border rounded-lg" placeholder="Enter your message..." value={broadcastMsg} onChange={(e) => { setBroadcastMsg(e.target.value); setBroadcastSent(false); }} />
-                </div>
-                <Button disabled={!broadcastMsg.trim()} title={broadcastMsg.trim() ? undefined : t('common.empty')} onClick={() => setBroadcastSent(true)}><Send className="h-4 w-4 mr-2" aria-hidden="true" /> Send Broadcast</Button>
-                {broadcastSent && (
-                  <p role="status" className="text-sm font-medium text-foreground">{t('common.success')}</p>
-                )}
+              <div className={cn('max-w-2xl space-y-2')}>
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  {t('common.comingSoon')} — لا إرسال حقيقي بعد.
+                </p>
+                <Button disabled title={t('common.comingSoon')}><Send className="h-4 w-4 mr-2" aria-hidden="true" /> Send Broadcast</Button>
               </div>
             </CardContent>
           </Card>

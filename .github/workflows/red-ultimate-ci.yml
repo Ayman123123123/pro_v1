@@ -82,7 +82,7 @@ jobs:
             --add-host admin-panel:127.0.0.1 \
             -v "$PWD/nginx.conf:/etc/nginx/nginx.conf:ro" \
             -v "$tls:/etc/ssl/red:ro" \
-            nginx:1.27-alpine nginx -t
+            nginx:1.29-alpine nginx -t
 
       - name: Build backend production image with BuildKit cache mount
         working-directory: ${{ env.PROJECT }}
@@ -261,7 +261,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: ${{ env.PROJECT }}/media-sfu/package-lock.json
       - name: Install production dependency and validate server

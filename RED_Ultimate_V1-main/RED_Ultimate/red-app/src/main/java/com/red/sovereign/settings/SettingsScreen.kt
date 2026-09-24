@@ -241,8 +241,22 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
                     Column(Modifier.weight(1f)) {
                         Text("فشل مزامنة الخصوصية", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
                         Text(err, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "القيم على جهازك محفوظة؛ الخادم لم يستلمها بعد.",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
-                    TextButton(onClick = vm::clearSyncError) { Text("إخفاء") }
+                    Column(horizontalAlignment = Alignment.End) {
+                        // إعادة دفع القيم الحالية نفسها — كل setter يعيد PUT /api/social/privacy.
+                        TextButton(onClick = {
+                            vm.setLastSeenVisibility(vm.state.lastSeenVisibility)
+                            vm.setWhoCanCall(vm.state.whoCanCall)
+                            vm.setReadReceipts(vm.state.readReceipts)
+                            vm.setTypingIndicators(vm.state.typingIndicators)
+                        }) { Text("إعادة المحاولة") }
+                        TextButton(onClick = vm::clearSyncError) { Text("إخفاء") }
+                    }
                 }
             }
         }

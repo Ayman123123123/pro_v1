@@ -9,6 +9,45 @@ import com.red.sovereign.core.database.MessageEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.TimerOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * 🕐 Disappearing Messages — رسائل ذاتية الحذف
@@ -56,6 +95,8 @@ class DisappearingMessagesManager(
         private const val KEY_PREFIX = "timer_"
         private const val KEY_CUSTOM_PREFIX = "custom_"
         private const val KEY_ENABLED_AT = "enabled_at_"
+        /** حد أمان للمؤقت المخصص: 365 يومًا — يمنع فيض effectiveSeconds*1000. */
+        const val MAX_CUSTOM_SECONDS = 365L * 24 * 60 * 60
     }
 
     /**
@@ -63,10 +104,12 @@ class DisappearingMessagesManager(
      */
     suspend fun setTimer(conversationId: String, timer: DisappearingTimer, customSeconds: Long = 0L): Boolean = withContext(Dispatchers.IO) {
         try {
+            if (conversationId.isBlank()) return@withContext false
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val editor = prefs.edit()
             
-            val effectiveSeconds = if (timer == DisappearingTimer.CUSTOM) customSeconds else timer.seconds
+            val safeCustom = customSeconds.coerceIn(0L, MAX_CUSTOM_SECONDS)
+            val effectiveSeconds = if (timer == DisappearingTimer.CUSTOM) safeCustom else timer.seconds.coerceAtLeast(0L)
             
             editor.putLong("${KEY_PREFIX}$conversationId", effectiveSeconds)
             editor.putLong("${KEY_ENABLED_AT}$conversationId", System.currentTimeMillis())
@@ -113,10 +156,12 @@ class DisappearingMessagesManager(
     fun shouldMessageExpire(message: MessageEntity): Boolean {
         val settings = getSettings(message.conversationId)
         if (!settings.isEnabled) return false
-        
+        if (message.createdAt <= 0L) return false
         val now = System.currentTimeMillis()
+        if (message.createdAt > now) return false
+        val windowMs = settings.effectiveSeconds.coerceAtLeast(0L).coerceAtMost(MAX_CUSTOM_SECONDS) * 1000L
         val messageAge = now - message.createdAt
-        return messageAge >= settings.effectiveSeconds * 1000
+        return messageAge >= windowMs
     }
 
     /**
@@ -124,9 +169,11 @@ class DisappearingMessagesManager(
      */
     suspend fun cleanupExpiredMessages(conversationId: String): Int = withContext(Dispatchers.IO) {
         val settings = getSettings(conversationId)
-        if (!settings.isEnabled) return 0
-        
-        val cutoffTime = System.currentTimeMillis() - settings.effectiveSeconds * 1000
+        if (!settings.isEnabled) return@withContext 0
+        if (conversationId.isBlank()) return@withContext 0
+        val windowMs = settings.effectiveSeconds.coerceAtLeast(0L).coerceAtMost(MAX_CUSTOM_SECONDS) * 1000L
+        if (windowMs <= 0L) return@withContext 0
+        val cutoffTime = System.currentTimeMillis() - windowMs
         val deletedCount = repository.deleteMessagesBefore(conversationId, cutoffTime)
         
         // أيضاً تنظيف من local_history
@@ -176,13 +223,15 @@ class DisappearingMessagesManager(
     /**
      * يحصل على الوقت المتبقي لأقدم رسالة في المحادثة
      */
-    fun getTimeUntilOldestExpires(conversationId: String): Long? {
+    suspend fun getTimeUntilOldestExpires(conversationId: String): Long? {
         val settings = getSettings(conversationId)
         if (!settings.isEnabled) return null
-        
-        val oldestMessage = repository.getOldestMessage(conversationId)
+        val windowMs = settings.effectiveSeconds.coerceAtLeast(0L).coerceAtMost(MAX_CUSTOM_SECONDS) * 1000L
+        if (windowMs <= 0L) return null
+        val oldestMessage = runCatching { repository.getOldestMessage(conversationId) }.getOrNull()
         return oldestMessage?.let { msg ->
-            val expiryTime = msg.createdAt + settings.effectiveSeconds * 1000
+            if (msg.createdAt <= 0L) return@let null
+            val expiryTime = msg.createdAt + windowMs
             val remaining = expiryTime - System.currentTimeMillis()
             if (remaining > 0) remaining else 0
         }
@@ -346,7 +395,9 @@ fun DisappearingBadge(
     
     if (!settings.isEnabled) return
     
-    val timeLeft = manager.getTimeUntilOldestExpires(conversationId)
+    val timeLeft by produceState<Long?>(initialValue = null, conversationId) {
+        value = runCatching { manager.getTimeUntilOldestExpires(conversationId) }.getOrNull()
+    }
     
     Surface(
         modifier = modifier

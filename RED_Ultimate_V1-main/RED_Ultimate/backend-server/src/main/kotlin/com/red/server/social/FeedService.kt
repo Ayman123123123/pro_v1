@@ -54,6 +54,9 @@ class FeedService(
         val muted = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), MutedAuthor::class.java).map(MutedAuthor::authorId)
         if (hidden.isNotEmpty()) criteria.and("id").nin(hidden)
         if (muted.isNotEmpty()) criteria.and("authorId").nin(muted)
+        // فحص الجمهور الموحّد: المحظور ثنائيًا لا يظهر في أي فيد.
+        val blocked = AudienceGuard.blockedAuthorIds(jdbc, userId)
+        if (blocked.isNotEmpty()) criteria.and("authorId").nin(blocked)
         val friendIds = mutualFriendIds(userId) + userId.toString()
         // canonical() يوحّد FOLLOWING⇒FRIENDS وYEMEN⇒PUBLIC، فلا يتفرّع
         // المنطق أربع مرات ولا يُنسى فرعٌ عند إضافة قيمة. النسخ
@@ -90,26 +93,37 @@ class FeedService(
      * `EXISTS` المتماثلة تفرض التبادل داخل قاعدة البيانات، فلا تُنقل
      * قائمتان إلى الذاكرة لتقاطعهما.
      */
-    private fun mutualFriendIds(userId: UUID): List<String> = jdbc.queryForList(
-        """SELECT a.contact_id::text
-           FROM red_contacts a
-           WHERE a.owner_id = ?
-             AND EXISTS (
-                 SELECT 1 FROM red_contacts b
-                 WHERE b.owner_id = a.contact_id AND b.contact_id = a.owner_id
-             )""",
-        String::class.java,
-        userId
-    ).filterNotNull()
+    private fun mutualFriendIds(userId: UUID): List<String> = AudienceGuard.mutualFriendIds(jdbc, userId)
 
-    fun thread(postId: String): List<PostDocument> {
-        require(activePost(postId) != null) { "Post not found" }
+    /**
+     * فحص الجمهور الموحّد قبل أي تفاعل مع منشور: المحظور ثنائيًا يُعامل
+     * كغير موجود (رسالة موحدة لا تكشف الحظر ولا وجود المنشور).
+     */
+    private fun requireNotBlocked(viewerId: UUID, authorId: String, message: String) {
+        val author = runCatching { UUID.fromString(authorId) }.getOrNull() ?: return
+        if (author != viewerId && AudienceGuard.isBlockedEitherDirection(jdbc, viewerId, author)) {
+            throw NoSuchElementException(message)
+        }
+    }
+
+    /** ترشيح الردود من محظورين داخل الخيط دون كشفهم. */
+    private fun requireNotBlockedSoft(viewerId: UUID, authorId: String): Boolean {
+        val author = runCatching { UUID.fromString(authorId) }.getOrNull() ?: return true
+        if (author == viewerId) return true
+        return !AudienceGuard.isBlockedEitherDirection(jdbc, viewerId, author)
+    }
+
+    fun thread(viewerId: UUID, postId: String): List<PostDocument> {
+        val root = requireNotNull(activePost(postId)) { "Post not found" }
+        requireNotBlocked(viewerId, root.authorId, "Post not found")
         return mongo.find(Query(Criteria().orOperator(Criteria.where("id").`is`(postId), Criteria.where("parentId").`is`(postId)).and("deletedAt").`is`(null))
             .with(Sort.by(Sort.Direction.ASC, "createdAt")), PostDocument::class.java)
+            .filter { requireNotBlockedSoft(viewerId, it.authorId) }
     }
 
     fun react(userId: UUID, postId: String, request: ReactionRequest): PostDocument {
-        require(activePost(postId) != null) { "Post not found" }
+        val target = requireNotNull(activePost(postId)) { "Post not found" }
+        requireNotBlocked(userId, target.authorId, "Post not found")
         val type = request.type.uppercase()
         require(type in setOf("LIKE", "LOVE", "SUPPORT", "INSIGHTFUL")) { "Unsupported reaction" }
         val id = "$postId:$userId:$type"
@@ -126,6 +140,7 @@ class FeedService(
 
     fun vote(userId: UUID, postId: String, request: PollVoteRequest): PostDocument {
         val post = requireNotNull(activePost(postId)) { "Post not found" }
+        requireNotBlocked(userId, post.authorId, "Post not found")
         val poll = requireNotNull(post.poll) { "Post has no poll" }
         require(poll.expiresAt == null || poll.expiresAt.isAfter(Instant.now())) { "Poll is closed" }
         require(poll.options.any { it.id == request.optionId }) { "Poll option not found" }
@@ -143,6 +158,7 @@ class FeedService(
      */
     fun repost(userId: UUID, postId: String): PostDocument {
         val post = requireNotNull(activePost(postId)) { "Post not found" }
+        requireNotBlocked(userId, post.authorId, "Post not found")
         require(post.parentId == null) { "Only top-level posts can be reposted" }
         val repostId = "$postId:$userId"
         if (!mongo.exists(Query(Criteria.where("id").`is`(repostId)), Repost::class.java)) {
@@ -156,6 +172,7 @@ class FeedService(
     fun follow(userId: UUID, targetRedId: String) {
         val target = users.findByRedId(targetRedId) ?: throw NoSuchElementException("RED identity not found")
         require(target.id != userId) { "A user cannot follow their own account" }
+        require(!AudienceGuard.isBlockedEitherDirection(jdbc, userId, target.id)) { "Contact is blocked" }
         mongo.save(FollowDocument("$userId:${target.id}", userId.toString(), target.id.toString()))
     }
 

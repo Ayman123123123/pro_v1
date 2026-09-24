@@ -174,6 +174,8 @@ data class CreatePostRequest(
     val mentions: List<String> = emptyList(),
     /** Hashtags extracted from text (#tag) */
     val hashtags: List<String> = emptyList(),
+    /** موقع نصي اختياري يرسله العميل — يُحفظ مع المنشور ولا يؤثر على الرؤية. */
+    val location: String? = null,
     /** Disappearing message duration in seconds (0 = permanent) */
     val disappearingSeconds: Int = 0
 )

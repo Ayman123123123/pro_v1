@@ -2,14 +2,14 @@
 # Run ./gradlew --write-verification-metadata sha256 after changes
 
 [versions]
-# Spring Boot 3.3.x
-spring-boot = "3.3.5"
+# Spring Boot 4.0.x (mirrors backend-server/build.gradle.kts)
+spring-boot = "4.0.7"
 spring-cloud = "2023.0.3"
 spring-dependency-management = "1.1.7"
 
-# Java / Kotlin
+# Java / Kotlin (root gradle/libs.versions.toml is the reference: Kotlin 2.3.21)
 java = "21"
-kotlin = "2.0.21"
+kotlin = "2.3.21"
 kotlin-jvm-target = "21"
 
 # Database
@@ -20,7 +20,7 @@ redis-client = "6.3.8.RELEASE"
 
 # Security
 spring-security = "6.3.5"
-jjwt = "0.12.6"
+jjwt = "0.13.0"
 bouncycastle = "1.86"
 nimbus-jose-jwt = "9.37.3"
 
@@ -33,9 +33,9 @@ opentelemetry-exporter-otlp = "1.42.0"
 # Testing
 junit-jupiter = "5.11.4"
 mockito = "5.12.0"
-mockito-kotlin = "5.1.0"
+mockito-kotlin = "6.1.0"
 testcontainers = "1.20.1"
-spring-boot-test = "3.3.5"
+spring-boot-test = "4.0.7"
 spring-security-test = "6.3.5"
 
 # Serialization
@@ -50,10 +50,10 @@ grpc-kotlin-stub = "1.6.2"
 # Utilities
 minio = "8.6.0"
 jsoup = "1.22.2"
-coroutines = "1.9.0"
+coroutines = "1.10.2"
 
-# Build
-gradle = "8.11"
+# Build (matches gradle wrapper 9.7.0)
+gradle = "9.7.0"
 spotbugs = "4.8.6"
 checkstyle = "10.18.0"
 
