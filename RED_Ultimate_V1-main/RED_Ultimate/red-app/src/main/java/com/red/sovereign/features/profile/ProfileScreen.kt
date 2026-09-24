@@ -92,8 +92,21 @@ fun ProfileScreen(
         viewModel.load(redId, username, displayName)
     }
 
-    var editingName by remember { mutableStateOf(displayName) }
-    var editingBio by remember { mutableStateOf("") }
+    var editingName by remember { mutableStateOf(displayName.ifBlank { viewModel.displayName }) }
+    var editingBio by remember { mutableStateOf(viewModel.bio) }
+    var nameTouched by remember { mutableStateOf(false) }
+    var bioTouched by remember { mutableStateOf(false) }
+    // مزامنة لمرة واحدة عند وصول بيانات الخادم المتأخرة — لا تصفّر تحرير المستخدم الجاري.
+    LaunchedEffect(viewModel.displayName) {
+        if (!nameTouched && viewModel.displayName.isNotBlank() && editingName.isBlank()) {
+            editingName = viewModel.displayName
+        }
+    }
+    LaunchedEffect(viewModel.bio) {
+        if (!bioTouched && viewModel.bio.isNotEmpty() && editingBio.isEmpty()) {
+            editingBio = viewModel.bio
+        }
+    }
     var showQr by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
@@ -204,7 +217,7 @@ fun ProfileScreen(
         // الاسم المعروض (قابل للتعديل)
         OutlinedTextField(
             value = editingName,
-            onValueChange = { editingName = it.take(50) },
+            onValueChange = { nameTouched = true; editingName = it.take(50) },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("الاسم المعروض") },
             singleLine = true,
@@ -214,7 +227,7 @@ fun ProfileScreen(
         // البايو (قابل للتعديل)
         OutlinedTextField(
             value = editingBio,
-            onValueChange = { editingBio = it.take(280) },
+            onValueChange = { bioTouched = true; editingBio = it.take(280) },
             modifier = Modifier.fillMaxWidth().height(100.dp),
             label = { Text("نبذة تعريفية (بايو)") },
             maxLines = 4,
@@ -229,7 +242,8 @@ fun ProfileScreen(
                 }
             },
             Modifier.fillMaxWidth(),
-            enabled = !viewModel.isSaving && editingName.isNotBlank() && editingName != displayName
+            enabled = !viewModel.isSaving && editingName.isNotBlank() &&
+                (editingName != viewModel.displayName.ifBlank { displayName } || editingBio != viewModel.bio)
         ) {
             if (viewModel.isSaving) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
             else { Icon(Icons.Default.Check, "حفظ"); Text(" حفظ التغييرات") }

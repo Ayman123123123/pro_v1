@@ -2,6 +2,7 @@ package com.red.sovereign.features.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -29,7 +30,12 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.core.RichMessage
+import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.PlexArabicFamily
+import com.red.sovereign.ui.theme.YounesEmerald
+
+/** عتامة الوقت/الثانوي — قابلة للقياس (≥0.85) ومستخدمة في كل النصوص الثانوية. */
+private const val BubbleDimAlpha: Float = 0.85f
 
 /**
  * فقاعة دردشة "Luxury" — تصميم عصري وحصري للمنصة السيادية.
@@ -58,15 +64,33 @@ fun LuxuryChatBubble(
     // اليدوية شرطيًا (لا شارة عند غياب المعلومة). "كثيرة التحويل" عندما العدد > 5.
     forwardOf: String? = null,
     forwardCount: Int = 0,
-    richMessage: RichMessage? = null
+    richMessage: RichMessage? = null,
+    // replyTo: اقتباس قابل للنقر يقفز للأصل عبر onReplyClick.
+    replyToId: String? = null,
+    replyToText: String? = null,
+    replyToSender: String? = null,
+    onReplyClick: (() -> Unit)? = null,
+    // تفاعلات: emoji -> count (chips قابلة للنقر عبر onReactionClick).
+    reactions: Map<String, Int> = emptyMap(),
+    onReactionClick: ((String) -> Unit)? = null,
+    isEdited: Boolean = false,
+    hideSenderHeader: Boolean = false
 ) {
     val resolvedForwardOf: String? = richMessage?.forwardOf ?: forwardOf
     val resolvedForwardCount: Int = (richMessage?.forwardCount ?: forwardCount).coerceAtLeast(0)
     val isForwarded: Boolean = resolvedForwardOf != null || resolvedForwardCount > 0
+    val resolvedReplyId: String? = richMessage?.replyTo ?: replyToId
+    val resolvedReplyText: String? = replyToText ?: resolvedReplyId?.let { "رسالة: ${it.take(32)}" }
+    val hasReply: Boolean = resolvedReplyText != null || resolvedReplyId != null
+    val resolvedEdited: Boolean = isEdited || (richMessage?.editOf != null)
     val resolvedFont = fontFamily ?: PlexArabicFamily
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    val timeColor = textColor.copy(alpha = 0.7f)
+    // وقت ≥11sp بعتامة 0.85 قابلة للقياس (كان 0.70).
+    val timeColor = textColor.copy(alpha = BubbleDimAlpha)
+    // منشن/هاشتاغ مميز وقابل للقياس (بلا alpha): الصادرة نص داكن عالي التباين، الواردة زمرد/كوبالت صلبان.
+    val mentionColor = if (isMe) Color(0xFF002118) else YounesEmerald
+    val hashtagColor = if (isMe) Color(0xFF0B3D91) else AqyalCyanGlow
     val shape = when (bubbleStyle) {
         "CLASSIC" -> RoundedCornerShape(12.dp)
         "MINIMAL" -> RoundedCornerShape(6.dp)
@@ -143,8 +167,8 @@ fun LuxuryChatBubble(
                 .padding(start = 12.dp, top = 8.dp, end = 10.dp, bottom = 6.dp)
                 .graphicsLayer { translationX = dragX }
         ) {
-            // G3: ترويسة المرسل للوارد فقط — الاسم بارز + Red ID الكامل بخط صغير.
-            if (!isMe && (senderName.isNotBlank() || senderRedId.isNotBlank())) {
+            // G3: ترويسة المرسل للوارد فقط — الاسم بارز + Red ID الكامل بخط صغير (تُخفى عند الدمج البصري).
+            if (!isMe && !hideSenderHeader && (senderName.isNotBlank() || senderRedId.isNotBlank())) {
                 Text(
                     text = senderName.ifBlank { senderRedId },
                     color = MaterialTheme.colorScheme.primary,
@@ -157,13 +181,13 @@ fun LuxuryChatBubble(
                     Text(
                         text = senderRedId,
                         color = timeColor,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         maxLines = 1
                     )
                 } else if (senderRedId.isNotBlank()) {
                     Text(
                         text = senderRedId,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = BubbleDimAlpha),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1
@@ -171,11 +195,15 @@ fun LuxuryChatBubble(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
             }
-            // P0-B: شارة التحويل — "محوّلة" عند التوفر،
+            // P0-B: شارة التحويل — "محوّلة" عند التوفر + عداد،
             // و"كثيرة التحويل" عندما العدد > 5.
             if (isForwarded) {
                 Text(
-                    text = if (resolvedForwardCount > 5) "كثيرة التحويل" else "محوّلة",
+                    text = when {
+                        resolvedForwardCount > 5 -> "كثيرة التحويل • $resolvedForwardCount"
+                        resolvedForwardCount > 0 -> "محوّلة • $resolvedForwardCount"
+                        else -> "محوّلة"
+                    },
                     color = timeColor,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -184,8 +212,49 @@ fun LuxuryChatBubble(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
             }
+            // replyTo: اقتباس قابل للنقر يقفز للأصل عبر onReplyClick.
+            if (hasReply) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.45f))
+                        .then(if (onReplyClick != null) Modifier.clickable(onClick = onReplyClick) else Modifier)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .heightIn(min = 28.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        if (!replyToSender.isNullOrBlank() || richMessage?.replyTo != null) {
+                            Text(
+                                text = replyToSender?.takeIf { it.isNotBlank() } ?: "رد",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = resolvedFont,
+                                maxLines = 1
+                            )
+                        }
+                        Text(
+                            text = resolvedReplyText.orEmpty(),
+                            color = timeColor,
+                            fontSize = 12.sp,
+                            fontFamily = resolvedFont,
+                            maxLines = 2
+                        )
+                    }
+                }
+            }
             Text(
-                text = remember(message) { annotatedWithMentions(message, textColor) },
+                text = remember(message, isMe) { annotatedWithMentions(message, textColor, mentionColor, hashtagColor) },
                 color = textColor,
                 fontSize = 16.sp,
                 lineHeight = 26.sp,
@@ -194,6 +263,40 @@ fun LuxuryChatBubble(
                     lineBreak = LineBreak.Paragraph
                 )
             )
+            // تفاعلات: chips مع العد — الضغط toggle عبر onReactionClick.
+            if (reactions.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    reactions.entries.sortedByDescending { it.value }.take(6).forEach { (emoji, count) ->
+                        androidx.compose.material3.Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+                            modifier = Modifier.then(
+                                if (onReactionClick != null) Modifier.clickable { onReactionClick(emoji) } else Modifier
+                            )
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(emoji, fontSize = 13.sp)
+                                if (count > 1) {
+                                    Text(
+                                        count.toString(),
+                                        fontSize = 11.sp,
+                                        color = timeColor,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -203,7 +306,7 @@ fun LuxuryChatBubble(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // عزل Bidi للأوقات داخل الجمل العربية
+                // عزل Bidi للأوقات داخل الجمل العربية — ≥11sp بعتامة 0.85 قابلة للقياس.
                 Text(
                     text = android.text.BidiFormatter.getInstance().unicodeWrap(time),
                     fontSize = 11.sp,
@@ -211,6 +314,15 @@ fun LuxuryChatBubble(
                     fontFamily = resolvedFont,
                     maxLines = 1
                 )
+                if (resolvedEdited) {
+                    Text(
+                        text = "• مُعدَّلة",
+                        fontSize = 11.sp,
+                        color = timeColor,
+                        fontFamily = resolvedFont,
+                        maxLines = 1
+                    )
+                }
                 if (isMe) {
                     // واتساب: ✓ رمادي (مرسَل) / ✓✓ رمادي (مستلَم) / ✓✓ أزرق (مقروء) + ◷ قيد الإرسال + ⚠ فشل
                     val tick = when (status.uppercase()) {
@@ -224,7 +336,7 @@ fun LuxuryChatBubble(
                     val tickColor = when (status.uppercase()) {
                         "READ" -> com.red.sovereign.ui.theme.YounesReadTick
                         "FAILED", "ERROR", "DEAD_LETTER" -> Color(0xFFF25C5C)
-                        "SENDING", "PENDING", "QUEUED" -> timeColor.copy(alpha = 0.7f)
+                        "SENDING", "PENDING", "QUEUED" -> timeColor.copy(alpha = BubbleDimAlpha)
                         else -> timeColor
                     }
                     Text(
@@ -240,15 +352,28 @@ fun LuxuryChatBubble(
 }
 }
 
-/** LEGENDARY: تمييز @all/@user بلون أساسي (واتساب يبرز المنشن — كان نصاً عادياً يضيع). دالة خالصة (تُستدعى داخل remember من الأعلى). */
-private fun annotatedWithMentions(message: String, base: Color): androidx.compose.ui.text.AnnotatedString {
-    val primary = Color(0xFF00C98C)
-        val regex = Regex("@(all|الجميع|online|متصل|[A-Z0-9]{5,16})", RegexOption.IGNORE_CASE)
+/** LEGENDARY: تمييز @all/@user بلون أساسي + #hashtag بلون مميز ثانٍ (واتساب يبرز المنشن — كان نصاً عادياً يضيع). دالة خالصة (تُستدعى داخل remember من الأعلى). */
+private fun annotatedWithMentions(
+    message: String,
+    base: Color,
+    mentionColor: Color = Color(0xFF14C79A),
+    hashtagColor: Color = Color(0xFF4D9FE8)
+): androidx.compose.ui.text.AnnotatedString {
+        val mentionRegex = Regex("@(all|الجميع|online|متصل|[A-Z0-9]{5,16})", RegexOption.IGNORE_CASE)
+        val hashtagRegex = Regex("#[\\w\u0600-\u06FF\\-]{2,30}")
         val builder = androidx.compose.ui.text.AnnotatedString.Builder(message)
-        regex.findAll(message).forEach { m ->
+        mentionRegex.findAll(message).forEach { m ->
             runCatching {
                 builder.addStyle(
-                    androidx.compose.ui.text.SpanStyle(color = primary, fontWeight = FontWeight.Bold),
+                    androidx.compose.ui.text.SpanStyle(color = mentionColor, fontWeight = FontWeight.Bold),
+                    m.range.first, m.range.last + 1
+                )
+            }
+        }
+        hashtagRegex.findAll(message).forEach { m ->
+            runCatching {
+                builder.addStyle(
+                    androidx.compose.ui.text.SpanStyle(color = hashtagColor, fontWeight = FontWeight.Bold),
                     m.range.first, m.range.last + 1
                 )
             }

@@ -4,6 +4,7 @@ import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.services.NotificationService
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
@@ -23,7 +24,8 @@ import java.util.concurrent.ConcurrentHashMap
  *   يبقى offline-first عبر AlarmManager. الترقية لـ Mongo/JPA لاحقاً دون كسر العقد.
  * - التسجيل الخادمي موجود مسبقاً: POST /api/recordings في CallRecordingController
  *   (metadata في Mongo `call_recordings` + بوابة consent في العميل).
- * - تذكير الدفع السيادي: controller فقط + TODO أدناه (لا Scheduler فعلي في هذه الخطوة).
+ * - المجدول الخادمي فعّال: @Scheduled كل دقيقة يرسل VoIP push عند الاستحقاق
+ *   (نافذة ±دقيقة) وينظّف المنتهية بعد نافذة الاحتفاظ (5 دقائق).
  */
 @RestController
 @RequestMapping("/api/calls/scheduled")
@@ -37,9 +39,37 @@ class ScheduledCallController(
         private const val MAX_TITLE = 140
         private const val MAX_INVITEES = 100
         private const val MAX_FUTURE_MILLIS = 365L * 24 * 60 * 60 * 1000
+        /** نافذة الاستحقاق: قبل الموعد بدقيقة وبعده بدقيقة (تغطي انحراف الجولة). */
+        const val DUE_BEFORE_MILLIS = 60_000L
+        const val DUE_AFTER_MILLIS = 60_000L
+        /** الاحتفاظ بالمنتهية 5 دقائق بعد موعدها ثم تنظيفها نهائياً. */
+        const val EXPIRE_AFTER_MILLIS = 5 * 60_000L
 
         /** مخزن العملية — مفتاح id. يُصفّى منطقياً بالمستقبل فقط عند القراءة. */
         private val store = ConcurrentHashMap<String, ScheduledCallRecord>()
+
+        /** مُذكَّرات تم إشعارها فعلاً — لمنع التكرار في كل جولة (exactly-once لكل id). */
+        private val reminded = ConcurrentHashMap.newKeySet<String>()
+
+        /** تحقق زمني خالص (للوحدة + نقطة الجدولة): null = صالح. */
+        @JvmStatic
+        fun validateScheduleTime(timeMillis: Long, now: Long = System.currentTimeMillis()): String? {
+            if (timeMillis <= now) return "SCHEDULED_TIME_MUST_BE_FUTURE"
+            if (timeMillis - now > MAX_FUTURE_MILLIS) return "SCHEDULED_TOO_FAR"
+            return null
+        }
+
+        /** مستحق خلال نافذة [now-دقيقة، now+دقيقة]. */
+        @JvmStatic
+        fun isDue(timeMillis: Long, now: Long = System.currentTimeMillis()): Boolean {
+            return timeMillis <= now + DUE_BEFORE_MILLIS && timeMillis >= now - DUE_AFTER_MILLIS
+        }
+
+        /** منتهٍ فقط بعد تجاوز نافذة الاحتفاظ (now - time > 5 دقائق). */
+        @JvmStatic
+        fun isExpired(timeMillis: Long, now: Long = System.currentTimeMillis()): Boolean {
+            return now - timeMillis > EXPIRE_AFTER_MILLIS
+        }
     }
 
     @PostMapping
@@ -51,8 +81,8 @@ class ScheduledCallController(
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         val now = System.currentTimeMillis()
         require(request.roomId.trim().matches(ROOM_ID)) { "Invalid roomId" }
-        require(request.timeMillis > now) { "SCHEDULED_TIME_MUST_BE_FUTURE" }
-        require(request.timeMillis - now <= MAX_FUTURE_MILLIS) { "SCHEDULED_TOO_FAR" }
+        val timeError = validateScheduleTime(request.timeMillis, now)
+        require(timeError == null) { timeError!! }
         require(request.title.length <= MAX_TITLE) { "TITLE_TOO_LONG" }
         val invitees = request.invitees.filter { it.isNotBlank() }.distinct().take(MAX_INVITEES)
         val id = request.id.trim().ifBlank { "sched_${UUID.randomUUID().toString().replace("-", "").take(12)}" }
@@ -72,17 +102,8 @@ class ScheduledCallController(
         store[id] = record
         log.info("scheduled.call created id={} room={} owner={} at={}", id, record.roomId, user.redId, record.timeMillis)
 
-        // TODO تذكير سيادي: مجدول خادمي (Scheduler/Quartz) يفحص المستحق خلال 5 دقائق
-        // ويرسل NotificationService.sendVoipPushNotification لكل مدعو + المالك.
-        // عمداً لا إرسال فوري هنا — الدعوة تُرسل عند الاستحقاق فقط لتفادي إزعاج مبكر.
-        // مثال عند التفعيل:
-        //   @Scheduled(fixedDelay = 60_000) fun remindDue() {
-        //     dueRecords(5.min).forEach { r ->
-        //       (r.invitees + r.ownerRedId).distinct().forEach { redId ->
-        //         notifications.sendVoipPushNotification(redId, r.ownerRedId, r.roomId, if (r.video) "VIDEO" else "VOICE")
-        //       }
-        //     }
-        //   }
+        // لا إرسال فوري هنا عمداً — الدعوة تُرسل عند الاستحقاق فقط عبر remindDue()
+        // لتفادي إزعاج مبكر. (المجدول كل دقيقة + نافذة ±دقيقة).
         schedulePushReminder(record)
 
         return ResponseEntity.ok(record.toResponse())
@@ -91,8 +112,9 @@ class ScheduledCallController(
     @GetMapping
     fun list(authentication: Authentication): List<ScheduledCallResponse> {
         val now = System.currentTimeMillis()
-        // تنظيف كسول للماضي حتى لا ينمو المخزن بلا حد (in-memory فقط).
-        store.entries.removeIf { it.value.timeMillis <= now }
+        // تنظيف المنتهية فقط بعد نافذة الاحتفاظ حتى لا ينمو المخزن بلا حد.
+        val expiredIds = store.entries.filter { isExpired(it.value.timeMillis, now) }.map { it.key }
+        expiredIds.forEach { store.remove(it); reminded.remove(it) }
         return store.values
             .filter { it.ownerAccountId == authentication.name && it.timeMillis > now }
             .sortedBy { it.timeMillis }
@@ -107,17 +129,66 @@ class ScheduledCallController(
         val record = store[id] ?: throw NoSuchElementException("Scheduled call not found")
         require(record.ownerAccountId == authentication.name) { "ONLY_OWNER_CAN_DELETE" }
         store.remove(id)
+        reminded.remove(id)
         log.info("scheduled.call deleted id={}", id)
         return ResponseEntity.ok(mapOf("id" to id, "deleted" to true))
     }
 
     /**
-     * خطاف التذكير — حالياً توثيق/لوج فقط.
-     * TODO: اربطه بـ @Scheduled + NotificationService.sendVoipPushNotification عند الاستحقاق.
+     * جولة المجدول الفعلية — كل دقيقة عبر Spring (@EnableScheduling في التطبيق).
+     * ترسل VoIP push عند الاستحقاق ثم تنظّف المنتهية بعد نافذة الاحتفاظ.
+     * @return عدد السجلات التي تم تذكيرها أول مرة في هذه الجولة.
+     */
+    @Scheduled(fixedDelay = 60_000)
+    fun scheduledRemind() {
+        runCatching { remindDue(System.currentTimeMillis()) }
+            .onFailure { log.warn("scheduled.call tick failed", it) }
+    }
+
+    /**
+     * يفحص المستحق خلال نافذة ±دقيقة ويرسل لكل مدعو + المالك مرة واحدة فقط،
+     * ثم يحذف المنتهية بعد 5 دقائق. خالصة زمنياً عبر nowMillis لتكون قابلة للاختبار.
+     */
+    fun remindDue(nowMillis: Long = System.currentTimeMillis()): Int {
+        // تنظيف المنتهية أولاً (مع تحرير reminded لمنع التسرب).
+        val expiredIds = store.entries.filter { isExpired(it.value.timeMillis, nowMillis) }.map { it.key }
+        expiredIds.forEach { store.remove(it); reminded.remove(it) }
+        var remindedCount = 0
+        store.values
+            .filter { isDue(it.timeMillis, nowMillis) && reminded.add(it.id) }
+            .forEach { record ->
+                val targets = (record.invitees + record.ownerRedId).distinct()
+                var ok = false
+                targets.forEach { redId ->
+                    runCatching {
+                        notifications.sendVoipPushNotification(
+                            redId,
+                            record.ownerRedId,
+                            record.roomId,
+                            if (record.video) "VIDEO" else "VOICE"
+                        )
+                    }.onSuccess { ok = true }
+                        .onFailure { log.warn("scheduled.call push failed id={} target={}", record.id, redId, it) }
+                }
+                if (ok) {
+                    remindedCount++
+                    log.info("scheduled.call reminded id={} room={} targets={}", record.id, record.roomId, targets.size)
+                } else if (targets.isEmpty()) {
+                    // بلا مدعوين: تُحتسب مذكّرة لتفادي إعادة الفحص كل دقيقة.
+                    remindedCount++
+                } else {
+                    // فشل الكل: اسمح بإعادة المحاولة في الجولة القادمة.
+                    reminded.remove(record.id)
+                }
+            }
+        return remindedCount
+    }
+    /**
+     * خطاف توثيق فقط — الإرسال الفعلي يتم عبر remindDue() كل دقيقة عند الاستحقاق.
      */
     private fun schedulePushReminder(record: ScheduledCallRecord) {
         log.info(
-            "scheduled.call reminder TODO id={} at={} invitees={} (wire to Scheduler + UnifiedPush)",
+            "scheduled.call queued id={} at={} invitees={} (push on due via Scheduler)",
             record.id, record.timeMillis, record.invitees.size
         )
         @Suppress("unused")

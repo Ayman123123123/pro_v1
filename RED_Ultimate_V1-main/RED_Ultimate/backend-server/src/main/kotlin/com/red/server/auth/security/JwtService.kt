@@ -30,6 +30,30 @@ class JwtService(
         }
     }
 
+    @PostConstruct
+    fun validateSfuSecretForProd() {
+        if (!isProdEnvironment()) return
+        require(configuredSfuSecret.isNotBlank()) {
+            "FATAL: SFU_TICKET_SECRET (red.jwt.sfu-secret) is not set. Production cannot start with SFU fallback to JWT_SECRET."
+        }
+        require(configuredSfuSecret.length >= 32 && configuredSfuSecret != "change-me-in-production-please") {
+            "FATAL: SFU_TICKET_SECRET must contain at least 32 random characters"
+        }
+        require(configuredSfuSecret != configuredSecret) {
+            "FATAL: SFU_TICKET_SECRET must differ from JWT_SECRET in production (SFU separation required)"
+        }
+    }
+
+    private fun isProdEnvironment(): Boolean {
+        val profiles = buildList {
+            add(System.getProperty("spring.profiles.active", ""))
+            add(System.getenv("SPRING_PROFILES_ACTIVE") ?: "")
+            add(System.getenv("RED_ENV") ?: "")
+            add(System.getenv("APP_ENV") ?: "")
+        }.joinToString(" ").lowercase()
+        return profiles.contains("prod")
+    }
+
     private val expirationMs: Long
         get() = accessExpirationMinutes.coerceIn(1, 60 * 24) * 60_000
 
@@ -50,6 +74,10 @@ class JwtService(
                 MessageDigest.getInstance("SHA-256").digest(s.toByteArray(StandardCharsets.UTF_8))
             )
         } else {
+            // Fail-fast in prod only — dev/test keep the safe fallback (covered by SfuTicketJwtTest).
+            check(!isProdEnvironment()) {
+                "FATAL: SFU_TICKET_SECRET (red.jwt.sfu-secret) is not set. Production cannot start with SFU fallback to JWT_SECRET."
+            }
             key
         }
     }

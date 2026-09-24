@@ -181,6 +181,16 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 val invitees = intent.getStringArrayListExtra(EXTRA_INVITEE_IDS) ?: arrayListOf()
                 val names = intent.getStringArrayListExtra(EXTRA_INVITEE_NAMES) ?: arrayListOf()
                 val title = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "اجتماع Zoom" }
+                // تحقق مسبق موحد من السقف (100) — قبل أي حالة/رنين، مع رسالة للمضيف.
+                CallLimits.checkZoom(invitees.size + 1)?.let { msg ->
+                    android.util.Log.w("ZoomGroupCallService", "limit exceeded: $msg")
+                    runCatching {
+                        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    ZoomRuntime.state = ZoomUiState.Ended
+                    stopZoom()
+                    return START_STICKY
+                }
                 ZoomRuntime.meetingId = meetingId
                 ZoomRuntime.meetingTitle = title
                 ZoomRuntime.isHost = true
@@ -196,7 +206,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                     signaling.connect()
                 }
                 ringTimeout = scope.launch {
-                    delay(45_000)
+                    delay(CallRingPolicy.UNANSWERED_TIMEOUT_MS)
                     val cur = ZoomRuntime.state
                     if (cur is ZoomUiState.Ringing) {
                         val updated = cur.members.map { if (it.status==ZoomMemberStatus.RINGING) it.copy(status=ZoomMemberStatus.NO_ANSWER) else it }
@@ -224,7 +234,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 if (com.red.sovereign.settings.SettingsRuntime.current.callNotifications) startRingtone() else prepareAudio(isVideo)
                 incomingTimeout?.cancel()
                 incomingTimeout = scope.launch {
-                    delay(30_000)
+                    delay(CallRingPolicy.INCOMING_GROUP_TIMEOUT_MS)
                     val cur = ZoomRuntime.state
                     if (cur is ZoomUiState.Incoming && cur.meetingId==meetingId) {
                         runCatching { signaling.send(CallSignal(callId=meetingId, type="ZOOM_DECLINE", groupCallId=meetingId)) }

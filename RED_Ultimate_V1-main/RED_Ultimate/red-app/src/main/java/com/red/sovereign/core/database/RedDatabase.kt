@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import com.red.sovereign.core.SecureStore
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
@@ -49,6 +50,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
     version = 8,
     exportSchema = false
 )
+@TypeConverters(RedTypeConverters::class)
 abstract class RedDatabase : RoomDatabase() {
     abstract fun redDao(): RedDao
     abstract fun outboxDao(): OutboxDao

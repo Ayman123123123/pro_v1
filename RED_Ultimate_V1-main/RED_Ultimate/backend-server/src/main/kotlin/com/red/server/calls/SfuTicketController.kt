@@ -16,6 +16,7 @@ import java.util.UUID
 import com.red.server.auth.model.UserAccount
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
+import jakarta.annotation.PostConstruct
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
@@ -164,17 +165,21 @@ data class SfuTicketResponse(
 /**
  * Issues the short-lived SFU media capability ticket.
  *
- * The signing key is derived from SFU_TICKET_SECRET when that variable is set and non-blank,
+ * The signing key is derived from `red.jwt.sfu-secret` (env SFU_TICKET_SECRET — unified
+ * with JwtService via application.yml `red.jwt.sfu-secret: ${SFU_TICKET_SECRET:}`),
  * and otherwise from the primary JWT secret (red.jwt.secret / JWT_SECRET). This lets operators
  * separate or rotate the media-ticket secret without touching login/refresh tokens, while keeping
  * a zero-config safe fallback that is byte-identical to the previous behaviour.
+ *
+ * In production (`prod` profile) the dedicated SFU secret is mandatory (fail-fast):
+ * blank/weak/reused secrets refuse startup instead of silently falling back.
  *
  * The derivation (SHA-256(secret) -> HS256 key) intentionally matches media-sfu/server.js
  * authenticate() and JwtService so the SFU verifies the ticket with the same environment variable.
  */
 @Service
 class SfuTicketSigner(
-    @Value("\${SFU_TICKET_SECRET:}") private val configuredSfuSecret: String,
+    @Value("\${red.jwt.sfu-secret:}") private val configuredSfuSecret: String,
     @Value("\${red.jwt.secret}") private val configuredJwtSecret: String,
     @Value("\${red.jwt.issuer:red-sovereign}") private val issuer: String,
     @Value("\${red.jwt.audience:red-app}") private val audience: String
@@ -183,10 +188,45 @@ class SfuTicketSigner(
     val dedicatedSecretInUse: Boolean
         get() = configuredSfuSecret.isNotBlank() && configuredSfuSecret != configuredJwtSecret
 
+    @PostConstruct
+    fun validateSfuSecretForProd() {
+        if (!isProdEnvironment()) return
+        require(configuredSfuSecret.isNotBlank()) {
+            "FATAL: SFU_TICKET_SECRET (red.jwt.sfu-secret) is not set. Production cannot start with SFU fallback to JWT_SECRET."
+        }
+        require(configuredSfuSecret.length >= 32 && configuredSfuSecret != "change-me-in-production-please") {
+            "FATAL: SFU_TICKET_SECRET must contain at least 32 random characters"
+        }
+        require(configuredSfuSecret != configuredJwtSecret) {
+            "FATAL: SFU_TICKET_SECRET must differ from JWT_SECRET in production (SFU separation required)"
+        }
+    }
+
+    private fun isProdEnvironment(): Boolean {
+        val profiles = buildList {
+            add(System.getProperty("spring.profiles.active", ""))
+            add(System.getenv("SPRING_PROFILES_ACTIVE") ?: "")
+            add(System.getenv("RED_ENV") ?: "")
+            add(System.getenv("APP_ENV") ?: "")
+        }.joinToString(" ").lowercase()
+        return profiles.contains("prod")
+    }
+
     private val signingKey: SecretKey by lazy {
-        val secret = configuredSfuSecret.ifBlank { configuredJwtSecret }
+        val secret = configuredSfuSecret.ifBlank {
+            // Fail-fast in prod only — dev/test keep the safe fallback.
+            check(!isProdEnvironment()) {
+                "FATAL: SFU_TICKET_SECRET (red.jwt.sfu-secret) is not set. Production cannot start with SFU fallback to JWT_SECRET."
+            }
+            configuredJwtSecret
+        }
         require(secret.length >= 32 && secret != "change-me-in-production-please") {
             "SFU_TICKET_SECRET (or JWT_SECRET) must contain at least 32 random characters"
+        }
+        if (isProdEnvironment()) {
+            require(configuredSfuSecret.isNotBlank() && configuredSfuSecret != configuredJwtSecret) {
+                "FATAL: SFU_TICKET_SECRET must differ from JWT_SECRET in production (SFU separation required)"
+            }
         }
         val digest = MessageDigest.getInstance("SHA-256").digest(secret.toByteArray(StandardCharsets.UTF_8))
         Keys.hmacShaKeyFor(digest)

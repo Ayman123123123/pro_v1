@@ -19,14 +19,14 @@ object RoomSeparationPolicy {
     const val PREFIX_LIVE = "LIVE_"
     const val PREFIX_CONF = "CONF_"
 
-    /** GroupChat: حد Mesh الناعم — فوقه الترقية إلى SFU. */
-    const val GROUP_CHAT_MESH_LIMIT = 8
+    /** GroupChat: حد Mesh الناعم — فوقه الترقية إلى SFU. المصدر: [CallLimits.MESH_MAX]. */
+    const val GROUP_CHAT_MESH_LIMIT = CallLimits.MESH_MAX
 
-    /** Friends/Zoom: سقف SFU الكامل (مطابق ZOOM_LIMIT). */
-    const val FRIENDS_SFU_LIMIT = 100
+    /** Friends/Zoom: سقف SFU الكامل (مطابق ZOOM_LIMIT). المصدر: [CallLimits.ZOOM_SFU_MAX]. */
+    const val FRIENDS_SFU_LIMIT = CallLimits.ZOOM_SFU_MAX
 
-    /** Live: مضيفون مشاركون ≤4. */
-    const val LIVE_COHOST_LIMIT = 4
+    /** Live: مضيفون مشاركون ≤4. المصدر: [CallLimits.LIVE_COHOST_MAX]. */
+    const val LIVE_COHOST_LIMIT = CallLimits.LIVE_COHOST_MAX
 
     /** Spaces: خانات التحدث المستهدفة (11 متحدثاً + مضيفان = 13). */
     const val CONF_SPEAKER_SLOTS = 13
@@ -96,5 +96,5 @@ object RoomSeparationPolicy {
     }
 
     /** GroupChat: هل يبدأ Mesh أولاً؟ (≤8 أعضاء إجمالاً) — فوقه SFU مباشرة. */
-    fun meshFirst(totalMembers: Int): Boolean = totalMembers <= GROUP_CHAT_MESH_LIMIT
+    fun meshFirst(totalMembers: Int): Boolean = totalMembers <= CallLimits.MESH_MAX
 }

@@ -179,12 +179,18 @@ internal fun UnifiedMessageBubble(
     onLongClick: () -> Unit = {},
     onInfoClick: () -> Unit = {}
 ) {
+    // محاذاة صحيحة (واتساب): الصادرة يمين / الواردة يسار عبر Row + Arrangement.
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isOutgoing) Arrangement.End else Arrangement.Start
+    ) {
     Card(
         modifier = Modifier
             .fillMaxWidth(0.85f)
             .combinedClickable(onClick = onInfoClick, onLongClick = onLongClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (isOutgoing) YounesEmerald.copy(alpha = .82f)
+            // ألوان معتمة قابلة للقياس (بلا alpha شفاف): زمرد صلب للصادرة.
+            containerColor = if (isOutgoing) YounesEmerald
             else MaterialTheme.colorScheme.surfaceVariant
         ),
         shape = RoundedCornerShape(
@@ -236,14 +242,16 @@ internal fun UnifiedMessageBubble(
                 MessageReactions(reactions = reactions, currentRedId = currentRedId, onToggle = onToggleReaction)
             }
             Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(timeText, fontSize = 10.sp, color = if (isOutgoing) Color(0x99001B14) else MaterialTheme.colorScheme.onSurfaceVariant)
+                // الوقت ≥11sp بعتامة 0.85 قابلة للقياس (كان 10sp بشفافية أعلى).
+                Text(timeText, fontSize = 11.sp, color = if (isOutgoing) Color(0xFF001B14).copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f))
                 if (isEdited) Text("✏️", fontSize = 10.sp)
                 if (isOutgoing) {
                     val ticks = when (message.status) { "READ", "DELIVERED" -> "✓✓" else -> "✓" }
-                    Text(ticks, color = if (message.status == "READ") AqyalCyanGlow else Color(0x99001B14), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(ticks, color = if (message.status == "READ") AqyalCyanGlow else Color(0xFF001B14).copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
+    }
     }
 }
 
@@ -262,14 +270,18 @@ internal fun RichTextMessage(
     if (rich == null) { Text("رسالة غير صالحة", color = MaterialTheme.colorScheme.error); return }
     rich.replyTo?.let { replyId -> conversation.firstOrNull { it.id == replyId }?.let { quoted -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .45f))) { Text(messageDisplayText(quoted), Modifier.padding(7.dp), maxLines = 2, style = MaterialTheme.typography.bodySmall) } } }
     if (rich.forwardOf != null) Text("معاد توجيهها", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    val annotated = remember(rich.text, rich.mentions, rich.hashtags) {
+    val annotated = remember(rich.text, rich.mentions, rich.hashtags, message.outgoing) {
         val t = rich.text
         val mentions = (rich.mentions + RED_ID_PARTIAL.findAll(t).map { it.value } + GroupMentions.NAME_TOKEN.findAll(t).map { it.value }).distinct()
         val hashtags = rich.hashtags + HASHTAG_PARTIAL.findAll(t).map { it.value }.toList()
+        // ألوان مميزة فعلاً وقابلة للقياس: الصادرة (خلفية زمردية) بنص داكن عالِ التباين،
+        // الواردة بزمرد/كوبالت صلبين على السطح — لا يتطابق أيٌّ منهما مع لون المتن.
+        val mentionColor = if (message.outgoing) Color(0xFF002118) else YounesEmerald
+        val hashtagColor = if (message.outgoing) Color(0xFF0B3D91) else AqyalCyanGlow
         androidx.compose.ui.text.buildAnnotatedString {
             append(t)
-            mentions.forEach { m -> val idx = t.indexOf(m); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = YounesEmerald, fontWeight = FontWeight.Bold), idx, idx + m.length) }
-            hashtags.forEach { h -> val idx = t.indexOf(h); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = AqyalCyanGlow), idx, idx + h.length) }
+            mentions.forEach { m -> val idx = t.indexOf(m); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = mentionColor, fontWeight = FontWeight.Bold), idx, idx + m.length) }
+            hashtags.forEach { h -> val idx = t.indexOf(h); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = hashtagColor, fontWeight = FontWeight.Bold), idx, idx + h.length) }
         }
     }
     Text(annotated, color = if (message.outgoing) Color(0xFF001B14) else MaterialTheme.colorScheme.onSurface, fontFamily = ChatFontPolicy.familyFor(SettingsRuntime.current.fontFamily))
@@ -315,22 +327,16 @@ private fun InlinePollCard(
     val id = myRedId ?: null
     val myVote = if (synced && id != null) ChatPollVoteStore.myVote(poll.pollId, id) else null
     val baseVotes = poll.votes
-    val votes = if (synced && storeCounts.any { it > 0 }) {
-        // دمج لقطة المُنشئ (تتضمن أصواتًا سابقة للإرسال) مع الوارد الجديد.
-        baseVotes.mapIndexed { index, base -> base + storeCounts.getOrElse(index) { 0 } }
-            .let { merged ->
-                // إن صوّتُّ ولم أظهر في اللقطة، أضف صوتي (تفادي النقصان البصري).
-                if (myVote != null && baseVotes.getOrElse(myVote) { 0 } == 0 &&
-                    storeCounts.getOrElse(myVote) { 0 } == 0
-                ) merged.toMutableList().also { it[myVote] = it[myVote] + 1 } else merged
-            }
-    } else if (synced && myVote != null) {
-        baseVotes.mapIndexed { index, base -> if (index == myVote) base + 1 else base }
-            .let { if (it.size < poll.options.size) it + List(poll.options.size - it.size) { 0 } else it }
+    // دمج بلا تضخيم: لقطة المُنشئ + الوارد الجديد فقط — بلا +1 متفائل
+    // (كان فرعان يضيفان +1 لصوتي فيضخّمان total ويشوّهان النسب).
+    val votes: List<Int> = if (synced) {
+        val size = maxOf(baseVotes.size, poll.options.size, storeCounts.size)
+        List(size) { index -> baseVotes.getOrElse(index) { 0 } + storeCounts.getOrElse(index) { 0 } }
     } else {
         baseVotes
     }
-    val total = votes.sum().coerceAtLeast(1)
+    // إجمالي حقيقي بلا تضخيم: 0 عند غياب الأصوات (كان coerceAtLeast(1) يضخّم).
+    val total = votes.sum().coerceAtLeast(0)
     Card(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
@@ -344,7 +350,9 @@ private fun InlinePollCard(
             Text(poll.question, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             poll.options.forEachIndexed { index, option ->
                 val optionVotes = votes.getOrElse(index) { 0 }
-                val ratio = (optionVotes.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                // نسبة موحدة: قسمة آمنة على الصفر + صيغة واحدة لكل الخيارات.
+                val ratio = if (total > 0) (optionVotes.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
+                val percentText = "${(ratio * 100).toInt()}%"
                 val isSelected = if (synced) myVote == index else null
                 Card(
                     Modifier.fillMaxWidth().clickable(enabled = !poll.isClosed && onVote != null) {
@@ -359,15 +367,15 @@ private fun InlinePollCard(
                     Column(Modifier.padding(10.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(option, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = if (isSelected == true) FontWeight.Bold else FontWeight.Normal)
-                            if (poll.isClosed || (synced && myVote != null) || (!synced)) Text(
-                                "${(ratio * 100).toInt()}%",
+                            // عرض موحد للنسبة: يُعرض دائمًا بنفس الصيغة (كان مشروطًا بثلاثة شروط متباينة).
+                            Text(
+                                percentText,
                                 color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold
                             )
                         }
-                        if (poll.isClosed || (synced && myVote != null)) {
-                            Spacer(Modifier.height(6.dp))
-                            LinearProgressIndicator(progress = { ratio }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = YounesEmerald, trackColor = MaterialTheme.colorScheme.surface)
-                        }
+                        // شريط موحد: يُعرض دائمًا بنفس القاعدة مع النسبة أعلاه.
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(progress = { ratio }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = YounesEmerald, trackColor = MaterialTheme.colorScheme.surface)
                     }
                 }
             }
@@ -550,10 +558,10 @@ internal fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMod
     val isDownloading = attachments.getDownloadState(item.id) is AttachmentState.Working
     val downloadedUri = when (val current = attachments.getDownloadState(item.id)) {
         is AttachmentState.Downloaded -> if (current.name == manifest.name) {
-            android.net.Uri.fromFile(java.io.File(current.path))
+            contentUriForFile(context, java.io.File(current.path))
         } else null
         is AttachmentState.Exported -> if (current.name == manifest.name) {
-            android.net.Uri.fromFile(java.io.File(current.path))
+            contentUriForFile(context, java.io.File(current.path))
         } else null
         else -> null
     }
@@ -643,7 +651,8 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                 androidx.compose.foundation.Image(
                     currentBitmap, contentDescription = "صورة",
                     modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
-                        val uri = android.net.Uri.fromFile(file)
+                        // content:// عبر FileProvider بدل file:// (يرمي FileUriExposedException على API 24+).
+                        val uri = contentUriForFile(context, file)
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, "image/*")
                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -694,16 +703,18 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
         else -> null
     }
     if (downloaded?.second == manifest.name) {
+        // content:// عبر FileProvider — StoryVideoPlayer والمشغّل الخارجي يقبلانها.
+        val contentUri = remember(downloaded.first) { contentUriForFile(context, java.io.File(downloaded.first)) }
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.Black), shape = RoundedCornerShape(16.dp)) {
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
-                StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxSize())
+                StoryVideoPlayer(contentUri, Modifier.fillMaxSize())
                 Box(
                     Modifier
                         .align(Alignment.Center).size(52.dp)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.55f))
                         .clickable {
-                        val uri = android.net.Uri.fromFile(java.io.File(downloaded.first))
+                        val uri = contentUriForFile(context, java.io.File(downloaded.first))
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, "video/*")
                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -813,6 +824,16 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
 
 private fun shouldAutoDownload(context: android.content.Context, sizeBytes: Long): Boolean =
     RedQualityManager.shouldAutoDownload(context, sizeBytes)
+
+/**
+ * مرجع content:// آمن عبر FileProvider (authority: com.red.sovereign.fileprovider).
+ * بديل Uri.fromFile (file://) الذي يرمي FileUriExposedException عند المشاركة
+ * مع عارض خارجي على API 24+. السقوط إلى file:// احتياطي فقط عند فشل المزوّد.
+ */
+internal fun contentUriForFile(context: android.content.Context, file: java.io.File): android.net.Uri =
+    runCatching {
+        androidx.core.content.FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+    }.getOrElse { android.net.Uri.fromFile(file) }
 
 // (نُقلت formatDuration/formatBytes إلى DashboardMedia.kt بصيغة dashboard* وLocale("ar"). 2026-09-10)
 

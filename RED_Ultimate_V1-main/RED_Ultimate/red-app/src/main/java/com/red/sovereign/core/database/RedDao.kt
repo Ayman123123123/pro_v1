@@ -4,6 +4,7 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+@TypeConverters(RedTypeConverters::class)
 interface MediaUploadDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(e: MediaUploadEntity)
@@ -19,9 +20,14 @@ interface MediaUploadDao {
 
     @Query("DELETE FROM media_uploads WHERE messageId=:id")
     suspend fun delete(id: String)
+
+    /** تنظيف رفع الوسائط عند حذف المحادثة — يُستدعى داخل معاملة deleteConversation. */
+    @Query("DELETE FROM media_uploads WHERE conversationId = :convId")
+    suspend fun deleteByConversation(convId: String): Int
 }
 
 @Dao
+@TypeConverters(RedTypeConverters::class)
 interface RedDao {
     // --- Messages & History ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -64,6 +70,14 @@ interface RedDao {
     @Query("SELECT * FROM conversations WHERE id = :id")
     suspend fun getConversation(id: String): ConversationEntity?
 
+    /** محادثة عبر معرف النظير — لمنع تكرار صفوف 1:1 لنفس الجهة. */
+    @Query("SELECT * FROM conversations WHERE peerId = :peerId LIMIT 1")
+    suspend fun getConversationByPeerId(peerId: String): ConversationEntity?
+
+    /** مجموع غير المقروء عبر كل المحادثات — لشارة التطبيق. */
+    @Query("SELECT COALESCE(SUM(unreadCount), 0) FROM conversations")
+    suspend fun totalUnreadCount(): Int
+
     @Query("UPDATE conversations SET unreadCount = 0 WHERE id = :id")
     suspend fun clearUnread(id: String)
 
@@ -82,6 +96,48 @@ interface RedDao {
     @Query("UPDATE conversations SET lastMessageText = :preview, lastMessageTimestamp = :ts, unreadCount = CASE WHEN :isIncoming = 1 THEN unreadCount + 1 ELSE unreadCount END WHERE id = :id")
     suspend fun updateConversationLast(id: String, preview: String, ts: Long, isIncoming: Int)
 
+    /**
+     * إنشاء/تحديث ذري لصف المحادثة عند تخزين رسالة (يحفظ pinned/
+     * archived/muted). كان get+insert/update متفرقين في Repository
+     * فيتسابق خيطان ويضيع unread أو يتكرر الصف.
+     */
+    @Transaction
+    suspend fun upsertConversationOnMessage(
+        conversationId: String,
+        peerId: String,
+        preview: String,
+        timestamp: Long,
+        isIncoming: Boolean
+    ) {
+        val existing = getConversation(conversationId)
+        if (existing != null) {
+            updateConversationLast(conversationId, preview, timestamp, if (isIncoming) 1 else 0)
+        } else {
+            insertConversation(
+                ConversationEntity(
+                    id = conversationId, peerId = peerId,
+                    lastMessageText = preview, lastMessageTimestamp = timestamp,
+                    unreadCount = if (isIncoming) 1 else 0
+                )
+            )
+        }
+    }
+
+    /**
+     * حفظ وارد + لمس المحادثة في معاملة واحدة: لا رسالة بلا صف
+     * محادثة ولا عداد ضائع عند قتل العملية بين العمليتين.
+     */
+    @Transaction
+    suspend fun insertMessageAndTouchConversation(
+        message: MessageEntity,
+        peerId: String,
+        preview: String,
+        isIncoming: Boolean
+    ) {
+        insertMessage(message)
+        upsertConversationOnMessage(message.conversationId, peerId, preview, message.createdAt, isIncoming)
+    }
+
     // --- Contacts ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContacts(contacts: List<ContactEntity>)
@@ -91,6 +147,32 @@ interface RedDao {
 
     @Query("SELECT * FROM contacts WHERE isFriend = 1")
     fun getFriends(): Flow<List<ContactEntity>>
+
+    /** جهة واحدة بالمعرف — للتحقق قبل الحظر/العرض. */
+    @Query("SELECT * FROM contacts WHERE redId = :redId LIMIT 1")
+    suspend fun getContactById(redId: String): ContactEntity?
+
+    /**
+     * بحث جهات بالاسم/المعرف — يستقبل نمط LIKE جاهزًا من
+     * [SearchGuards.likePattern] (التهريب في Repository، وESCAPE هنا).
+     */
+    @Query(
+        "SELECT * FROM contacts WHERE username LIKE :pattern ESCAPE '\\' " +
+            "OR displayName LIKE :pattern ESCAPE '\\' " +
+            "ORDER BY displayName ASC LIMIT :limit"
+    )
+    suspend fun searchContacts(pattern: String, limit: Int = 50): List<ContactEntity>
+
+    /** حظر/فك حظر — يعيد عدد الصفوف المعدلة (0 = لا جهة بهذا المعرف). */
+    @Query("UPDATE contacts SET isBlocked = :blocked WHERE redId = :redId")
+    suspend fun setBlocked(redId: String, blocked: Boolean): Int
+
+    /** استبدال ذري لقائمة الجهات: مسح + إدراج في معاملة واحدة. */
+    @Transaction
+    suspend fun replaceContactsFull(contacts: List<ContactEntity>) {
+        clearContacts()
+        if (contacts.isNotEmpty()) insertContacts(contacts)
+    }
 
     // --- Groups ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -107,6 +189,10 @@ interface RedDao {
 
     @Query("SELECT COUNT(*) FROM groups")
     suspend fun countGroups(): Int
+
+    /** مجموعة واحدة بالمعرف — لشاشة التفاصيل قبل الاشتراك في Flow. */
+    @Query("SELECT * FROM groups WHERE id = :id LIMIT 1")
+    suspend fun getGroupById(id: String): GroupEntity?
 
     // --- Call History ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -135,6 +221,10 @@ interface RedDao {
 
     @Query("DELETE FROM call_logs")
     suspend fun clearCallLogs()
+
+    /** عدد المكالمات الفائتة — لشارة "فاتك N". */
+    @Query("SELECT COUNT(*) FROM call_logs WHERE status = 'MISSED'")
+    suspend fun countMissedCalls(): Int
 
     /** حذف السجلات الأقدم من حد الاحتفاظ (CALL_HISTORY_RETENTION) — يُبقي الأحدث فقط. */
     @Query("DELETE FROM call_logs WHERE timestamp < :cutoff")
@@ -186,9 +276,9 @@ interface RedDao {
     @Query(
         "SELECT * FROM local_history WHERE conversationId = :convId " +
             "AND CAST(encryptedPlaintext AS TEXT) LIKE :query ESCAPE '\\' " +
-            "ORDER BY createdAt DESC"
+            "ORDER BY createdAt DESC LIMIT :limit"
     )
-    suspend fun searchMessages(convId: String, query: String): List<LocalHistoryEntity>
+    suspend fun searchMessages(convId: String, query: String, limit: Int = 100): List<LocalHistoryEntity>
 
     /** وسائط محادثة (صور/فيديو/ملفات/صوت) — مرتبة بالأحدث أولاً. أساس معرض الوسائط. */
     @Query("SELECT * FROM local_history WHERE conversationId = :convId AND messageType IN ('IMAGE','VIDEO','FILE','AUDIO') ORDER BY createdAt DESC")
@@ -246,10 +336,23 @@ interface RedDao {
     @Query("DELETE FROM conversations WHERE id = :convId")
     suspend fun deleteConversationRow(convId: String)
 
+    /**
+     * حذف محادثة ذري: السجل + الرسائل + التفاعلات + الصف في معاملة
+     * واحدة — لا صف يتيم ولا سجل بلا محادثة عند قتل العملية وسط الحذف.
+     * (تنظيف outbox/media/FTS في LocalRepository بنفس المعاملة عبر DB).
+     */
+    @Transaction
+    suspend fun deleteConversationFull(convId: String) {
+        deleteLocalHistoryByConversation(convId)
+        deleteMessagesByConversation(convId)
+        deleteReactionsByConversation(convId)
+        deleteConversationRow(convId)
+    }
+
     // بحث شامل: CAST لازم لأن encryptedPlaintext BLOB وLIKE على BLOB
     // لا يطابق شيئًا أبدًا (نفس علة searchMessages). ESCAPE للتهريب.
-    @Query("SELECT * FROM local_history WHERE CAST(encryptedPlaintext AS TEXT) LIKE :query ESCAPE '\\' ORDER BY createdAt DESC")
-    suspend fun searchAllMessages(query: String): List<LocalHistoryEntity>
+    @Query("SELECT * FROM local_history WHERE CAST(encryptedPlaintext AS TEXT) LIKE :query ESCAPE '\\' ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun searchAllMessages(query: String, limit: Int = 100): List<LocalHistoryEntity>
 
     /** كل الرسائل الغنية المخزنة — لفحص مؤقت الاختفاء (expiresAt داخل حمولة RichMessage). */
     @Query("SELECT * FROM local_history WHERE messageType = 'RICH_TEXT'")

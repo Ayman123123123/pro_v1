@@ -55,6 +55,9 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
         val contactResult = client.request("GET", "/api/contacts")
         val requestResult = client.request("GET", "/api/contacts/requests")
         val outgoingResult = client.request("GET", "/api/contacts/requests/outgoing")
+        // المحظورون من الخادم — GET /api/contacts/blocked يرجع List<PublicRedProfile>.
+        // أفضل جهد: فشله لا يُفشل كامل التحديث، والقائمة القديمة تبقى بدل التصفير.
+        val blockedResult = client.request("GET", "/api/contacts/blocked")
         if (contactResult is ApiResult.Error) { state = DirectoryState.Error(contactResult.message); return@launch }
         if (requestResult is ApiResult.Error) { state = DirectoryState.Error(requestResult.message); return@launch }
         if (outgoingResult is ApiResult.Error) { state = DirectoryState.Error(outgoingResult.message); return@launch }
@@ -69,6 +72,22 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
             repository.replaceContacts(people.map { ContactEntity(it.redId, it.username, it.displayName) })
             requests.clear(); requests.addAll(incoming)
             outgoingRequests.clear(); outgoingRequests.addAll(outgoing)
+            // مزامنة المحظورين من الخادم — لا ذاكرة لحظية فقط.
+            if (blockedResult is ApiResult.Success) {
+                runCatching { json.decodeFromString<List<PublicRedProfile>>(blockedResult.value) }
+                    .onSuccess { serverBlocked ->
+                        blocked.clear()
+                        blocked.addAll(serverBlocked.map { it.redId }.filter { it.isNotBlank() }.distinct())
+                    }
+                    .onFailure {
+                        // توافق رجعي: خادم قديم يرجع List<String> لمعرفات redId.
+                        runCatching { json.decodeFromString<List<String>>(blockedResult.value) }
+                            .onSuccess { ids ->
+                                blocked.clear()
+                                blocked.addAll(ids.filter { it.isNotBlank() }.distinct())
+                            }
+                    }
+            }
             refreshPresence(people)
         }
             .onFailure { state = DirectoryState.Error("INVALID_CONTACT_RESPONSE") }

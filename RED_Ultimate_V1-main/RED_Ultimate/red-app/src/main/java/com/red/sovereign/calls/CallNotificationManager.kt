@@ -40,7 +40,26 @@ object CallNotificationManager {
 
     // إصلاح تسرب/تصادم: notificationId++ غير ذري — استدعاءان متزامنان قد
     // يُنتجان نفس المعرف فيُسقط إشعار قبول/رفض. AtomicInteger يضمن التفرد.
-    private val notificationIdSeq = java.util.concurrent.atomic.AtomicInteger(1000)
+    // فصل النطاق عن الثوابت (NOTIFICATION_ID=7401/7499): يبدأ من 20_000،
+    // ونطاق الرنين 200_000+، فحتى لو صادف callId.hashCode قيمة ثابتة لا يتصادمان.
+    private val notificationIdSeq = java.util.concurrent.atomic.AtomicInteger(20_000)
+    private const val ACTION_CODE_MIN = 20_000
+    private const val ACTION_CODE_MAX = 90_000
+    const val RING_NOTIFY_BASE = 200_000
+    private const val RING_NOTIFY_SPAN_MASK = 0x7FFF
+
+    /** معرف إشعار رنين مستقر لكل callId داخل نطاق منفصل عن كل الثوابت. */
+    fun ringNotifyId(callId: String): Int =
+        RING_NOTIFY_BASE + (callId.hashCode() and RING_NOTIFY_SPAN_MASK)
+
+    /** معرف فريد لأزرار الإشعار داخل نطاق الإجراءات (يلتف قبل بلوغ نطاق الرنين). */
+    fun nextActionRequestCode(): Int {
+        while (true) {
+            val v = notificationIdSeq.getAndIncrement()
+            if (v in ACTION_CODE_MIN..ACTION_CODE_MAX) return v
+            if (v > ACTION_CODE_MAX) notificationIdSeq.compareAndSet(v + 1, ACTION_CODE_MIN)
+        }
+    }
 
     fun isSuppressedByDnd(isFavorite: Boolean = false, isRepeatCaller: Boolean = false): Boolean =
         DndPolicy.shouldSuppress(SettingsRuntime.current, isFavorite, isRepeatCaller)
@@ -183,7 +202,7 @@ object CallNotificationManager {
             context,
             CallNotificationActionReceiver.ACTION_END,
             callType,
-            notificationIdSeq.getAndIncrement(),
+            nextActionRequestCode(),
             callId,
             myUserId
         )
@@ -222,7 +241,7 @@ object CallNotificationManager {
             context,
             CallNotificationActionReceiver.ACTION_END,
             callType,
-            notificationIdSeq.getAndIncrement(),
+            nextActionRequestCode(),
             callId,
             myUserId
         )
@@ -230,7 +249,7 @@ object CallNotificationManager {
             context,
             CallNotificationActionReceiver.ACTION_TOGGLE_MIC,
             callType,
-            notificationIdSeq.getAndIncrement(),
+            nextActionRequestCode(),
             callId,
             myUserId
         )
@@ -238,7 +257,7 @@ object CallNotificationManager {
             context,
             CallNotificationActionReceiver.ACTION_TOGGLE_SPEAKER,
             callType,
-            notificationIdSeq.getAndIncrement(),
+            nextActionRequestCode(),
             callId,
             myUserId
         )
@@ -319,7 +338,7 @@ object CallRingRegistry {
                 am.requestAudioFocus(req)
             }
         }
-        val notifyId = callId.hashCode()
+        val notifyId = CallNotificationManager.ringNotifyId(callId)
         val builder = CallNotificationManager.buildIncomingCallNotification(
             context, peer, isVideo, callType, callId, myUserId
         )
@@ -344,6 +363,8 @@ object CallRingRegistry {
         runCatching {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             nm.cancel(activeNotifyId)
+            // النطاق المنفصل + hashCode القديم (ترحيل: إشعارات ما قبل التحديث)
+            nm.cancel(CallNotificationManager.ringNotifyId(callId))
             nm.cancel(callId.hashCode())
         }
         if (activeCallId == callId) {

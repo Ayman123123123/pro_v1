@@ -8,7 +8,10 @@ package com.red.sovereign.calls
  * RED ID is polite and rolls back to the remote offer.
  */
 object MeshNegotiation {
-    const val MAX_PEERS = 8
+    /**
+     * المصدر الوحيد: [CallLimits.MESH_MAX] (=8). هذا الاسم باقٍ للتوافق فقط.
+     */
+    const val MAX_PEERS = CallLimits.MESH_MAX
 
     fun shouldOfferTo(remoteUserId: String, localUserId: String, isNewcomer: Boolean): Boolean {
         if (remoteUserId.isBlank() || remoteUserId == localUserId) return false
@@ -22,7 +25,7 @@ object MeshNegotiation {
     }
 
     fun canAttach(existingPeerCount: Int, alreadyAttached: Boolean): Boolean =
-        alreadyAttached || existingPeerCount < MAX_PEERS
+        alreadyAttached || existingPeerCount < CallLimits.MESH_MAX
 
     fun targetOf(payload: Map<String, String>, fallback: String = ""): String =
         payload["targetUserId"].orEmpty().ifBlank { fallback }

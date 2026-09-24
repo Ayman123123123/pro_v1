@@ -36,6 +36,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * ════════════════════════════════════════════════════════════════════════
@@ -57,6 +60,52 @@ data class CommunitiesUiState(
     val query: String = "",
     val showCreate: Boolean = false
 )
+
+/** جسم PUT /api/communities/{id} — يطابق UpdateCommunityRequest في الباكند (ADMIN فقط). */
+@Serializable
+data class UpdateCommunityBody(
+    val name: String? = null,
+    val description: String? = null,
+    val category: String? = null,
+    val tags: List<String>? = null,
+    val isPublic: Boolean? = null,
+    val rules: String? = null,
+    val avatarColor: String? = null
+)
+
+private val CommunityJson = Json { ignoreUnknownKeys = true; isLenient = true; explicitNulls = false }
+
+/**
+ * PUT /api/communities/{id} — معرّف هنا (لا في CommunitiesApi.kt خارج النطاق)
+ * لأن CommunitiesApi يُخفي الـ client (private) ولا يقبل handler خارجي؛
+ * المنادي يمرر tokens الجلسة نفسها فيُبنى AuthorizedApiClient مطابق.
+ */
+suspend fun putCommunityUpdate(
+    tokens: TokenStore,
+    id: String,
+    body: UpdateCommunityBody
+): ApiResult<Community> {
+    val payload = CommunityJson.encodeToString(body)
+    val raw = when (val r = AuthorizedApiClient(tokens).request("PUT", "/api/communities/$id", payload)) {
+        is ApiResult.Success -> r.value
+        is ApiResult.Error -> return r
+    }
+    return try {
+        ApiResult.Success(200, CommunityJson.decodeFromString<Community>(raw))
+    } catch (e: Exception) {
+        ApiResult.Error(500, e.message.orEmpty())
+    }
+}
+
+/** ألوان الأفاتار المقترحة — نفس لوحة pickRandomColor في الباكند. */
+private val CommunityAvatarColors = listOf(
+    "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A",
+    "#98D8C8", "#FFD93D", "#6BCB77", "#C780FA"
+)
+
+/** "a, b, c" ←→ ["a","b","c"] — تُطبَّع صغيرة كما يفعل الباكند. */
+private fun parseTagsInput(raw: String): List<String> =
+    raw.split(',', '،', ' ').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct().take(10)
 
 class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
     private val _state = MutableStateFlow(CommunitiesUiState())
@@ -129,6 +178,9 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
         description: String,
         category: String,
         isPublic: Boolean,
+        tags: List<String> = emptyList(),
+        rules: String? = null,
+        avatarColor: String? = null,
         onSuccess: () -> Unit
     ) {
         if (name.length < 2) {
@@ -140,7 +192,10 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
                 name = name.trim(),
                 description = description.takeIf { it.isNotBlank() }?.trim(),
                 category = category,
-                isPublic = isPublic
+                tags = tags.takeIf { it.isNotEmpty() },
+                isPublic = isPublic,
+                rules = rules?.trim()?.takeIf { it.isNotEmpty() },
+                avatarColor = avatarColor?.trim()?.takeIf { it.isNotEmpty() }
             )
             when (val result = api.create(body)) {
                 is ApiResult.Success -> {
@@ -150,6 +205,32 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
                 is ApiResult.Error -> _state.update { it.copy(error = result.message) }
             }
         }
+    }
+
+    /** تحديث المجتمع عبر PUT — doPut تُحقن من الشاشة (تملك tokens الجلسة). */
+    fun update(
+        community: Community,
+        name: String?,
+        description: String?,
+        category: String?,
+        tags: List<String>?,
+        isPublic: Boolean?,
+        rules: String?,
+        avatarColor: String?,
+        doPut: suspend (id: String, body: UpdateCommunityBody) -> ApiResult<Community>,
+        onSuccess: () -> Unit = {}
+    ) = viewModelScope.launch {
+        when (val result = doPut(community.id, UpdateCommunityBody(name, description, category, tags, isPublic, rules, avatarColor))) {
+            is ApiResult.Success -> {
+                applyUpdated(result.value)
+                onSuccess()
+            }
+            is ApiResult.Error -> _state.update { it.copy(error = result.message) }
+        }
+    }
+
+    fun applyUpdated(updated: Community) = _state.update { current ->
+        current.copy(communities = current.communities.map { if (it.id == updated.id) updated else it })
     }
 
     fun clearError() = _state.update { it.copy(error = null) }
@@ -170,6 +251,10 @@ fun CommunitiesScreen(
         }
     )
     val state by vm.state.collectAsState()
+    var editingCommunity by remember { mutableStateOf<Community?>(null) }
+    // حقن PUT من الشاشة (تملك tokens) — الـ ViewModel لا يرى الجلسة.
+    val doPut: suspend (String, UpdateCommunityBody) -> ApiResult<Community> =
+        remember(tokens) { { id, body -> putCommunityUpdate(tokens, id, body) } }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -247,7 +332,8 @@ fun CommunitiesScreen(
                             onOpen = { onOpenCommunity(community.id, community.name) },
                             onJoin = { vm.join(community) },
                             onLeave = { vm.leave(community) },
-                            onDelete = { vm.delete(community) }
+                            onDelete = { vm.delete(community) },
+                            onEdit = { editingCommunity = community }
                         )
                     }
                 }
@@ -258,7 +344,21 @@ fun CommunitiesScreen(
     if (state.showCreate) {
         CreateCommunityDialog(
             onDismiss = vm::hideCreate,
-            onSubmit = { name, desc, cat, isPublic -> vm.create(name, desc, cat, isPublic) {} }
+            onSubmit = { name, desc, cat, isPublic, tags, rules, avatarColor ->
+                vm.create(name, desc, cat, isPublic, tags, rules, avatarColor) {}
+            }
+        )
+    }
+
+    editingCommunity?.let { community ->
+        EditCommunityDialog(
+            community = community,
+            onDismiss = { editingCommunity = null },
+            onSave = { name, desc, cat, isPublic, tags, rules, avatarColor ->
+                vm.update(community, name, desc, cat, tags, isPublic, rules, avatarColor, doPut) {
+                    editingCommunity = null
+                }
+            }
         )
     }
 }
@@ -269,7 +369,8 @@ private fun CommunityCard(
     onOpen: () -> Unit,
     onJoin: () -> Unit,
     onLeave: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEdit: () -> Unit = {}
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val avatarColor = parseColorOrDefault(community.avatarColor)
@@ -333,6 +434,31 @@ private fun CommunityCard(
                             "· ${roleLabel(community.myRole)}",
                             color = Muted,
                             fontSize = 11.sp
+                        )
+                    }
+                }
+                if (community.tags.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        community.tags.take(5).joinToString(" ") { "#$it" },
+                        color = YounesEmerald,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                community.rules?.takeIf { it.isNotBlank() }?.let { rules ->
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, null, tint = Muted, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            rules,
+                            color = Muted,
+                            fontSize = 11.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                     }
                 }

@@ -285,7 +285,9 @@ import com.red.sovereign.features.explore.RedExploreScreen
 import com.red.sovereign.features.privacy.PrivacySettingsScreen
 import com.red.sovereign.features.chat.CreateGroupScreen
 import com.red.sovereign.features.chat.RedGlobalSearch
+import com.red.sovereign.features.chat.ScheduledMessagesScreen
 import com.red.sovereign.features.chat.SovereignGroupInfoScreen
+import com.red.sovereign.features.chat.StarredMessagesScreen
 import com.red.sovereign.features.profile.BackupScreen
 import com.red.sovereign.features.profile.ProfileScreen
 import com.red.sovereign.core.YounesId
@@ -301,7 +303,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 
 
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, ADMIN, DEVICE_SETTINGS, OFFLINE_QUEUE, RECOVERY_HUB, SMART_SERVER }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, ADMIN, DEVICE_SETTINGS, OFFLINE_QUEUE, RECOVERY_HUB, SMART_SERVER, STARRED, SCHEDULED }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -513,7 +515,34 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 val tokens = rememberDashboardTokenStore()
                 CommunitiesScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD })
             }
-            SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
+            SovereignScreen.STARRED -> {
+                val repo = rememberDashboardRepository()
+                StarredMessagesScreen(
+                    repository = repo,
+                    onBack = { currentScreen = SovereignScreen.DASHBOARD },
+                    onMessageClick = { _, conversationId ->
+                        val peer = directory.contacts.firstOrNull { conversationId(account.redId, it.redId) == conversationId }
+                        if (peer != null) {
+                            pendingChatTarget = peer.redId
+                            section = MainSection.CHATS
+                        } else if (groups.groups.any { it.id == conversationId }) {
+                            selectedGroupId = conversationId
+                            section = MainSection.GROUPS
+                        } else {
+                            section = MainSection.CHATS
+                        }
+                        currentScreen = SovereignScreen.DASHBOARD
+                    }
+                )
+            }
+            SovereignScreen.SCHEDULED -> {
+                ScheduledMessagesScreen(
+                    onNavigateBack = { currentScreen = SovereignScreen.DASHBOARD },
+                    onEditMessage = { },
+                    onDeleteMessage = { }
+                )
+            }
+            SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> pendingChatTarget = person.redId; currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
             else -> currentScreen = SovereignScreen.DASHBOARD
         }
         // Still show call overlays even when not on dashboard — unified
@@ -607,7 +636,9 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onProfile = { currentScreen = SovereignScreen.PROFILE },
                     onEvents = { currentScreen = SovereignScreen.EVENTS },
                     onPolls = { currentScreen = SovereignScreen.POLLS },
-                    onDeviceSettings = { currentScreen = SovereignScreen.DEVICE_SETTINGS }
+                    onDeviceSettings = { currentScreen = SovereignScreen.DEVICE_SETTINGS },
+                    onStarred = { currentScreen = SovereignScreen.STARRED },
+                    onScheduled = { currentScreen = SovereignScreen.SCHEDULED }
                 )
             }
         }
@@ -754,162 +785,7 @@ private fun RedTopBar(redId: String, username: String, compact: Boolean, onSetti
     IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
 }
 
-@Composable
-private fun StoryCircle(label: String, own: Boolean, click: () -> Unit) = Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = click)) {
-    Box(Modifier.size(66.dp).clip(CircleShape).background(if (own) AqyalGold else AqyalCyanGlow), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(58.dp).clip(CircleShape).background(AqyalRoyalBlue), contentAlignment = Alignment.Center) {
-            Icon(if (own) Icons.Default.Add else Icons.Default.Person, null)
-        }
-    }
-    Text(label, fontSize = 11.sp, maxLines = 1)
-}
-
-@Composable
-private fun PostCard(
-    post: Post,
-    currentRedId: String,
-    onLike: (Post) -> Unit,
-    onFollow: (Post) -> Unit,
-    onVote: (Post, String) -> Unit,
-    onThread: () -> Unit,
-    onQuote: () -> Unit,
-    onEdit: (Post, String) -> Unit = { _, _ -> },
-    onDelete: (Post) -> Unit = {},
-    onHide: (Post) -> Unit = {},
-    onMute: (Post) -> Unit = {},
-    onReport: (Post) -> Unit = {}
-) = Card(
-    Modifier.fillMaxWidth().padding(horizontal = 14.dp),
-    colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy.copy(alpha = .96f)),
-    shape = RoundedCornerShape(24.dp)
-) {
-    val context = LocalContext.current
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        var showMenu by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-        var showEditHistory by androidx.compose.runtime.remember(post.id) { androidx.compose.runtime.mutableStateOf(false) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(48.dp).clip(CircleShape).background(
-                    Brush.linearGradient(listOf(YounesEmerald, AqyalCyanGlow, AqyalGold))
-                ),
-                contentAlignment = Alignment.Center
-            ) { Text(post.authorDisplayName.take(1).ifBlank { "ي" }, color = Color(0xFF03120E), fontWeight = FontWeight.Black) }
-            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                Text(post.authorDisplayName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("@${post.authorUsername} · ${post.authorRedId}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            IconButton({ showMenu = true }) { Icon(Icons.Default.MoreVert, "خيارات") }
-            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                if (post.authorRedId == currentRedId) {
-                    DropdownMenuItem(text = { Text("تعديل") }, onClick = { showMenu = false; onEdit(post, post.text) })
-                    DropdownMenuItem(text = { Text("حذف") }, onClick = { showMenu = false; onDelete(post) })
-                } else {
-                    DropdownMenuItem(text = { Text("إخفاء") }, onClick = { showMenu = false; onHide(post) })
-                    DropdownMenuItem(text = { Text("كتم @${post.authorUsername}") }, onClick = { showMenu = false; onMute(post) })
-                    DropdownMenuItem(text = { Text("إبلاغ") }, onClick = { showMenu = false; onReport(post) })
-                }
-            }
-            if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("إضافة صديق") }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            // شارات عرض فقط (كانت AssistChip معطلة بـ onClick فارغ) — نصوص ثابتة بلا تفاعل وهمي.
-            Text(if (post.visibility == "LOCAL_YEMEN") "نبض محلي" else "عام", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(if (post.poll != null) "استطلاع" else if (post.parentId != null) "رد" else "منشور", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (post.kind != "POST") Text(post.kind, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Text(post.text, fontSize = 17.sp, lineHeight = 25.sp, color = MaterialTheme.colorScheme.onSurface)
-        if (post.hashtags.isNotEmpty() || post.mentions.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                post.hashtags.forEach { tag -> Text(tag, color = AqyalCyanGlow, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
-                post.mentions.forEach { m -> Text(m, color = YounesEmerald, fontSize = 13.sp) }
-            }
-        }
-        if (SettingsRuntime.current.linkPreviews) post.linkCard?.let { card ->
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(10.dp)) {
-                    Text(card.title ?: card.url, fontWeight = FontWeight.Bold, maxLines = 1)
-                    Text(card.description ?: "", color = Color.Gray, fontSize = 12.sp, maxLines = 2)
-                }
-            }
-        }
-        if (post.editedAt != null) TextButton({ showEditHistory = true }) { Text("تم التعديل — عرض السجل", color = Color.Gray, fontSize = 11.sp) }
-        if (showEditHistory) AlertDialog(
-            onDismissRequest = { showEditHistory = false },
-            title = { Text("سجل التعديلات") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (post.editHistory.isEmpty()) Text("لا يوجد سجل متاح", fontSize = 13.sp)
-                    post.editHistory.forEach { entry ->
-                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .6f))) {
-                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(entry.text, fontSize = 13.sp)
-                                Text(entry.editedAt, fontSize = 11.sp, color = Color.Gray)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton({ showEditHistory = false }) { Text("إغلاق") } }
-        )
-        post.quotePostId?.let { quotedId ->
-            Card(colors = CardDefaults.cardColors(containerColor = AqyalSurfaceRaised.copy(alpha = .72f))) {
-                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Repeat, null, tint = AqyalGold, modifier = Modifier.size(18.dp))
-                    Text(" اقتباس يونس · ${quotedId.take(8)}", color = AqyalGold, fontSize = 12.sp)
-                }
-            }
-        }
-        post.poll?.let { poll ->
-            val totalVotes = poll.options.sumOf { it.votes }.coerceAtLeast(1)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                poll.options.forEach { option ->
-                    val ratio = (option.votes.toFloat() / totalVotes.toFloat()).coerceIn(0f, 1f)
-                    Card(
-                        Modifier.fillMaxWidth().clickable { onVote(post, option.id) },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .72f)),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(option.text, fontWeight = FontWeight.SemiBold)
-                                Text("${(ratio * 100).toInt()}%", color = AqyalCyanGlow, fontWeight = FontWeight.Bold)
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = { ratio },
-                                modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(50)),
-                                color = YounesEmerald,
-                                trackColor = MaterialTheme.colorScheme.surface
-                            )
-                            Text("${option.votes} صوت", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-                        }
-                    }
-                }
-                Text("إجمالي الأصوات: ${poll.options.sumOf { it.votes }}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-            PostAction(Icons.Default.FavoriteBorder, "${post.reactionCounts["LIKE"] ?: 0}", true) { onLike(post) }
-            PostAction(Icons.AutoMirrored.Filled.Chat, post.replyCount.toString(), true, onThread)
-            PostAction(Icons.Default.Repeat, "اقتباس", true, onQuote)
-            PostAction(Icons.Default.Share, "مشاركة", true) {
-                val shareText = buildString {
-                    append(post.text)
-                    if (post.hashtags.isNotEmpty()) append("\n").append(post.hashtags.joinToString(" "))
-                    append("\n\nيونس · @").append(post.authorUsername)
-                }
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, shareText)
-                }
-                runCatching { context.startActivity(Intent.createChooser(intent, "مشاركة منشور يونس")) }
-            }
-        }
-    }
-}
-
-@Composable private fun PostAction(icon: ImageVector, label: String, enabled: Boolean, action: () -> Unit) = TextButton(action, enabled = enabled) { Icon(icon, label, Modifier.size(18.dp)); Text(" $label", fontSize = 11.sp) }
+// (استخراج 2026-09-10: StoryCircle/PostCard/PostAction الميتة حُذفت — النسخة الحية في FeedScreens.kt.)
 // (حُذف المغلف الرقيق Avatar — استورد SovereignAvatar مباشرة من ui/components/Avatar.kt. 2026-09-10)
 
 @Composable private fun GroupAvatar(group: com.red.sovereign.groups.Group, groups: GroupViewModel) {
@@ -3732,7 +3608,9 @@ private fun MoreScreen(
     onEvents: () -> Unit = {},
     onPolls: () -> Unit = {},
     // ربط P0: مدخل شاشة إعدادات الجهاز (البنود المربوطة بالصفحات الحية).
-    onDeviceSettings: () -> Unit = {}
+    onDeviceSettings: () -> Unit = {},
+    onStarred: () -> Unit = {},
+    onScheduled: () -> Unit = {}
 ) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -3761,6 +3639,8 @@ private fun MoreScreen(
         MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "مجتمعات عامة وقنوات — انضم وتابع (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
         MoreOption(Icons.Default.Event, "الفعاليات", "فعاليات مجتمعية مع RSVP وتسجيل حضور", Color(0xFFE8B84A), enabled = true, click = onEvents)
         MoreOption(Icons.Default.Poll, "الاستطلاعات", "تصويت مجتمعي مع نتائج فورية ونِسَم مئوية", Color(0xFF65D7E7), enabled = true, click = onPolls)
+        MoreOption(Icons.Default.Star, "الرسائل المُعلَّمة", "رسائلك المميزة بنجمة من كل المحادثات", AqyalGold, click = onStarred)
+        MoreOption(Icons.Default.History, "الرسائل المجدولة", "رسائل تُرسل تلقائياً في موعدها", AqyalCyanGlow, click = onScheduled)
     }
 }
 

@@ -33,19 +33,44 @@ class CallWebSocketHandler(
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
     private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
     private val groupRooms = ConcurrentHashMap<String, GroupCallRoom>()
+    private val rateLimits = ConcurrentHashMap<String, ArrayDeque<Long>>()
 
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
-        val source = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
-        val signal = objectMapper.readValue(message.payload, IncomingCallSignal::class.java)
+        val source = session.attributes["userId"] as? String
+        if (source.isNullOrBlank()) {
+            sendError(session, "", "UNAUTHENTICATED")
+            return
+        }
+        if (!checkRateLimit(source)) {
+            sendError(session, "", "RATE_LIMITED")
+            return
+        }
+        val signal: IncomingCallSignal = try {
+            objectMapper.readValue(message.payload, IncomingCallSignal::class.java)
+        } catch (_: Exception) {
+            sendError(session, "", "INVALID_PAYLOAD")
+            return
+        }
+        try {
+            handleSignal(session, source, signal)
+        } catch (e: Exception) {
+            // إطار ERROR فقط — الجلسة تبقى مفتوحة أبداً.
+            sendError(session, signal.callId?.trim().orEmpty(), e.message?.takeIf { it.isNotBlank() } ?: "INTERNAL_ERROR")
+        }
+    }
+
+    private fun handleSignal(session: WebSocketSession, source: String, signal: IncomingCallSignal) {
         val type = signal.type.uppercase()
         when (type) {
             // دعوة مكالمة جماعية: targetUserId فارغ والقائمة في inviteeIds — يُرن لكل مدعو
             "GROUP_CALL_INVITE" -> {
-                val rawGroupCallId = requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
-                val groupCallId = resolveRoom(rawGroupCallId)
+                val rawId = signal.callId?.trim().orEmpty()
+                if (rawId.isBlank()) { sendError(session, "", "callId is required"); return }
+                val groupCallId = resolveRoom(rawId)
+                if (!ROOM_ID_REGEX.matches(groupCallId)) { sendError(session, rawId, "INVALID_ROOM_ID"); return }
                 // حد واتساب: 32 مشاركاً كحد أقصى — كان الخادم يقبل عدداً غير محدود.
                 val invitees = signal.inviteeIds.filter { it.isNotBlank() && it != source }.take(MAX_GROUP_CALL_MEMBERS)
-                require(invitees.isNotEmpty()) { "inviteeIds is required" }
+                if (invitees.isEmpty()) { sendError(session, groupCallId, "inviteeIds is required"); return }
                 groupRooms[groupCallId] = GroupCallRoom(host = source, members = invitees.toMutableList())
                 val payload = signal.payload + ("hostName" to (signal.payload["hostName"] ?: ""))
                 invitees.forEach { invitee ->
@@ -66,12 +91,12 @@ class CallWebSocketHandler(
             // ردود الأعضاء إلى المضيف: ACCEPT/DECLINE جوابٌ على الدعوة
             // فوجهته المضيف طبعًا.
             "GROUP_CALL_ACCEPT", "GROUP_CALL_DECLINE" -> {
-                val groupCallId = resolveRoom(requireCallId(signal))
+                val groupCallId = validGroupRoomOrError(session, signal.callId) ?: return
                 val room = groupRooms[groupCallId] ?: groupRooms[signal.callId?.trim().orEmpty()]
                 // Kicked members rejoining (stale invite / message tap): bounce them out cleanly.
                 if (type == "GROUP_CALL_ACCEPT" && room != null && room.kicked.any { it.equals(source, ignoreCase = true) }) {
                     val bounce = OutgoingCallSignal(groupCallId, room.host, source, "GROUP_CALL_END", signal.mode.uppercase(), mapOf("reason" to "kicked"))
-                    session.sendMessage(TextMessage(objectMapper.writeValueAsString(bounce)))
+                    session.sendSafe(TextMessage(objectMapper.writeValueAsString(bounce)))
                     return
                 }
                 // وجهة صريحة إن أرسلها العميل، وإلا المضيف، وإلا المصدر نفسه.
@@ -84,7 +109,7 @@ class CallWebSocketHandler(
                     val json = objectMapper.writeValueAsString(outbound)
                     targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
                 }
-                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                 return
             }
 
@@ -106,7 +131,7 @@ class CallWebSocketHandler(
             // ثم المضيف كسقوط أخير حين لا تكون الغرفة معروفة للخادم (مثل
             // إعادة تشغيله وسط مكالمة).
             "GROUP_CALL_STATUS" -> {
-                val groupCallId = resolveRoom(requireCallId(signal))
+                val groupCallId = validGroupRoomOrError(session, signal.callId) ?: return
                 val room = groupRooms[groupCallId] ?: groupRooms[signal.callId?.trim().orEmpty()]
                 val recipients: List<String> = when {
                     signal.targetUserId.isNotBlank() -> listOf(signal.targetUserId)
@@ -127,11 +152,11 @@ class CallWebSocketHandler(
                         targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
                     }
                 }
-                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                 return
             }
             "GROUP_CALL_END" -> {
-                val groupCallId = resolveRoom(requireCallId(signal))
+                val groupCallId = validGroupRoomOrError(session, signal.callId) ?: return
                 val room = groupRooms.remove(groupCallId) ?: groupRooms.remove(signal.callId?.trim().orEmpty())
                 val targets = (room?.members ?: emptyList()) + room?.host
                 dropPending(groupCallId)

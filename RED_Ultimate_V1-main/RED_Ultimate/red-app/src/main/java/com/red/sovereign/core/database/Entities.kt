@@ -26,7 +26,54 @@ data class MessageEntity(
     // ✅ إضافة دعم الحذف للجميع
     val deletedForAll: Boolean = false,
     val deletedBySenderId: String? = null
-)
+) {
+    // ByteArray يستعمل المساواة المرجعية افتراضيًا في data class —
+    // فينكسر distinct()/DiffUtil وتُعامل نسختان متطابقتان كعنصرين.
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MessageEntity) return false
+        return id == other.id &&
+            conversationId == other.conversationId &&
+            senderId == other.senderId &&
+            receiverId == other.receiverId &&
+            payload.contentEquals(other.payload) &&
+            type == other.type &&
+            senderDeviceId == other.senderDeviceId &&
+            receiverDeviceId == other.receiverDeviceId &&
+            ciphertextType == other.ciphertextType &&
+            sequence == other.sequence &&
+            status == other.status &&
+            createdAt == other.createdAt &&
+            outgoing == other.outgoing &&
+            replyToMessageId == other.replyToMessageId &&
+            replyToMessageText == other.replyToMessageText &&
+            replyToSenderId == other.replyToSenderId &&
+            deletedForAll == other.deletedForAll &&
+            deletedBySenderId == other.deletedBySenderId
+    }
+
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + conversationId.hashCode()
+        result = 31 * result + senderId.hashCode()
+        result = 31 * result + receiverId.hashCode()
+        result = 31 * result + payload.contentHashCode()
+        result = 31 * result + type.hashCode()
+        result = 31 * result + senderDeviceId
+        result = 31 * result + receiverDeviceId
+        result = 31 * result + ciphertextType
+        result = 31 * result + sequence.hashCode()
+        result = 31 * result + status.hashCode()
+        result = 31 * result + createdAt.hashCode()
+        result = 31 * result + outgoing.hashCode()
+        result = 31 * result + (replyToMessageId?.hashCode() ?: 0)
+        result = 31 * result + (replyToMessageText?.hashCode() ?: 0)
+        result = 31 * result + (replyToSenderId?.hashCode() ?: 0)
+        result = 31 * result + deletedForAll.hashCode()
+        result = 31 * result + (deletedBySenderId?.hashCode() ?: 0)
+        return result
+    }
+}
 
 // TODO(P1-A): عمود topicId مقترح لجدول local_history لم يُضف عمدًا هنا —
 // إضافة عمود Room تتطلب Migration (6→7) + تعديل RedDatabase.kt وهو خارج
@@ -54,7 +101,43 @@ data class LocalHistoryEntity(
     val replyToSenderId: String? = null,
     val deletedForAll: Boolean = false,
     val deletedBySenderId: String? = null
-)
+) {
+    // نفس علة MessageEntity: BLOB بمساواة مرجعية — إصلاح بالمحتوى.
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is LocalHistoryEntity) return false
+        return id == other.id &&
+            conversationId == other.conversationId &&
+            senderId == other.senderId &&
+            encryptedPlaintext.contentEquals(other.encryptedPlaintext) &&
+            messageType == other.messageType &&
+            createdAt == other.createdAt &&
+            outgoing == other.outgoing &&
+            status == other.status &&
+            replyToMessageId == other.replyToMessageId &&
+            replyToMessageText == other.replyToMessageText &&
+            replyToSenderId == other.replyToSenderId &&
+            deletedForAll == other.deletedForAll &&
+            deletedBySenderId == other.deletedBySenderId
+    }
+
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + conversationId.hashCode()
+        result = 31 * result + senderId.hashCode()
+        result = 31 * result + encryptedPlaintext.contentHashCode()
+        result = 31 * result + messageType.hashCode()
+        result = 31 * result + createdAt.hashCode()
+        result = 31 * result + outgoing.hashCode()
+        result = 31 * result + status.hashCode()
+        result = 31 * result + (replyToMessageId?.hashCode() ?: 0)
+        result = 31 * result + (replyToMessageText?.hashCode() ?: 0)
+        result = 31 * result + (replyToSenderId?.hashCode() ?: 0)
+        result = 31 * result + deletedForAll.hashCode()
+        result = 31 * result + (deletedBySenderId?.hashCode() ?: 0)
+        return result
+    }
+}
 
 @Entity(
     tableName = "conversations",

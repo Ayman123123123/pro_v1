@@ -20,8 +20,10 @@ import com.red.sovereign.core.database.LocalRepository
 import com.red.sovereign.core.GroupSyncBus
 import com.red.sovereign.media.MediaApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -39,6 +41,12 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
     val joinRequests = mutableStateListOf<GroupJoinRequestResponse>()
     var latestInvite: GroupInviteResponse? by mutableStateOf(null); private set
     var state: GroupState by mutableStateOf(GroupState.Loading); private set
+    // ── اكتشاف المجموعات العامة (GET /api/groups/discover) ──
+    val discovered = mutableStateListOf<Group>()
+    var discoverQuery by mutableStateOf(""); private set
+    var discoverLoading by mutableStateOf(false); private set
+    var discoverError by mutableStateOf<String?>(null); private set
+    private var discoverJob: Job? = null
 
     init {
         load()
@@ -133,6 +141,37 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
             is ApiResult.Error -> state = GroupState.Error(result.message)
         }
     }
+
+    /**
+     * اكتشاف المجموعات العامة: GET /api/groups/discover?q=&limit= (قراءة فقط).
+     * التوقيع من الباكند (GroupController.discover → GroupService.discover):
+     * عامة فقط (privacy=PUBLIC)، حد 1..20، طول q حتى 64 حرفاً.
+     * يُفكك كـ List<Group> بتسامح (ignoreUnknownKeys) — GroupResponse أوسع من Group.
+     */
+    fun onDiscoverQueryChange(q: String) {
+        discoverQuery = q
+        discoverJob?.cancel()
+        discoverJob = viewModelScope.launch {
+            delay(350)
+            discover(q)
+        }
+    }
+
+    fun discover(q: String = discoverQuery) = viewModelScope.launch {
+        discoverLoading = true
+        discoverError = null
+        val query = q.trim().take(64)
+        val qs = if (query.isEmpty()) "?limit=20"
+            else "?q=" + java.net.URLEncoder.encode(query, "UTF-8") + "&limit=20"
+        when (val result = client.request("GET", "/api/groups/discover$qs")) {
+            is ApiResult.Success -> runCatching { json.decodeFromString<List<Group>>(result.value) }
+                .onSuccess { discovered.clear(); discovered.addAll(it); discoverLoading = false }
+                .onFailure { discoverError = "INVALID_DISCOVER_RESPONSE"; discoverLoading = false }
+            is ApiResult.Error -> { discoverError = result.message; discoverLoading = false }
+        }
+    }
+
+    fun clearDiscover() { discoverJob?.cancel(); discoverQuery = ""; discovered.clear(); discoverError = null }
 
     /**
      * إنشاء مجموعة مع صورة اختيارية: تُرفع عبر MediaApi ثم PATCH /api/groups/{id}/avatar

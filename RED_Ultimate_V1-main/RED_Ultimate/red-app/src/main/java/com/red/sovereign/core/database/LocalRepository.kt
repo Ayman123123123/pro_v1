@@ -6,7 +6,10 @@ import kotlinx.coroutines.flow.Flow
 
 class LocalRepository(context: Context) {
     private val appCtx = context.applicationContext
-    private val dao = RedDatabase.getInstance(context).redDao()
+    private val db = RedDatabase.getInstance(context)
+    private val dao = db.redDao()
+    private val outboxDao = db.outboxDao()
+    private val mediaDao: MediaUploadDao = db.mediaUploadDao()
 
     // --- Messages ---
     suspend fun saveMessage(message: MessageEntity) = dao.insertMessage(message)
@@ -67,11 +70,40 @@ class LocalRepository(context: Context) {
             receiverDeviceId = message.receiverDeviceId,
             ciphertextType = message.ciphertextType,
             sequence = message.sequenceNumber,
-            status = if (outgoing) "SENT" else "DELIVERED",
+            status = if (outgoing) MessageStatus.SENT.value else MessageStatus.DELIVERED.value,
             createdAt = message.timestamp,
             outgoing = outgoing
         )
         dao.insertMessage(entity)
+    }
+
+    /**
+     * حفظ وارد + لمس المحادثة ذريًا في معاملة واحدة (البديل المفضل
+     * لمناداة saveIncomingMessage ثم onMessageStored متفرقتين —
+     * كانتا تنكسر بينهما العملية فيترك رسالة بلا صف محادثة).
+     */
+    suspend fun saveIncomingAndTouch(
+        message: com.red.sovereign.proto.RedProtos.ChatMessage,
+        peerId: String,
+        preview: String,
+        outgoing: Boolean = false
+    ) {
+        val entity = MessageEntity(
+            id = message.id,
+            conversationId = message.conversationId,
+            senderId = message.senderId,
+            receiverId = message.receiverId,
+            payload = message.payload.toByteArray(),
+            type = message.type,
+            senderDeviceId = message.senderDeviceId,
+            receiverDeviceId = message.receiverDeviceId,
+            ciphertextType = message.ciphertextType,
+            sequence = message.sequenceNumber,
+            status = if (outgoing) MessageStatus.SENT.value else MessageStatus.DELIVERED.value,
+            createdAt = message.timestamp,
+            outgoing = outgoing
+        )
+        dao.insertMessageAndTouchConversation(entity, peerId, preview, !outgoing)
     }
 
     // --- Conversations ---
@@ -83,23 +115,14 @@ class LocalRepository(context: Context) {
      * يحافظ على pinned/archived/muted عند وجود المحادثة مسبقاً.
      */
     suspend fun onMessageStored(conversationId: String, peerId: String, preview: String, timestamp: Long, isIncoming: Boolean) {
-        val existing = dao.getConversation(conversationId)
-        if (existing != null) {
-            dao.updateConversationLast(conversationId, preview, timestamp, if (isIncoming) 1 else 0)
-        } else {
-            dao.insertConversation(
-                ConversationEntity(
-                    id = conversationId, peerId = peerId,
-                    lastMessageText = preview, lastMessageTimestamp = timestamp,
-                    unreadCount = if (isIncoming) 1 else 0
-                )
-            )
-        }
+        dao.upsertConversationOnMessage(conversationId, peerId, preview, timestamp, isIncoming)
     }
     fun getActiveConversations(): Flow<List<ConversationEntity>> = dao.getActiveConversations()
     fun getArchivedConversations(): Flow<List<ConversationEntity>> = dao.getArchivedConversations()
     fun getAllConversations(): Flow<List<ConversationEntity>> = dao.getAllConversations()
     suspend fun getConversation(id: String) = dao.getConversation(id)
+    suspend fun getConversationByPeerId(peerId: String) = dao.getConversationByPeerId(peerId)
+    suspend fun totalUnreadCount(): Int = runCatching { dao.totalUnreadCount() }.getOrDefault(0)
     suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, pinned)
     suspend fun setArchived(id: String, archived: Boolean) = dao.setArchived(id, archived)
     suspend fun setMutedUntil(id: String, until: Long) = dao.setMutedUntil(id, until)
@@ -108,11 +131,17 @@ class LocalRepository(context: Context) {
 
     // --- Contacts ---
     suspend fun saveContacts(contacts: List<ContactEntity>) = dao.insertContacts(contacts)
+    /** استبدال ذري عبر معاملة DAO واحدة — لا فراغ يُقرأ بين المسح والإدراج. */
     suspend fun replaceContacts(contacts: List<ContactEntity>) {
-        dao.clearContacts()
-        if (contacts.isNotEmpty()) dao.insertContacts(contacts)
+        dao.replaceContactsFull(contacts)
     }
     fun getFriends(): Flow<List<ContactEntity>> = dao.getFriends()
+    suspend fun getContactById(redId: String) = dao.getContactById(redId)
+    suspend fun setBlocked(redId: String, blocked: Boolean): Int = dao.setBlocked(redId, blocked)
+    suspend fun searchContacts(query: String, limit: Int = SearchGuards.SEARCH_LIMIT_DEFAULT): List<ContactEntity> {
+        if (!SearchGuards.isSearchable(query)) return emptyList()
+        return dao.searchContacts(SearchGuards.likePattern(query), SearchGuards.coerceLimit(limit))
+    }
 
     // --- Groups ---
     suspend fun saveGroups(groups: List<GroupEntity>) = dao.insertGroups(groups)

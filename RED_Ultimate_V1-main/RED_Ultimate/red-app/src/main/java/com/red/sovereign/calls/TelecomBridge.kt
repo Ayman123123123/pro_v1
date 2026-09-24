@@ -2,6 +2,7 @@ package com.red.sovereign.calls
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.telecom.DisconnectCause
 import android.util.Log
 import androidx.core.telecom.CallAttributesCompat
@@ -21,9 +22,13 @@ class TelecomBridge(context: Context) {
     private val scopes = ConcurrentHashMap<String, CallControlScope>()
     private val heldStates = ConcurrentHashMap<String, Boolean>()
     private val counter = AtomicInteger(0)
+    // Debounce: يمنع بدء مكرر (نقرة مزدوجة/سباق كوروتين) من توليد مدخلي peer وpeer#n.
+    private val lastAddMs = ConcurrentHashMap<String, Long>()
+    private val startLock = Any()
 
     companion object {
         private const val TAG = "TelecomBridge"
+        private const val START_DEBOUNCE_MS = 1500L
     }
 
     fun register() {
@@ -60,11 +65,23 @@ class TelecomBridge(context: Context) {
         onActive: suspend () -> Unit,
         onInactive: suspend () -> Unit
     ): String {
-        val callId = if (scopes.containsKey(peer) || scopes.keys.any { it.startsWith("$peer#") }) {
-            "$peer#${counter.incrementAndGet()}"
-        } else {
-            peer
+        // رفض بدء أثناء Connecting: أي نطاق قائم (peer أو peer#n) يعني المكالمة
+        // ما زالت في الطريق — نعيد المفتاح القائم بدل توليد مدخل ثانٍ.
+        // + Debounce زمني يغلق سباق البدء المتزامن قبل إدخال النطاق.
+        val now = SystemClock.elapsedRealtime()
+        synchronized(startLock) {
+            resolve(peer)?.let { existing ->
+                Log.w(TAG, "Duplicate start rejected during active/connecting: peer=$peer existing=$existing")
+                return existing
+            }
+            val last = lastAddMs[peer] ?: 0L
+            if (now - last < START_DEBOUNCE_MS) {
+                Log.w(TAG, "Debounced rapid start: peer=$peer")
+                return resolve(peer) ?: peer
+            }
+            lastAddMs[peer] = now
         }
+        val callId = peer
 
         val attributes = CallAttributesCompat(
             displayName = peer,

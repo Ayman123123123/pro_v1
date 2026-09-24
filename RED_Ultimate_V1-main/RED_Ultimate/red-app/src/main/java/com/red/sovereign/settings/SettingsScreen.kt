@@ -76,6 +76,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.core.ServerEndpoint
+import kotlinx.coroutines.launch
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
@@ -481,6 +482,9 @@ private fun WallpaperSettings() {
     item { ToggleSetting("إشعارات المجموعات", "تنبيهات المحادثات الجماعية بشكل مستقل", vm.state.groupNotifications, vm::setGroupNotifications) }
     item { ToggleSetting("إشعارات المكالمات", "رنين وارد عبر خدمة المكالمات الأمامية", vm.state.callNotifications, vm::setCallNotifications) }
     item { ToggleSetting("إظهار محتوى الرسالة", "غير موصى به على شاشة القفل", vm.state.notificationPreview, vm::setNotificationPreview) }
+    item { ToggleSetting("صوت الإشعارات", "نغمة قناتي red_messages/red_calls — تُطبق عبر NotificationPrefs", vm.state.notificationSound, vm::setNotificationSound) }
+    item { ToggleSetting("اهتزاز الإشعارات", "اهتزاز عند وصول رسالة أو مكالمة", vm.state.notificationVibration, vm::setNotificationVibration) }
+    item { ToggleSetting("ضوء LED", "وميض ضوئي للتنبيهات على الأجهزة الداعمة", vm.state.notificationLed, vm::setNotificationLed) }
     item { DndEntry(onOpen = { showDnd = true }) }
     item { InfoCard("قنوات Android", "الصوت والاهتزاز من إعدادات النظام: رسائل يونس، مكالمات يونس.", Icons.Default.Notifications) }
     }
@@ -494,9 +498,57 @@ private fun WallpaperSettings() {
     item { LockedSetting("النسخ الاحتياطي السحابي", "معطل لحماية مفاتيح الهوية والمحادثات") }
 }
 
-@Composable private fun CallSettings(vm: SettingsViewModel) = SettingsList {
+@Composable private fun CallSettings(vm: SettingsViewModel) {
+    var showRingtoneDialog by remember { mutableStateOf(false) }
+    SettingsList {
     item { ToggleSetting("توفير بيانات المكالمات", "يخفض bitrate ويُفضّل الطبقات الأخف على الشبكات الضعيفة", vm.state.dataSaverCalls, vm::setDataSaverCalls) }
+    item { ToggleSetting("إشعارات المكالمات", "رنين وارد عبر خدمة المكالمات الأمامية", vm.state.callNotifications, vm::setCallNotifications) }
+    item {
+        Card(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("نغمة المكالمة", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (vm.state.callRingtoneUri.isBlank()) "الافتراضية للنظام" else "مخصصة: ${vm.state.callRingtoneUri.take(40)}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                }
+                OutlinedButton(onClick = { showRingtoneDialog = true }) { Text("اختيار") }
+                if (vm.state.callRingtoneUri.isNotBlank()) {
+                    TextButton(onClick = { vm.setCallRingtoneUri("") }) { Text("افتراضية") }
+                }
+            }
+        }
+    }
+    item { ToggleSetting("اهتزاز مع الرنين", "اهتزاز Vibrator مع نغمة المكالمة الواردة", vm.state.callVibration, vm::setCallVibration) }
+    item { ToggleSetting("مكبر الصوت تلقائياً", "تفعيل مكبر الصوت عند بدء المكالمة عبر prepareAudio", vm.state.autoSpeaker, vm::setAutoSpeaker) }
+    item { ToggleSetting("أولوية البلوتوث", "توجيه الصوت لجهاز BT متصل قبل قرار المكبر", vm.state.bluetoothPriority, vm::setBluetoothPriority) }
+    item { ToggleSetting("كتم تلقائي عند الدخول", "كتم الميكروفون بعد إنشاء محرك WebRTC", vm.state.autoMuteOnEntry, vm::setAutoMuteOnEntry) }
+    item { ToggleSetting("التسجيل التلقائي", "بموافقة الطرفين عبر RecordingConsentDialog", vm.state.callAutoRecord, vm::setCallAutoRecord) }
+    item {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("الاحتفاظ بسجل المكالمات · ${vm.state.callHistoryRetentionDays} يوم", fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(7, 30, 90, 365).forEach { days ->
+                        AssistChip(
+                            onClick = { vm.setCallHistoryRetention(days) },
+                            label = { Text("$days") },
+                            leadingIcon = { if (vm.state.callHistoryRetentionDays == days) Text("●") }
+                        )
+                    }
+                }
+                Text("الأقدم من المدة يُحذف عبر pruneExpired — التشفير دائم عبر CallLogCipher", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+    item { ToggleSetting("مزامنة السجل مع الخادم", "جلب GET /api/calls/history عند فتح السجل", vm.state.callHistorySync, vm::setCallHistorySync) }
     item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — لا تستخدم SIM", Icons.Default.Call) }
+    }
+    if (showRingtoneDialog) {
+        com.red.sovereign.calls.RingtonePickerDialog(settings = vm, onDismiss = { showRingtoneDialog = false })
+    }
 }
 
 @Composable private fun DevicesSettings(vm: DeviceSettingsViewModel) = SettingsList {
@@ -570,14 +622,72 @@ private fun WallpaperSettings() {
     }
 }
 
-@Composable private fun StarredSettings() {
+@Composable private fun StarredSettings(onOpenConversation: (String) -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val org = remember { com.red.sovereign.core.ChatOrganizationStore(context) }
+    val repo = remember { com.red.sovereign.core.database.LocalRepository(context) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val revision = org.revision
-    val ids = remember(revision) { org.starredIds() }
+    val legacyIds = remember(revision) { org.starredIds() }
+    val starredFlow = remember { repo.getAllStarredMessages() }
+    val entities by starredFlow.collectAsState(initial = emptyList())
+    var query by remember { mutableStateOf("") }
+    val q = query.trim()
+    val filteredEntities = remember(entities, q) {
+        if (q.length < 2) entities.sortedByDescending { it.starredAt }
+        else entities.filter {
+            it.messageText.contains(q, ignoreCase = true) || it.conversationId.contains(q, ignoreCase = true)
+        }.sortedByDescending { it.starredAt }
+    }
+    val legacyOnly = remember(legacyIds, entities, q) {
+        val known = entities.map { it.messageId }.toSet()
+        legacyIds.filter { it !in known && (q.length < 2 || it.contains(q, ignoreCase = true)) }.sorted()
+    }
+    val totalCount = entities.size + legacyOnly.size
     SettingsList {
-        item { InfoCard("الرسائل المميّزة", if (ids.isEmpty()) "نجّم رسالة من الضغط الطويل داخل المحادثة." else "${ids.size} رسالة محفوظة محلياً", Icons.Default.Star) }
-        items(ids.toList(), key = { it }) { id ->
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it.take(60) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("بحث في المميّزة") },
+                placeholder = { Text("نص الرسالة أو معرف المحادثة…") }
+            )
+        }
+        item { InfoCard("الرسائل المميّزة", if (totalCount == 0) "نجّم رسالة من الضغط الطويل داخل المحادثة." else "$totalCount رسالة محفوظة محلياً", Icons.Default.Star) }
+        if (filteredEntities.isEmpty() && legacyOnly.isEmpty()) {
+            item {
+                Text(
+                    if (q.length >= 2) "لا نتائج مطابقة لـ «$q»." else "لا رسائل مميّزة بعد.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+        items(filteredEntities, key = { it.messageId }) { starred ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        starred.messageText.ifBlank { "[${starred.messageType}]" }.take(280),
+                        maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "المحادثة: ${starred.conversationId.take(24)} · ${starred.messageType}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { onOpenConversation(starred.conversationId) }) { Text("فتح المحادثة") }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = {
+                            if (org.isStarred(starred.messageId)) org.toggleStarred(starred.messageId)
+                            scope.launch { runCatching { repo.unstarMessage(starred.messageId) } }
+                        }) { Text("إزالة") }
+                    }
+                }
+            }
+        }
+        items(legacyOnly, key = { it }) { id ->
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(id.take(16), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)

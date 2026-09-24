@@ -39,8 +39,8 @@ import org.webrtc.SessionDescription
 import org.webrtc.VideoTrack
 import java.util.UUID
 
-/** واتساب: حد المشاركين — 32 للمجموعات (SFU يوفر التوسع، Mesh يتراجع تلقائياً). */
-const val WHATSAPP_GROUP_CALL_LIMIT = 32
+/** واتساب: حد المشاركين — المصدر الوحيد [CallLimits.GROUP_CALL_MAX]. باقٍ للتوافق فقط. */
+const val WHATSAPP_GROUP_CALL_LIMIT = CallLimits.GROUP_CALL_MAX
 
 // ─────────────────────────────────────────────────────────────────────────────
 // حالات واجهة المستخدم
@@ -303,6 +303,17 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 val invitees = intent.getStringArrayListExtra(EXTRA_INVITEE_IDS) ?: arrayListOf()
                 val names = intent.getStringArrayListExtra(EXTRA_INVITEE_NAMES) ?: arrayListOf()
 
+                // تحقق مسبق موحد من السقف (32) — قبل أي حالة/رنين، مع رسالة للمضيف.
+                CallLimits.checkGroupCall(invitees.size + 1)?.let { msg ->
+                    android.util.Log.w("GroupCallService", "limit exceeded: $msg")
+                    runCatching {
+                        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    GroupCallRuntime.state = GroupCallUiState.Ended
+                    stopGroupCall()
+                    return START_STICKY
+                }
+
                 GroupCallRuntime.activeGroupId = sourceGroupId
                 GroupCallRuntime.activeGroupName = intent.getStringExtra(EXTRA_GROUP_NAME).orEmpty()
                 GroupCallRuntime.isHost = true
@@ -318,9 +329,9 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 promoteToForeground()
                 scope.launch { signaling.connect() }
 
-                // مهلة الرنين 45 ثانية
+                // مهلة الرنين الموحدة من CallRingPolicy (كانت 45_000 مثبّتة).
                 ringTimeout = scope.launch {
-                    delay(45_000)
+                    delay(CallRingPolicy.UNANSWERED_TIMEOUT_MS)
                     val current = GroupCallRuntime.state
                     if (current is GroupCallUiState.Ringing) {
                         val updated = current.members.map {
@@ -364,10 +375,10 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 showIncomingGroupCallNotification(groupCallId, hostName, others.size, isVideo)
                 // رنين المكالمة الجماعية الواردة — نغمة + اهتزاز مثل واتساب
                 if (com.red.sovereign.settings.SettingsRuntime.current.callNotifications) startRingtone() else prepareAudio(isVideo)
-                // مهلة الرنين الواردة: 30 ثانية دون رد → رفض تلقائي يظهر للمضيف كـ "لم يرد"
+                // مهلة الرنين الواردة الموحدة (30s) → رفض تلقائي يظهر للمضيف كـ "لم يرد"
                 incomingRingTimeout?.cancel()
                 incomingRingTimeout = scope.launch {
-                    delay(30_000)
+                    delay(CallRingPolicy.INCOMING_GROUP_TIMEOUT_MS)
                     val current = GroupCallRuntime.state
                     if (current is GroupCallUiState.IncomingGroup && current.groupCallId == groupCallId) {
                         runCatching { signaling.sendGroupCallResponse(groupCallId, accepted = false) }
@@ -558,6 +569,15 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 }
                 val fresh = newIds.filterIndexed { i, id -> id.isNotBlank() && id !in existingIds && id != myUserId }
                 if (fresh.isEmpty()) return START_STICKY
+                // تحقق مسبق موحد: الإجمالي بعد الإضافة يجب ألا يتجاوز 32.
+                val totalAfterAdd = existingIds.size + fresh.size
+                CallLimits.checkGroupCall(totalAfterAdd)?.let { msg ->
+                    android.util.Log.w("GroupCallService", "add blocked: $msg")
+                    runCatching {
+                        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    return START_STICKY
+                }
                 // أضفهم للحالة كـ RINGING فوراً (واجهة)
                 scope.launch(Dispatchers.Main.immediate) {
                     when (val s = GroupCallRuntime.state) {
@@ -590,7 +610,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 ringTimeout?.cancel()
                 val freshSnapshot: List<String> = fresh
                 ringTimeout = scope.launch {
-                    delay(45_000)
+                    delay(CallRingPolicy.UNANSWERED_TIMEOUT_MS)
                     val st = GroupCallRuntime.state
                     if (st is GroupCallUiState.Active) {
                         val updated = st.members.map { m ->

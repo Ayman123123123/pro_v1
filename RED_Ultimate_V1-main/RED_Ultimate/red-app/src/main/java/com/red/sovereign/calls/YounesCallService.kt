@@ -295,7 +295,7 @@ ACTION_ACCEPT -> {
                     }.isSuccess
                     try {
                         getSystemService(NotificationManager::class.java)
-                            .notify((callId ?: peer).hashCode(),
+                            .notify(CallNotificationManager.ringNotifyId("${callId ?: peer}#qr"),
                                 NotificationCompat.Builder(this, "red_calls_incoming")
                                     .setSmallIcon(android.R.drawable.sym_action_chat)
                                     .setContentTitle(if (sent) "تم إرسال ردّك" else "تعذّر إرسال الرد")
@@ -510,8 +510,9 @@ override fun onConnected() {
                 }
             }
             // P0: END/REJECT/BUSY/UNAVAILABLE الغريبة كانت تُنهي المكالمة الحالية خطأً.
-            "END" -> { if (signal.callId == null || signal.callId == callId) handleCallEnded() }
-            "REJECT" -> { if (signal.callId == null || signal.callId == callId) handleDeclined() }
+            // END/REJECT يشترطان تطابق callId غير-null (لا wildcard للـnull).
+            "END" -> { val sid = signal.callId; if (!sid.isNullOrBlank() && sid == callId) handleCallEnded() }
+            "REJECT" -> { val sid = signal.callId; if (!sid.isNullOrBlank() && sid == callId) handleDeclined() }
             "BUSY" -> { if (signal.callId == null || signal.callId == callId) handleBusy() }
             "UNAVAILABLE" -> { if (signal.callId == null || signal.callId == callId) handleUnavailable() }
             "GROUP_CALL_INVITE" -> {
@@ -530,8 +531,16 @@ override fun onConnected() {
             }
             "GROUP_CALL_END" -> {
                 val gId = signal.groupCallId ?: signal.callId.orEmpty()
+                if (gId.isBlank()) return
                 val current = GroupCallRuntime.state
                 if (current is GroupCallUiState.IncomingGroup && current.groupCallId == gId) {
+                    GroupCallRuntime.state = GroupCallUiState.Ended
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else if ((current is GroupCallUiState.Active && current.groupCallId == gId) ||
+                    (current is GroupCallUiState.Ringing && current.groupCallId == gId)
+                ) {
+                    // إنهاء كامل عبر الخدمة المالكة (تنظيف المحرك/الإشعار/الحالة) بدل قلب الحالة فقط.
+                    runCatching { GroupCallService.end(this) }
                     GroupCallRuntime.state = GroupCallUiState.Ended
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 }
@@ -898,7 +907,8 @@ override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
     private fun resumeCall() {
         val current = CallRuntime.state as? CallUiState.Active ?: return
         if (!current.isHeld) return
-        engine?.setMicrophoneEnabled(true)
+        // احترام اختيار المستخدم: لا فك قسري للكتم عند الاستئناف.
+        engine?.setMicrophoneEnabled(userMicEnabled)
         if (mode == "VIDEO") engine?.setCameraEnabled(true)
         CallRuntime.state = current.copy(isHeld = false)
         runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) }
