@@ -1,8 +1,10 @@
-// Root build logic for Android Studio IDE integration
-tasks.register("assembleDebug") {
-    dependsOn(gradle.includedBuild("RED-Ultimate").task(":app:assembleDebug"))
+plugins {
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.compose) apply false
 }
 
-tasks.register("installDebug") {
-    dependsOn(gradle.includedBuild("RED-Ultimate").task(":app:installDebug"))
+tasks.register<Delete>("clean") {
+    delete(layout.buildDirectory)
 }

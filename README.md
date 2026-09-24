@@ -1,34 +1,66 @@
-# YOUNES / RED Sovereign
+# NOVA Connect
 
+NOVA Connect is an Android messaging platform being built as a real internet-connected
+client/server product. The Android client uses Kotlin, Jetpack Compose, Material 3,
+Gradle Kotlin DSL, and a version catalog. Its application ID is `com.nova.connect`.
 
-> The canonical project tree lives under [`RED_Ultimate_V1-main/`](RED_Ultimate_V1-main/README.md).
+> **Current delivery: Phase 0 — Project Bootstrap.** The project deliberately contains
+> no mock messaging path, local-only replacement backend, or production credentials.
+> The server, authentication, persistence, realtime gateway, and product features are
+> introduced in their respective later phases.
 
-## Repository layout
+## Module layout
 
-| Component | Path | Notes |
-|---|---|---|
-| Android App | `RED_Ultimate_V1-main/RED_Ultimate/red-app/` | Kotlin + Jetpack Compose |
-| Backend Server | `RED_Ultimate_V1-main/RED_Ultimate/backend-server/` | Spring Boot, REST + WebSocket APIs |
-| Admin Dashboard | `RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/` | Vite + TypeScript |
-| Shared Protocol | `RED_Ultimate_V1-main/RED_Ultimate/shared-proto/` | Protobuf schemas |
-| Media SFU | `RED_Ultimate_V1-main/RED_Ultimate/media-sfu/` | Node.js WebRTC SFU |
-| Runtime | `RED_Ultimate_V1-main/RED_Ultimate/docker-compose.yml` | Full stack containers |
-| CI | `.github/workflows/` | `red-ultimate-ci.yml` is the canonical workflow (single CI since 2026-09-15) |
-
-## Building
-
-Android (from `RED_Ultimate_V1-main/RED_Ultimate`):
-
-```
-.\gradlew.bat :app:compileDebugKotlin --offline --console=plain   (Windows)
-./gradlew :app:assembleDebug -PRED_SKIP_BUILD_LOGIC=true          (CI)
+```text
+app
+core:common             core:designsystem       core:network
+core:database           core:security           core:analytics
+domain                  data
+feature:onboarding      feature:authentication  feature:chat
+feature:calls           feature:communities     feature:profile
+feature:settings
 ```
 
-Backend:
+The Phase 0 dependency direction is intentionally one-way:
 
-```
-.\gradlew.bat compileKotlin compileTestKotlin --offline          (Windows)
-./gradlew test --no-daemon --stacktrace                          (CI)
+```text
+app → feature modules / data → domain → core
+                         data → core
+feature modules → domain / core:designsystem
 ```
 
-Secrets are configured via `RED_Ultimate_V1-main/RED_Ultimate/.env` (never committed; `.env.example` is the template). The `secrets/` folder under it is git-ignored and holds locally generated identity certificates.
+This is a structural bootstrap, not the completion of the Clean Architecture or NOVA
+Design System phases. The app launches a minimal Compose bootstrap surface only.
+
+## Prerequisites
+
+- JDK 17
+- Android SDK Platform 35 and Build Tools 35.x
+- An Android device or emulator for installation (not required for `assembleDebug`)
+
+Set `ANDROID_HOME` (or add `sdk.dir=/path/to/android-sdk` to a local, ignored
+`local.properties`) before building.
+
+## Build
+
+```bash
+./gradlew assembleDebug
+```
+
+Expected debug APK after a successful build:
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+## Documentation
+
+- [Phase 0 bootstrap report](docs/PHASE_0_PROJECT_BOOTSTRAP.md)
+- [Roadmap](docs/ROADMAP.md)
+
+## Security baseline
+
+No development or production secret is committed. The Android application has only the
+baseline `INTERNET` and network-state permissions at this stage. A public HTTPS API,
+WSS, PostgreSQL, Redis, object storage, and deployment secrets belong to subsequent
+server and deployment phases; none are simulated by on-device storage.

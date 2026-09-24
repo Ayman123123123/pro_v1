@@ -1,13 +1,37 @@
 pluginManagement {
     repositories {
         google()
-        maven { url = java.net.URI.create("https://maven-central.storage-download.googleapis.com/maven2") }
         mavenCentral()
         gradlePluginPortal()
     }
 }
 
-rootProject.name = "pro_new"
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
 
-// ربط مشروع RED Ultimate الرئيسي بأدوات البناء ومطرقة أندرويد ستوديو
-includeBuild("RED_Ultimate_V1-main/RED_Ultimate")
+rootProject.name = "NOVA Connect"
+
+include(":app")
+
+include(":core:common")
+include(":core:designsystem")
+include(":core:network")
+include(":core:database")
+include(":core:security")
+include(":core:analytics")
+
+include(":domain")
+include(":data")
+
+include(":feature:onboarding")
+include(":feature:authentication")
+include(":feature:chat")
+include(":feature:calls")
+include(":feature:communities")
+include(":feature:profile")
+include(":feature:settings")

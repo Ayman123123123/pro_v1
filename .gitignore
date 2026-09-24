@@ -172,3 +172,16 @@ chat-*.txt
 *.aab
 *.ap_RED_Ultimate_V1-main/RED_Ultimate/**/screenshotTest*/**/*.png
 RED_Ultimate_V1-main/RED_Ultimate/**/screenshotTest*/**/*.jpg
+
+# NOVA Connect local Android configuration
+/local.properties
+/.android/
+/.gradle/
+**/build/
+*.apk
+*.aab
+
+# NOVA Connect local environment/secrets
+nova-connect-backend/.env
+nova-connect-backend/.env.*
+!nova-connect-backend/.env.example
