@@ -205,6 +205,9 @@ fun ModernRedDashboard(
     val networkInfo by UnifiedNetworkManager.currentNetwork.collectAsState()
     val isOnline by UnifiedNetworkManager.isOnline.collectAsState()
     
+    // 📡 حالة السيرفر الحقيقية — تدفّق من RedConnectionService (لا Polling ولا حوارات مزعجة).
+    val serverConnected by com.red.sovereign.core.ServerConnectionMonitor.isConnected.collectAsState()
+    
     // مكالمات موحدة - 9 أنواع + 6 مسارات رنين مضمونة
     val callState by UnifiedCallOrchestrator.state.collectAsState()
     
@@ -277,6 +280,9 @@ fun ModernRedDashboard(
                     onSearch = { showSearch = true }
                 )
                 
+                // شريط حالة السيرفر — يظهر فقط عند الانقطاع: رسالة واحدة هادئة لا حوار ولا إزعاج.
+                ServerConnectionBanner(serverConnected)
+                
                 // محتوى التبويب الحالي
                 when {
                     showDinstar -> ModernDinstarScreen(
@@ -336,9 +342,15 @@ fun ModernRedDashboard(
         }
     }
     
-    // Overlays للمكالمات — الموحدة الحقيقية (1:1 + جماعية + مؤتمر + بث) فوق كل التبويبات (RedDashboard 549/658).
-    UnifiedCallOverlaysModern()
+    // Overlays المكالمات — وجهة واحدة فقط على الشاشة في كل لحظة (إصلاح تكدّس الوجهات):
+    // • UnifiedCallOverlays: النظام الكامل بأولوية عرض داخلية واحدة —
+    //   1:1 + زووم + جماعي + مؤتمر + بث + الشريط المصغّر + بانر الوارد الثاني.
+    // • UnifiedCallOverlaysModern: وجهة 1:1 عبر UnifiedCallOrchestrator — لا تُعرض
+    //   إلا حين يكون CallRuntime خاملاً، فلا تتراكب وجهتان لنفس المكالمة أبداً.
     UnifiedCallOverlays()
+    if (CallRuntime.state is CallUiState.Idle) {
+        UnifiedCallOverlaysModern()
+    }
 
     // بحث شامل حقيقي (RedGlobalSearch) — كان no-op.
     if (showSearch) {
@@ -531,8 +543,10 @@ fun ModernTopBar(
                 )
                 Text(
                     if (isOnline) redId else "غير متصل - يعمل محلياً P2P",
-                    color = if (isOnline) YounesCobalt else YounesMuted,
-                    fontSize = 10.sp,
+                    // تباين عالٍ مقروء: نعناعي فاتح عند الاتصال / أحمر ناعم عند الانقطاع (≥7:1 على السطح الداكن).
+                    color = if (isOnline) Color(0xFF8FE8C8) else Color(0xFFF0A3A3),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1
                 )
             }
@@ -1267,4 +1281,35 @@ fun ModernCreateGroupDialog(
             TextButton(onClick = onDismiss) { Text("إلغاء") }
         }
     )
+}
+
+/**
+ * 📡 شريط حالة السيرفر — بديل الإزعاج القديم (حوارات متكررة + مكالمات مزدوجة):
+ * شريط واحد صغير أعلى الشاشة يظهر فقط عند الانقطاع، يطمئن المستخدم أن
+ * الرسائل محفوظة وستُرسل تلقائياً — ويختفي فور عودة الاتصال بلا أي نقر.
+ */
+@Composable
+fun ServerConnectionBanner(connected: Boolean?) {
+    if (connected != false) return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF2B1D00))
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(7.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color(0xFFFFB300))
+        )
+        Spacer(Modifier.width(9.dp))
+        Text(
+            "السيرفر غير متصل — رسائلك محفوظة وستُرسل تلقائياً عند عودة الاتصال",
+            color = Color(0xFFF0D48C),
+            fontSize = 12.sp,
+            maxLines = 1
+        )
+    }
 }

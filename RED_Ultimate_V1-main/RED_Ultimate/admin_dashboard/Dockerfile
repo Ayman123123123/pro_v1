@@ -1,9 +1,9 @@
 # ══════════════════════════════════════════════════════════════════
-# 🏛️ YOUNES Admin Dashboard — Modern Unified Build (16 pages)
+# 🏛️ YOUNES Admin Dashboard — Modern Unified Build (39 pages, TanStack Router)
 # Stage 1: Node.js 24 — Build production bundle (Vite + React 19 + antd 6)
 # Stage 2: Nginx 1.29 — Serve SPA with security headers & immutable caching
 # ══════════════════════════════════════════════════════════════════
-# Builds the MODERN unified dashboard (App.tsx 16 pages) — old _archive is never bundled
+# Builds the MODERN unified dashboard (src/routes/* via TanStack Router) — App.tsx retired 2026-09-24
 # Verified: npm ci + npm run lint + npm run build (Vite 5) → dist with code-split chunks
 
 FROM node:24-alpine AS builder
@@ -13,7 +13,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-# ─── Source layer — builds the modern App.tsx (16 pages, RTL dark) ───
+# ─── Source layer — builds the modern router pages (39 pages, RTL dark) ───
 COPY . .
 # Strict gates: ESLint 9 (flat) + TypeScript check + Vite 5 bundle.
 RUN npm run lint
@@ -21,7 +21,7 @@ RUN npm run build
 
 FROM nginx:1.29-alpine
 LABEL maintainer="YOUNES Sovereign" \
-      description="YOUNES Master Admin — Unified 16-page dashboard (RTL dark, antd, echarts)" \
+      description="YOUNES Master Admin — Unified 39-page dashboard (RTL dark, TanStack Router)" \
       version="1.0.0"
 
 # Security headers and SPA fallback (unified)

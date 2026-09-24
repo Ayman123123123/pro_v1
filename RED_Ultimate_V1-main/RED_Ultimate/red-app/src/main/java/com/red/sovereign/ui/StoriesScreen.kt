@@ -222,7 +222,7 @@ fun StoryFullscreen(
             if (!story.caption.isNullOrBlank()) {
                 Text(
                     text = story.caption, color = Color.White, fontSize = 15.sp,
-                    modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.4f)).padding(16.dp)
+                    modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.6f)).padding(16.dp)
                 )
             }
             

@@ -503,6 +503,7 @@ class RedConnectionService : Service() {
         when (state) {
             ConnectionState.CONNECTED -> {
                 connected = true
+                com.red.sovereign.core.ServerConnectionMonitor.onConnected()
                 attempts = 0
                 reconnectTask?.cancel(false)
                 notifyConnection(getString(com.red.sovereign.R.string.status_connected_local))
@@ -520,9 +521,9 @@ class RedConnectionService : Service() {
                 scope.launch { catchUpMissedMessages() }
                 runCatching { com.red.sovereign.calls.PendingOfferPoller.pollNow(applicationContext) }; runCatching { com.red.sovereign.calls.PendingOfferPoller.schedule(applicationContext) }
             }
-            ConnectionState.CONNECTING -> notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
-            ConnectionState.DISCONNECTED -> { connected = false; scheduleReconnect() }
-            ConnectionState.UNAUTHORIZED -> { connected = false; refreshAndReconnect() }
+            ConnectionState.CONNECTING -> { com.red.sovereign.core.ServerConnectionMonitor.onConnecting(); notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local)) }
+            ConnectionState.DISCONNECTED -> { connected = false; com.red.sovereign.core.ServerConnectionMonitor.onDisconnected(); scheduleReconnect() }
+            ConnectionState.UNAUTHORIZED -> { connected = false; com.red.sovereign.core.ServerConnectionMonitor.onDisconnected(); refreshAndReconnect() }
         }
     }
 
