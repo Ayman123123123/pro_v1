@@ -41,7 +41,7 @@ data class UserOverview(
 )
 
 /**
- * لوحة الإدارة — بادئة API موحدة مع الباكند: /api/admin/* فقط.
+ * لوحة الإدارة — جميع المسارات تبدأ بالبادئة /api/admin/ فقط.
  * (فحص قراءة فقط: AdminV2Controller + AdminController + AdminMonitorController
  *  كلها @RequestMapping("/api/admin")، وAdminMasterController على
  *  /api/master/admin مكرر قديم — لا نستعمله هنا.)

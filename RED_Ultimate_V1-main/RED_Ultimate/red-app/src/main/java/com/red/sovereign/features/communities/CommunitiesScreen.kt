@@ -344,8 +344,8 @@ fun CommunitiesScreen(
     if (state.showCreate) {
         CreateCommunityDialog(
             onDismiss = vm::hideCreate,
-            onSubmit = { name, desc, cat, isPublic, tags, rules, avatarColor ->
-                vm.create(name, desc, cat, isPublic, tags, rules, avatarColor) {}
+            onSubmit = { name, desc, cat, isPublic ->
+                vm.create(name, desc, cat, isPublic) {}
             }
         )
     }

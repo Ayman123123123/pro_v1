@@ -4,7 +4,6 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.runtime.OptIn
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -76,11 +75,8 @@ object RedColorScheme {
         inverseSurface = Color(0xFFFFFFFF),
         inverseOnSurface = Color(0xFF0A0F18),
 
-        // Scrim
-        scrim = Color(0xE0000000),
-
-        // Shadow
-        shadow = Color(0xFF000000)
+        // Material 3 darkColorScheme derives shadow from its defaults.
+        scrim = Color(0xE0000000)
     )
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -136,11 +132,7 @@ object RedColorScheme {
         inverseSurface = Color(0xFF0A0F18),
         inverseOnSurface = Color(0xFFF7F8FA),
 
-        // Scrim
-        scrim = Color(0x66000000),
-
-        // Shadow
-        shadow = Color(0xFF000000)
+        scrim = Color(0x66000000)
     )
 
     // ═══════════════════════════════════════════════════════════════════════════════

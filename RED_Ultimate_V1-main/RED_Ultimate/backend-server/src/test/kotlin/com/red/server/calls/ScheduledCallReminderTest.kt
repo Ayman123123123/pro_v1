@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -124,11 +125,17 @@ class ScheduledCallReminderTest {
         try {
             assertEquals(1, controller.remindDue(System.currentTimeMillis()))
             // مدعوّان + المالك = 3 دفعات، ومرة واحدة فقط رغم الجولة الثانية.
-            verify(notifications, times(3))
-                .sendVoipPushNotification(any(), any(), any(), any())
             assertEquals(0, controller.remindDue(System.currentTimeMillis()))
+            // Kotlin expands the two defaulted arguments at the bytecode call site.
+            // Mockito matchers must cover all six arguments, not just the four
+            // explicitly passed in ScheduledCallController.remindDue.
             verify(notifications, times(3))
-                .sendVoipPushNotification(any(), any(), any(), any())
+                .sendVoipPushNotification(any(), any(), any(), any(), isNull(), isNull())
+            for (target in listOf("invitee-a", "invitee-b", "sched-owner-2")) {
+                verify(notifications).sendVoipPushNotification(
+                    target, "sched-owner-2", "room_due_once_1", "VOICE"
+                )
+            }
         } finally {
             runCatching { controller.delete(id, auth) }
         }

@@ -297,5 +297,5 @@ data class ChannelSettings(
     val forwardEnabled: Boolean = true,
     val copyEnabled: Boolean = true,
     val screenshotProtection: Boolean = false,
-    autoDeleteTimerDays: Int = 0,
+    val autoDeleteTimerDays: Int = 0,
 )
