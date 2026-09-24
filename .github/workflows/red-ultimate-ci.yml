@@ -115,15 +115,24 @@ jobs:
           gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/out.json
 
   database-migrations:
-    name: Fresh PostgreSQL Flyway B64 baseline
+    name: Fresh PostgreSQL Flyway B64 baseline (PG ${{ matrix.pg_major }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Base Compose deploys 16.9; also test the newer supported CI version.
+          - pg_major: '16'
+            image: postgres:16.9-bookworm
+          - pg_major: '17'
+            image: postgres:17-alpine
     permissions:
       contents: read
       checks: write
     services:
       postgres:
-        image: postgres:17-alpine
+        image: ${{ matrix.image }}
         env:
           POSTGRES_USER: red_ci
           POSTGRES_PASSWORD: disposable-ci-only
@@ -137,11 +146,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify numeric migration order
         run: python3 scripts/test_list_flyway_migrations.py
-      - name: Apply Flyway baseline on empty PostgreSQL 17
+      - name: Apply Flyway baseline on empty PostgreSQL ${{ matrix.pg_major }}
         env:
           PGUSER: red_ci
           PGDATABASE: red_migration_ci
           PGPASSWORD: disposable-ci-only
+          POSTGRES_CLI_IMAGE: ${{ matrix.image }}
+          POSTGRES_EXPECTED_MAJOR: ${{ matrix.pg_major }}
         run: |
           set -o pipefail
           bash scripts/test-flyway-postgres.sh 2>&1 | tee /tmp/pg-migrations.log
@@ -151,7 +162,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           CR_ID=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
-            --jq '.jobs[] | select(.name=="Fresh PostgreSQL Flyway B64 baseline") | .check_run_url | split("/") | last')
+            --jq '.jobs[] | select(.name=="Fresh PostgreSQL Flyway B64 baseline (PG ${{ matrix.pg_major }})") | .check_run_url | split("/") | last')
           EXCERPT=$(tail -n 40 /tmp/pg-migrations.log 2>/dev/null || echo "Migration job failed before SQL ran")
           jq -n --arg s "$EXCERPT" '{output:{title:"Fresh database migration failure",summary:$s}}' > /tmp/migration-out.json
           gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/migration-out.json
