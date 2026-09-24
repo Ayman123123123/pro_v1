@@ -138,8 +138,10 @@ class StoryService(
     fun delete(ownerId: UUID, storyId: String) {
         val story = activeStory(storyId)
         require(story.ownerId == ownerId.toString()) { "Only the owner can delete this story" }
+        // A user-owned upload may also be referenced by a post, another story,
+        // a group avatar or an explicit message grant. Removing this story must
+        // revoke its story-based visibility, not destroy the shared object.
         mongo.updateFirst(Query(Criteria.where("id").`is`(storyId)), Update().set("deletedAt", Instant.now()), StoryDocument::class.java)
-        if (story.mediaKey.isNotBlank()) runCatching { media.delete(story.mediaKey) }
     }
 
     fun activeCount(): Long = mongo.count(Query(Criteria.where("expiresAt").gt(Instant.now()).and("deletedAt").`is`(null)), StoryDocument::class.java)
@@ -147,9 +149,10 @@ class StoryService(
     @Scheduled(fixedDelay = 300_000)
     fun cleanupExpired() {
         val expired = mongo.find(Query(Criteria.where("expiresAt").lte(Instant.now())), StoryDocument::class.java)
-        expired.forEach { story ->
-            if (story.mediaKey.isNotBlank()) runCatching { media.delete(story.mediaKey) }
-        }
+        // Remove expired references and their metadata, never the upload itself:
+        // other live documents/grants may point to the same MinIO key. Automatic
+        // physical garbage collection remains disabled until the cross-store
+        // inventory is complete and race-safe.
         if (expired.isNotEmpty()) {
             val ids = expired.map(StoryDocument::id)
             mongo.remove(Query(Criteria.where("storyId").`in`(ids)), StoryView::class.java)
@@ -158,10 +161,8 @@ class StoryService(
     }
 
     fun purgeAll(): Long {
-        val stories = mongo.findAll(StoryDocument::class.java)
-        stories.forEach { story ->
-            if (story.mediaKey.isNotBlank()) runCatching { media.delete(story.mediaKey) }
-        }
+        // Purging story references is not proof that their uploads are unused
+        // elsewhere. Keep object deletion behind a separately audited GC path.
         mongo.remove(Query(), StoryView::class.java)
         return mongo.remove(Query(), StoryDocument::class.java).deletedCount
     }

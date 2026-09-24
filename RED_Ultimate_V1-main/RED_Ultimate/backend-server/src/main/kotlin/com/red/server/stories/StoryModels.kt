@@ -23,9 +23,9 @@ data class StoryDocument(
     val createdAt: Instant = Instant.now(),
     // TTL safety net (expireAfter 0) is created programmatically in
     // StoryIndexInitializer so expired docs auto-delete even if the
-    // @Scheduled sweeper is delayed. @Scheduled cleanupExpired is kept as
-    // the primary path because it also deletes the MinIO object (TTL alone
-    // would orphan media; OrphanCleanupScheduler is the final backstop).
+    // @Scheduled sweeper is delayed. Neither path deletes the uploader-owned
+    // MinIO object: it may still have a post/avatar/grant reference. Garbage
+    // collection remains observational until a safe cross-store inventory exists.
     @Indexed val expiresAt: Instant,
     var deletedAt: Instant? = null
 )

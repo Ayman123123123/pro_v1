@@ -36,8 +36,11 @@ class MediaController(
         val ownerId = UUID.fromString(authentication.name)
         require(userId == ownerId.toString()) { "Only the media owner can delete this object" }
         val key = "users/$userId/$fileName"
-        grants.revokeAll(ownerId, key)
+        // Deletion is explicit, but must not silently break another live
+        // reference. If MinIO fails, keep grants usable for a retry.
+        access.requireNoPublishedReferences(key)
         media.delete(key)
+        grants.revokeAll(ownerId, key)
         return ResponseEntity.noContent().build()
     }
 

@@ -211,7 +211,9 @@ class GroupService(
         require(membership(groupId, ownerId).role == GroupRole.OWNER) { "Only owner can delete group" }
         // 🔔 نبّه الأعضاء قبل الحذف كي يزيلوا المجموعة من واجهاتهم فوراً
         notifyMembershipChanged(groupId)
-        group(groupId).avatarMediaKey?.let { runCatching { media.delete(it) } }
+        // Group avatars are uploader-owned objects and may be shared with a
+        // story, post or another group. Deleting the group removes its grant,
+        // not the underlying object (see the observational-only orphan scan).
         mongo.remove(Query(Criteria.where("groupId").`is`(groupId)), GroupMember::class.java)
         // 🧹 تنظيف البيانات اليتيمة: الدعوات وطلبات الانضمام والرسائل والمثبتات وإعدادات الاختفاء
         mongo.remove(Query(Criteria.where("groupId").`is`(groupId)), GroupInviteDocument::class.java)
@@ -239,11 +241,13 @@ class GroupService(
         require(request.mediaKey.startsWith("users/$actorId/")) { "Group avatar must belong to the manager" }
         require(media.exists(request.mediaKey)) { "Avatar media not found" }
         require(media.metadata(request.mediaKey).mimeType.startsWith("image/")) { "Group avatar must be an image" }
-        val current = group(groupId)
-        current.avatarMediaKey?.let { if (it != request.mediaKey) runCatching { media.delete(it) } }
-        val updated = current.copy(avatarMediaKey = request.mediaKey, updatedAt = Instant.now())
-        mongo.save(updated)
-        return response(updated)
+        group(groupId) // fail closed if the group was removed after membership check
+        // An atomic field update avoids overwriting concurrently changed roles,
+        // counters/settings. The old uploader-owned object may still be shared.
+        mongo.updateFirst(Query(Criteria.where("id").`is`(groupId)),
+            Update().set("avatarMediaKey", request.mediaKey).set("updatedAt", Instant.now()),
+            GroupDocument::class.java)
+        return response(group(groupId))
     }
 
     fun createInvite(actorId: UUID, groupId: String, request: CreateGroupInviteRequest): GroupInviteResponse {

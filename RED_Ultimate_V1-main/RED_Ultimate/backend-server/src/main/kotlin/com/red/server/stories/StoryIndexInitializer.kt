@@ -9,11 +9,10 @@ import org.springframework.stereotype.Component
 /**
  * Story indexes — TTL safety net + query indexes.
  *
- * - `expiresAt` TTL with expire(0): MongoDB auto-deletes the document the
- *   moment expiresAt passes, even if [StoryService.cleanupExpired] is delayed
- *   or the scheduler is disabled. The scheduler remains primary because it
- *   also deletes the MinIO media object (TTL alone would orphan it;
- *   OrphanCleanupScheduler is the final backstop).
+ * - `expiresAt` TTL with expire(0): MongoDB eventually removes expired story
+ *   documents if [StoryService.cleanupExpired] is delayed or disabled. Neither
+ *   path deletes the uploader-owned MinIO key, which may still be shared with
+ *   another resource. The scheduled orphan scan is currently preview-only.
  * - `ownerId` + `createdAt` compound for feed queries; `deletedAt` sparse
  *   filter is handled in query predicates.
  */

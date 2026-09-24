@@ -2,6 +2,11 @@ package com.red.server.media
 
 import com.red.server.groups.GroupDocument
 import com.red.server.groups.GroupMember
+import com.red.server.database.ChannelDocument
+import com.red.server.database.ChannelMessageDocument
+import com.red.server.database.GroupMessageDocument
+import com.red.server.database.MessageDocument
+import com.red.server.social.PostDocument
 import com.red.server.stories.StoryDocument
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
@@ -16,6 +21,38 @@ import java.util.UUID
 /** Object-level authorization for authenticated media downloads. */
 @Service
 class MediaAccessService(private val mongo: MongoTemplate, private val jdbc: JdbcTemplate) {
+    /**
+     * An explicit uploader deletion must not silently break a published story,
+     * post, channel/group avatar or message attachment. Deny on Mongo errors rather than treating
+     * an unavailable reference store as proof that the object is unused.
+     * This is a safety guard, not an atomic cross-store reference count: a
+     * publisher racing this check still needs a separately designed lifecycle.
+     */
+    fun requireNoPublishedReferences(key: String) {
+        val inUse = mongo.exists(Query(Criteria.where("mediaKey").`is`(key)
+            .and("expiresAt").gt(Instant.now()).and("deletedAt").`is`(null)), StoryDocument::class.java) ||
+            mongo.exists(Query(Criteria.where("avatarMediaKey").`is`(key)), GroupDocument::class.java) ||
+            mongo.exists(Query(Criteria.where("avatarMediaKey").`is`(key)), ChannelDocument::class.java) ||
+            mongo.exists(Query(Criteria.where("media.objectKey").`is`(key)
+                .and("deletedAt").`is`(null)), PostDocument::class.java) ||
+            mongo.exists(Query(Criteria.where("poll.options.imageUrl").`is`("/api/media/$key")
+                .and("deletedAt").`is`(null)), PostDocument::class.java) ||
+            mongo.exists(Query(Criteria.where("attachments.mediaKey").`is`(key)
+                .and("deletedForEveryoneAt").`is`(null)), MessageDocument::class.java) ||
+            mongo.exists(Query(Criteria.where("attachments.mediaKey").`is`(key)
+                .and("deletedForEveryoneAt").`is`(null)), GroupMessageDocument::class.java) ||
+            mongo.exists(Query(Criteria.where("attachments.mediaKey").`is`(key)
+                .and("deletedAt").`is`(null)), ChannelMessageDocument::class.java)
+        if (inUse) throw ResponseStatusException(HttpStatus.CONFLICT, "Media object is still referenced by published content")
+        // Profile avatars live in PostgreSQL, not Mongo. Do not let the owner
+        // remove their upload while the directory still points to it.
+        val profileAvatar = jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE avatar_url=? OR avatar_media_key=?)",
+            Boolean::class.java, key, key
+        ) == true
+        if (profileAvatar) throw ResponseStatusException(HttpStatus.CONFLICT, "Media object is still used as a profile avatar")
+    }
+
     fun requireDownloadAllowed(accountId: UUID, key: String) {
         val ownerId = key.substringAfter("users/", "").substringBefore('/')
         if (ownerId == accountId.toString()) return
