@@ -62,6 +62,12 @@ import com.red.sovereign.ui.theme.RedSemanticColors
 import com.red.sovereign.ui.theme.YounesPrimary
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.ui.theme.AqyalGold
+import com.red.sovereign.ui.theme.AppThemeState
+import com.red.sovereign.ui.theme.AppThemeMode
+import com.red.sovereign.ui.theme.CustomThemeStore
+import com.red.sovereign.ui.theme.CustomThemePackage
+import com.red.sovereign.ui.theme.PlexArabicFamily
+import com.red.sovereign.ui.theme.SovereignGlassTier
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -100,7 +106,7 @@ fun ChatThreadScreen(
     val hazeState = rememberSovereignHaze()
     // خلفية المحادثة: حزمة المستخدم أو السيادية الافتراضية.
     val wallpaperContext = androidx.compose.ui.platform.LocalContext.current
-    val customTheme = remember { CustomThemeStore.loadActiveCustomTheme(wallpaperContext) }
+    val customTheme = remember { CustomThemeStore.loadCustomThemePackage(wallpaperContext) }
     val wallpaperDark = when (AppThemeState.themeMode) {
         AppThemeMode.LIGHT -> false
         AppThemeMode.DARK -> true
@@ -142,7 +148,7 @@ fun ChatThreadScreen(
     LaunchedEffect(allTopics) {
         if (selectedTopic != null && selectedTopic !in allTopics) selectedTopic = null
     }
-    val filteredMessages = remember(resolvedMessages, selectedTopic) {
+    val filteredMessages: List<DecryptedMessage> = remember(resolvedMessages, selectedTopic) {
         if (selectedTopic == null) resolvedMessages
         else resolvedMessages.filter { it.threadTopics().contains(selectedTopic) }
     }
@@ -329,7 +335,7 @@ fun ChatThreadScreen(
                 }
                 // LEGENDARY: تجميع الرسائل مع فواصل تاريخ بأسلوب واتساب — قبل LazyColumn
                 // (remember لا يعمل داخل DSL). كانت الرسائل مكدسة بلا سياق زمني.
-                val groupedWithDates = remember(filteredMessages) {
+                val groupedWithDates: List<ChatListItem> = remember(filteredMessages) {
                     val out = ArrayList<ChatListItem>(filteredMessages.size + 4)
                     var lastDay: String? = null
                     val dayFmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")

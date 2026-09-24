@@ -9,7 +9,7 @@ protobuf-kotlin = "3.25.5"
 
 # Java / Kotlin
 java = "21"
-kotlin = "2.0.21"
+kotlin = "2.3.21"
 kotlin-jvm-target = "21"
 
 # Serialization

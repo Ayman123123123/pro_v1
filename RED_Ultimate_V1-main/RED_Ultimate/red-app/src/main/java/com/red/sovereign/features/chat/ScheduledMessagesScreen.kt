@@ -41,8 +41,8 @@ enum class RecurrenceRule(val label: String, val cronExpression: String?) {
     WEEKLY("أسبوعياً", "0 0 * * 0"),
     MONTHLY("شهرياً", "0 0 1 * *"),
     YEARLY("سنوياً", "0 0 1 1 *"),
-    CUSTOM("مخصص", null)
-    
+    CUSTOM("مخصص", null);
+
     companion object {
         fun fromCron(cron: String?): RecurrenceRule {
             return values().firstOrNull { it.cronExpression == cron } ?: NONE

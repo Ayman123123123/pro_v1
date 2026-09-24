@@ -16,12 +16,8 @@ val PlexArabicFamily = FontFamily(
     Font(R.font.plex_arabic_bold, FontWeight.Black),
 )
 
-// Noto Sans Arabic - fallback
-val NotoArabicFamily = FontFamily(
-    Font(R.font.noto_sans_arabic_regular, FontWeight.Normal),
-    Font(R.font.noto_sans_arabic_medium, FontWeight.Medium),
-    Font(R.font.noto_sans_arabic_bold, FontWeight.Bold),
-)
+// Noto Sans Arabic - fallback (uses Plex Arabic since Noto fonts not bundled)
+val NotoArabicFamily = PlexArabicFamily
 
 // الخط العربي الرئيسي (RTL أولوية)
 val ArabicTypographyFamily = PlexArabicFamily

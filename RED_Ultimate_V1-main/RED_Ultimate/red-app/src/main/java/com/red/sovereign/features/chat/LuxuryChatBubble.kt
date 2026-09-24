@@ -71,7 +71,7 @@ fun LuxuryChatBubble(
     val isForwarded: Boolean = resolvedForwardOf != null || resolvedForwardCount > 0
     val resolvedReplyTo: String? = richMessage?.replyTo ?: replyToMessageId
     val resolvedFont = fontFamily ?: FontFamily.Default
-    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.4f
+    val isDark = isBackgroundDark(MaterialTheme.colorScheme.background)
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
     val timeColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
@@ -293,33 +293,43 @@ fun LuxuryChatBubble(
 }
 }
 
-/** LEGENDARY: منشن مميز فعلاً + هاشتاغ — داكنان على الصادرة الفاتحة، مضيئان على الواردة الداكنة (كلها معتمة). دالة خالصة (تُستدعى داخل remember من الأعلى). */
+/** LEGENDARY: منشن مميز فعلاً + هاشتاغ — داكنان على الصادرة الفاتحة، مضيئان على الواردة الداكنة (كلها معتمة). دالة @Composable (تُستدعى داخل remember من الأعلى). */
+@Composable
 private fun annotatedWithMentions(message: String, isMe: Boolean): androidx.compose.ui.text.AnnotatedString {
-    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.4f
+    val isDark = isBackgroundDark(MaterialTheme.colorScheme.background)
     val mentionColor = if (isMe) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.tertiary
     val hashtagColor = if (isMe) MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.secondary
-        val mentionRegex = Regex("@(all|الجميع|online|متصل|[A-Z0-9]{5,16})", RegexOption.IGNORE_CASE)
-        val hashtagRegex = Regex("#[\\w\u0600-\u06FF]{2,30}")
-        val builder = androidx.compose.ui.text.AnnotatedString.Builder(message)
-        mentionRegex.findAll(message).forEach { m ->
-            runCatching {
-                builder.addStyle(
-                    androidx.compose.ui.text.SpanStyle(
-                        color = mentionColor,
-                        fontWeight = FontWeight.Bold,
-                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
-                    ),
-                    m.range.first, m.range.last + 1
-                )
-            }
+    val mentionRegex = Regex("@(all|الجميع|online|متصل|[A-Z0-9]{5,16})", RegexOption.IGNORE_CASE)
+    val hashtagRegex = Regex("#[\\w\u0600-\u06FF]{2,30}")
+    val builder = androidx.compose.ui.text.AnnotatedString.Builder(message)
+    mentionRegex.findAll(message).forEach { m ->
+        runCatching {
+            builder.addStyle(
+                androidx.compose.ui.text.SpanStyle(
+                    color = mentionColor,
+                    fontWeight = FontWeight.Bold,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                ),
+                m.range.first, m.range.last + 1
+            )
         }
-        hashtagRegex.findAll(message).forEach { m ->
-            runCatching {
-                builder.addStyle(
-                    androidx.compose.ui.text.SpanStyle(color = hashtagColor, fontWeight = FontWeight.Bold),
-                    m.range.first, m.range.last + 1
-                )
-            }
+    }
+    hashtagRegex.findAll(message).forEach { m ->
+        runCatching {
+            builder.addStyle(
+                androidx.compose.ui.text.SpanStyle(color = hashtagColor, fontWeight = FontWeight.Bold),
+                m.range.first, m.range.last + 1
+            )
         }
-        return builder.toAnnotatedString()
+    }
+    return builder.toAnnotatedString()
+}
+
+private fun isBackgroundDark(color: androidx.compose.ui.graphics.Color): Boolean {
+    // حساب اللمعان النسبي (relative luminance) من قيم RGB
+    val r = color.red
+    val g = color.green
+    val b = color.blue
+    val luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return luminance < 0.5f
 }

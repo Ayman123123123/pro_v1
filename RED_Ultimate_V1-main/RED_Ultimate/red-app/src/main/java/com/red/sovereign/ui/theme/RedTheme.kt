@@ -25,7 +25,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.LayoutDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -35,22 +35,8 @@ import com.red.sovereign.R
 
 // ════════════════════════════════════════════════════════════════════════════════
 // الخط الموحّد — IBM Plex Sans Arabic ثنائي النص (SIL OFL 1.1)
-// مضمّن في الحزمة لا مجلوب من الشبكة: 4 أوزان محلية في res/font
-// plex_arabic.xml (400/500/600/700). ينهي ارتداد خطوط Google الشبكية
-// ويوحّد هوية التطبيق مع admin_dashboard (IBM Plex) ويضمن ثبات مقاسات
-// الأسطر حتى على شبكات اليمن الضعيفة.
+// المصدر الوحيد: Font.kt (PlexArabicFamily). لا نسخ هنا.
 // ════════════════════════════════════════════════════════════════════════════════
-val PlexArabicFamily = FontFamily(
-    Font(R.font.plex_arabic_regular, FontWeight.Normal, FontStyle.Normal),
-    Font(R.font.plex_arabic_regular, FontWeight.Light, FontStyle.Normal),
-    Font(R.font.plex_arabic_medium, FontWeight.Medium, FontStyle.Normal),
-    Font(R.font.plex_arabic_semibold, FontWeight.SemiBold, FontStyle.Normal),
-    Font(R.font.plex_arabic_bold, FontWeight.Bold, FontStyle.Normal),
-    Font(R.font.plex_arabic_bold, FontWeight.ExtraBold, FontStyle.Normal),
-    Font(R.font.plex_arabic_bold, FontWeight.Black, FontStyle.Normal)
-)
-
-val NotoSansArabicFamily = PlexArabicFamily
 
 // عائلة الخط الأساسية للتطبيق - Plex Arabic مع Noto كبديل
 val AppFontFamily = PlexArabicFamily
@@ -554,44 +540,9 @@ val oledColorScheme = redColorScheme.copy(
 )
 val oledLightColorScheme = redLightColorScheme // الأوليد الفاتح = الفاتح العادي
 
-// ─── أوضاع المظهر ───────────────────────────────────────────────────────────
-enum class AppThemeMode(val label: String) {
-    LIGHT("فاتح"),
-    DARK("ليلي"),
-    SYSTEM("حسب النظام")
-}
-
-enum class AppThemePreset(val label: String, val description: String) {
-    SOVEREIGN("يونس السيادي", "أسود ملكي مع أخضر زمردي ولمسات ذهبية — الهوية الأصلية"),
-    TELEGRAM_DARK("تلجرام الكحلي", "أزرق تلجرام الأنيق مع كحلي داكن"),
-    WHATSAPP_DARK("واتساب الزمردي", "أخضر واتساب الكلاسيكي المريح للعين"),
-    OLED_BLACK("أوليد فائق السواد", "سواد تام 100% لتوفير الطاقة وأقصى تباين"),
-    DYNAMIC("ديناميكي", "ألوان مستخرجة من خلفية الهاتف — Material You (أندرويد 12+)"),
-    CUSTOM("مخصص", "اختر لونك بنفسك مع حارس تباين ذكي")
-}
-
-object AppThemeState {
-    var currentPreset by androidx.compose.runtime.mutableStateOf(AppThemePreset.SOVEREIGN)
-    var themeMode by androidx.compose.runtime.mutableStateOf(AppThemeMode.SYSTEM)
-    var highContrast by androidx.compose.runtime.mutableStateOf(false)
-    var liquidGlassEnabled by androidx.compose.runtime.mutableStateOf(true)
-    var reduceMotion by androidx.compose.runtime.mutableStateOf(false)
-    var fontScale by androidx.compose.runtime.mutableStateOf(1.0f)
-    var customPrimary by androidx.compose.runtime.mutableStateOf<Color?>(null)
-    // 6 ألوان مقترحة للمخصص تضمن ≥4.5:1
-    val customPresets = listOf(
-        YounesPrimary to "زمرد يونس",
-        YounesAccent to "ذهب إمبراطوري",
-        YounesCobalt to "أزرق ملكي",
-        Color(0xFFE53935) to "أحمر حي",
-        Color(0xFF8E24AA) to "بنفسجي ملكي",
-        Color(0xFF00ACC1) to "تركواز"
-    )
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 // ثيم يونس الرئيسي — يدعم فاتح/ليلي/نظام + ديناميكي + مخصص + Liquid Glass
-// ═══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
 @Composable
 fun YounesTheme(
     preset: AppThemePreset = AppThemeState.currentPreset,
@@ -763,22 +714,3 @@ const val SovereignMaxPulsesPerScreen = 1
 // القاعدة: البلور مكلف (GPU) فيُحصر في شريط التنقل والـ BottomSheet.
 // fallback معتم تلقائي عند تعطيل liquidGlass أو غياب Haze.
 // ═══════════════════════════════════════════════════════════════════════════════
-object SovereignGlassTier {
-    /** شريط علوي/سفلي — خفيف. */
-    val NavBar = 8.dp
-    /** بطاقات زجاجية — متوسط. */
-    val Card = 20.dp
-    /** حوارات و Sheets — عميق. */
-    val Sheet = 40.dp
-
-    /** لون احتياطي معتم لكل طبقة عند غياب البلور (isDark). */
-    @Composable
-    fun fallback(isDark: Boolean, tier: androidx.compose.ui.unit.Dp): Color {
-        val scheme = MaterialTheme.colorScheme
-        return when (tier) {
-            NavBar -> scheme.surface.copy(alpha = if (isDark) 0.85f else 0.88f)
-            Card -> scheme.surfaceContainerHigh.copy(alpha = if (isDark) 0.92f else 0.95f)
-            else -> scheme.surfaceContainerHighest.copy(alpha = 0.97f)
-        }
-    }
-}

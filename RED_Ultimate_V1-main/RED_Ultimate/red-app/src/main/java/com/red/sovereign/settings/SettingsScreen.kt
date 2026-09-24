@@ -408,7 +408,7 @@ private fun WallpaperSettings() {
     val context = androidx.compose.ui.platform.LocalContext.current
     var pkg by androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf(
-            com.red.sovereign.ui.theme.CustomThemeStore.loadActiveCustomTheme(context)
+            com.red.sovereign.ui.theme.CustomThemeStore.loadCustomThemePackage(context)
                 ?: com.red.sovereign.ui.theme.CustomThemePackage(
                     name = "سيادي",
                     primaryColor = androidx.compose.ui.graphics.Color(0xFF14C79A),

@@ -81,16 +81,13 @@ hilt = { id = "com.google.dagger.hilt.android", version = "2.52" }
 android-library = { module = "com.android.library:com.android.library.gradle.plugin", version.ref = "android-gradle-plugin" }
 android-application = { module = "com.android.application:com.android.application.gradle.plugin", version.ref = "android-gradle-plugin" }
 
-# Compose
-androidx-compose-bom = "androidx.compose:compose-bom:2026.08.00"
+# Compose - use stable BOM
+androidx-compose-bom = "androidx.compose:compose-bom:2024.08.00"
 androidx-compose-animation = { module = "androidx.compose.animation:animation" }
 androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
 androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-material3-windowsizeclass = { module = "androidx.compose.material3:material3-window-size-class" }
-androidx-compose-material3-adaptive = { module = "androidx.compose.material3.adaptive:adaptive"}
-androidx-compose-material3-adaptive-layout = { module = "androidx.compose.material3.adaptive:adaptive-layout"}
-androidx-compose-material3-adaptive-navigation = { module = "androidx.compose.material3.adaptive:adaptive-navigation"}
 androidx-compose-material-icons-extended = "androidx.compose.material:material-icons-extended:1.7.8"
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-compose-ui-tooling-core = { module = "androidx.compose.ui:ui-tooling" }
