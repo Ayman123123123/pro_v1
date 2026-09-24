@@ -558,17 +558,6 @@ fun ChatThreadScreen(
     }
 }
 
-/** A shared row for the message details sheet in both normal and paged history. */
-@Composable
-private fun MessageInfoLine(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp, modifier = Modifier.width(72.dp))
-        Text(value, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 2,
-            overflow = TextOverflow.Ellipsis)
-    }
-}
-
 /**
  * LEGENDARY: عناصر القائمة (تاريخ/رسالة) — فواصل واتساب بلا تداخل
  */
@@ -1279,6 +1268,7 @@ fun ChatHistoryPagingColumn(
             }
         }
     }
+}
 }
 
 @Composable
