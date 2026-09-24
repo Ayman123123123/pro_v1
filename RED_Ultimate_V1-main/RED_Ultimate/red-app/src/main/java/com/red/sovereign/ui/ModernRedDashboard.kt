@@ -2,6 +2,8 @@ package com.red.sovereign.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -189,12 +191,13 @@ fun ModernRedDashboard(
         ModernCreateGroupDialog(
             onDismiss = { showCreateGroup = false },
             onCreate = { name, description, memberIds ->
-                showCreateGroup = false
-                groups.create(name, description, memberIds = memberIds) {
+                groups.create(name, description, memberRedIds = memberIds) {
+                    showCreateGroup = false
                     currentSection = ModernSection.GROUPS
                 }
             },
-            contacts = directory.contacts
+            contacts = directory.contacts,
+            groupState = groups.state
         )
     }
     
@@ -477,22 +480,29 @@ fun ModernMoreScreen(onSettingsPage: (SettingsPage) -> Unit) {
 fun ModernCreateGroupDialog(
     onDismiss: () -> Unit,
     onCreate: (String, String?, List<String>) -> Unit,
-    contacts: List<com.red.sovereign.contacts.PublicRedProfile>
+    contacts: List<com.red.sovereign.contacts.PublicRedProfile>,
+    groupState: com.red.sovereign.groups.GroupState
 ) {
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var submitted by remember { mutableStateOf(false) }
     val selected = remember { mutableStateListOf<String>() }
-    
+    val saving = submitted && groupState is com.red.sovereign.groups.GroupState.Saving
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         title = { Text("إنشاء مجموعة مشفرة") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("اسم المجموعة") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = description,
@@ -500,19 +510,46 @@ fun ModernCreateGroupDialog(
                     label = { Text("الوصف (اختياري)") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("الأعضاء: ${selected.size}", fontSize = 12.sp, color = YounesMuted)
+                Text("اختيار الأعضاء: ${selected.size}", fontSize = 12.sp, color = YounesMuted)
+                if (contacts.isEmpty()) Text("لا توجد جهات اتصال لإضافتها الآن", fontSize = 12.sp)
+                contacts.distinctBy { it.redId }.forEach { contact ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) {
+                            if (contact.redId in selected) selected.remove(contact.redId)
+                            else selected.add(contact.redId)
+                        },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = contact.redId in selected,
+                            onCheckedChange = { checked ->
+                                if (checked) { if (contact.redId !in selected) selected.add(contact.redId) }
+                                else selected.remove(contact.redId)
+                            },
+                            enabled = !saving
+                        )
+                        Column {
+                            Text(contact.displayName.ifBlank { contact.username }, fontSize = 14.sp)
+                            Text(contact.redId, fontSize = 11.sp, color = YounesMuted)
+                        }
+                    }
+                }
+                if (submitted && groupState is com.red.sovereign.groups.GroupState.Error) {
+                    Text(groupState.message, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onCreate(name, description.ifBlank { null }, selected.toList()) },
-                enabled = name.isNotBlank()
-            ) {
-                Text("إنشاء")
-            }
+                onClick = {
+                    submitted = true
+                    onCreate(name.trim(), description.ifBlank { null }, selected.toList())
+                },
+                enabled = name.trim().length in 2..64 && !saving
+            ) { Text(if (saving) "جارٍ الإنشاء..." else "إنشاء") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
+            TextButton(onClick = onDismiss, enabled = !saving) { Text("إلغاء") }
         }
     )
 }

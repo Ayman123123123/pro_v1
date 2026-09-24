@@ -35,14 +35,14 @@ def excerpt(text: str) -> str:
             path, row, _col, message = match.groups()
             path = path.split("/src/")[-1] if "/src/" in path else "/".join(path.split("/")[-3:])
             values = files[path]
-            if len(values) < 3:
+            if len(values) < 10:
                 values.append(f"L{row}: {message[:250]}")
             continue
         if re.search(r"(?:^|\s)(?:[> ] Task .*FAILED|FAILURE:|Execution failed for task|^error:|^Caused by: .*Exception)", line):
             if len(other) < 12:
                 other.append(line.strip()[-350:])
 
-    lines: list[str] = ["Compilation diagnostics by file (first 3 per file):"]
+    lines: list[str] = ["Compilation diagnostics by file (first 10 per file):"]
     for path, errors in files.items():
         lines.append(path)
         lines.extend("  " + error for error in errors)

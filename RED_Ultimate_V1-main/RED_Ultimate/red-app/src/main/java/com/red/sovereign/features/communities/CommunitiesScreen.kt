@@ -2,6 +2,7 @@ package com.red.sovereign.features.communities
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -58,7 +59,8 @@ data class CommunitiesUiState(
     val communities: List<Community> = emptyList(),
     val error: String? = null,
     val query: String = "",
-    val showCreate: Boolean = false
+    val showCreate: Boolean = false,
+    val updatingCommunityId: String? = null
 )
 
 /** جسم PUT /api/communities/{id} — يطابق UpdateCommunityRequest في الباكند (ADMIN فقط). */
@@ -220,12 +222,18 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
         doPut: suspend (id: String, body: UpdateCommunityBody) -> ApiResult<Community>,
         onSuccess: () -> Unit = {}
     ) = viewModelScope.launch {
-        when (val result = doPut(community.id, UpdateCommunityBody(name, description, category, tags, isPublic, rules, avatarColor))) {
-            is ApiResult.Success -> {
-                applyUpdated(result.value)
-                onSuccess()
+        if (_state.value.updatingCommunityId != null) return@launch
+        _state.update { it.copy(updatingCommunityId = community.id, error = null) }
+        try {
+            when (val result = doPut(community.id, UpdateCommunityBody(name, description, category, tags, isPublic, rules, avatarColor))) {
+                is ApiResult.Success -> {
+                    applyUpdated(result.value)
+                    onSuccess()
+                }
+                is ApiResult.Error -> _state.update { it.copy(error = result.message) }
             }
-            is ApiResult.Error -> _state.update { it.copy(error = result.message) }
+        } finally {
+            _state.update { it.copy(updatingCommunityId = null) }
         }
     }
 
@@ -252,6 +260,7 @@ fun CommunitiesScreen(
     )
     val state by vm.state.collectAsState()
     var editingCommunity by remember { mutableStateOf<Community?>(null) }
+    var pendingDelete by remember { mutableStateOf<Community?>(null) }
     // حقن PUT من الشاشة (تملك tokens) — الـ ViewModel لا يرى الجلسة.
     val doPut: suspend (String, UpdateCommunityBody) -> ApiResult<Community> =
         remember(tokens) { { id, body -> putCommunityUpdate(tokens, id, body) } }
@@ -332,8 +341,8 @@ fun CommunitiesScreen(
                             onOpen = { onOpenCommunity(community.id, community.name) },
                             onJoin = { vm.join(community) },
                             onLeave = { vm.leave(community) },
-                            onDelete = { vm.delete(community) },
-                            onEdit = { editingCommunity = community }
+                            onDelete = { pendingDelete = community },
+                            onEdit = { vm.clearError(); editingCommunity = community }
                         )
                     }
                 }
@@ -353,12 +362,28 @@ fun CommunitiesScreen(
     editingCommunity?.let { community ->
         EditCommunityDialog(
             community = community,
+            saving = state.updatingCommunityId == community.id,
+            error = state.error,
             onDismiss = { editingCommunity = null },
             onSave = { name, desc, cat, isPublic, tags, rules, avatarColor ->
                 vm.update(community, name, desc, cat, tags, isPublic, rules, avatarColor, doPut) {
                     editingCommunity = null
                 }
             }
+        )
+    }
+
+    pendingDelete?.let { community ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("تأكيد حذف المجتمع") },
+            text = { Text("هل تريد حذف «${community.name}»؟ ستُؤرشف بيانات المجتمع ولن تظهر للأعضاء.") },
+            confirmButton = {
+                TextButton(onClick = { pendingDelete = null; vm.delete(community) }) {
+                    Text("حذف", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("إلغاء") } }
         )
     }
 }
@@ -472,6 +497,11 @@ private fun CommunityCard(
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
+                                text = { Text("تعديل المجتمع") },
+                                onClick = { menuOpen = false; onEdit() },
+                                leadingIcon = { Icon(Icons.Default.Edit, null) }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("حذف المجتمع") },
                                 onClick = {
                                     menuOpen = false
@@ -558,6 +588,73 @@ private fun CreateCommunityDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("إلغاء") }
         }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditCommunityDialog(
+    community: Community,
+    saving: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String, Boolean, List<String>, String, String) -> Unit
+) {
+    var name by remember(community.id) { mutableStateOf(community.name) }
+    var description by remember(community.id) { mutableStateOf(community.description.orEmpty()) }
+    var category by remember(community.id) { mutableStateOf(community.category) }
+    var tagsInput by remember(community.id) { mutableStateOf(community.tags.joinToString(", ")) }
+    var rules by remember(community.id) { mutableStateOf(community.rules.orEmpty()) }
+    var avatarColor by remember(community.id) { mutableStateOf(community.avatarColor) }
+    var isPublic by remember(community.id) { mutableStateOf(community.isPublic) }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("تعديل المجتمع") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(name, { name = it }, label = { Text("اسم المجتمع") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(description, { description = it }, label = { Text("الوصف") },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4)
+                OutlinedTextField(category, { category = it }, label = { Text("التصنيف") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(tagsInput, { tagsInput = it }, label = { Text("الوسوم (افصل بفاصلة)") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(rules, { rules = it }, label = { Text("قواعد المجتمع") },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = isPublic, onCheckedChange = { isPublic = it }, enabled = !saving)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isPublic) "عام" else "خاص (يتطلب موافقة)")
+                }
+                Text("لون الصورة", fontSize = 13.sp)
+                Row(Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CommunityAvatarColors.forEach { color ->
+                        FilterChip(
+                            selected = avatarColor.equals(color, ignoreCase = true),
+                            onClick = { avatarColor = color },
+                            label = { Text("●", color = parseColorOrDefault(color)) },
+                            enabled = !saving
+                        )
+                    }
+                }
+                if (error != null) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(name.trim(), description.trim(), category.trim(),
+                    isPublic, parseTagsInput(tagsInput), rules.trim(), avatarColor) },
+                enabled = !saving && name.trim().length in 2..100 &&
+                    description.length <= 500 && category.trim().length in 1..50 && rules.length <= 2000
+            ) { Text(if (saving) "جارٍ الحفظ..." else "حفظ", color = YounesEmerald) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text("إلغاء") } }
     )
 }
 

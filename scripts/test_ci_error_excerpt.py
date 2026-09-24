@@ -10,10 +10,13 @@ spec.loader.exec_module(module)
 
 log = "\n".join(
     [f"e: file:///runner/app/src/main/kotlin/First.kt:{i}:1 cascading error" for i in range(100)]
-    + ["e: file:///runner/app/src/main/kotlin/Second.kt:8:1 actual root cause", "> Task :app:compileDebugKotlin FAILED"]
+    + ["e: file:///runner/app/src/main/kotlin/Second.kt:8:1 actual root cause",
+       "* What went wrong:", "Invalid user data", "> version catalog used a reserved word",
+       "* Try:", "> Task :app:compileDebugKotlin FAILED"]
 )
 excerpt = module.excerpt(log)
-assert excerpt.count("cascading error") == 3
+assert excerpt.count("cascading error") == 10
 assert "Second.kt" in excerpt and "actual root cause" in excerpt
+assert "version catalog used a reserved word" in excerpt
 assert "compileDebugKotlin FAILED" in excerpt
 print("PASS: diagnostics include every file without flooding check output")

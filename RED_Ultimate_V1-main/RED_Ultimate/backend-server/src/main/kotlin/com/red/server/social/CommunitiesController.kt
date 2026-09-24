@@ -252,10 +252,11 @@ class CommunitiesController(
         val update = org.springframework.data.mongodb.core.query.Update()
             .set("updatedAt", Instant.now())
         request.name?.trim()?.takeIf { it.length in 2..100 }?.let { update.set("name", it) }
-        request.description?.trim()?.takeIf { it.isNotEmpty() }?.let { update.set("description", it) }
+        // Blank explicitly clears optional text; null means "leave unchanged".
+        request.description?.trim()?.let { update.set("description", it.takeIf(String::isNotEmpty)) }
         request.category?.trim()?.takeIf { it.isNotEmpty() }?.let { update.set("category", it) }
         request.avatarColor?.trim()?.takeIf { it.isNotEmpty() }?.let { update.set("avatarColor", it) }
-        request.rules?.trim()?.takeIf { it.isNotEmpty() }?.let { update.set("rules", it) }
+        request.rules?.trim()?.let { update.set("rules", it.takeIf(String::isNotEmpty)) }
         request.isPublic?.let { update.set("isPublic", it) }
         request.tags?.let {
             update.set("tags", it.map(String::trim).map(String::lowercase).filter(String::isNotEmpty))

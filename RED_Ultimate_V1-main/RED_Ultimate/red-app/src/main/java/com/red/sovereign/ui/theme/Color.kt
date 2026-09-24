@@ -5,6 +5,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 
 /**
  * RED Sovereign Material 3 Color Schemes
@@ -213,8 +214,7 @@ object RedColorScheme {
                 inversePrimary = tonal.tone90,
                 inverseSurface = Color(0xFFFFFFFF),
                 inverseOnSurface = Color(0xFF0A0F18),
-                scrim = Color(0xE0000000),
-                shadow = Color(0xFF000000)
+                scrim = Color(0xE0000000)
             )
         } else {
             lightColorScheme(
@@ -250,8 +250,7 @@ object RedColorScheme {
                 inversePrimary = tonal.tone80,
                 inverseSurface = Color(0xFF0A0F18),
                 inverseOnSurface = Color(0xFFF7F8FA),
-                scrim = Color(0x66000000),
-                shadow = Color(0xFF000000)
+                scrim = Color(0x66000000)
             )
         }
     }
@@ -267,19 +266,19 @@ object RedColorScheme {
         val saturation = hsv[1]
 
         return TonalPalette(
-            tone0 = Color.Hsv(hue, 0f, 1f),
-            tone10 = Color.Hsv(hue, saturation * 0.1f, 0.95f),
-            tone20 = Color.Hsv(hue, saturation * 0.2f, 0.9f),
-            tone30 = Color.Hsv(hue, saturation * 0.4f, 0.85f),
-            tone40 = Color.Hsv(hue, saturation * 0.6f, 0.8f),
-            tone50 = Color.Hsv(hue, saturation * 0.8f, 0.75f),
-            tone60 = Color.Hsv(hue, saturation, 0.7f),
-            tone70 = Color.Hsv(hue, saturation, 0.6f),
-            tone80 = Color.Hsv(hue, saturation, 0.5f),
-            tone90 = Color.Hsv(hue, saturation * 0.9f, 0.35f),
-            tone95 = Color.Hsv(hue, saturation, 0.25f),
-            tone99 = Color.Hsv(hue, saturation, 0.15f),
-            tone100 = Color.Hsv(hue, 0f, 0f)
+            tone0 = Color.hsv(hue, 0f, 1f),
+            tone10 = Color.hsv(hue, saturation * 0.1f, 0.95f),
+            tone20 = Color.hsv(hue, saturation * 0.2f, 0.9f),
+            tone30 = Color.hsv(hue, saturation * 0.4f, 0.85f),
+            tone40 = Color.hsv(hue, saturation * 0.6f, 0.8f),
+            tone50 = Color.hsv(hue, saturation * 0.8f, 0.75f),
+            tone60 = Color.hsv(hue, saturation, 0.7f),
+            tone70 = Color.hsv(hue, saturation, 0.6f),
+            tone80 = Color.hsv(hue, saturation, 0.5f),
+            tone90 = Color.hsv(hue, saturation * 0.9f, 0.35f),
+            tone95 = Color.hsv(hue, saturation, 0.25f),
+            tone99 = Color.hsv(hue, saturation, 0.15f),
+            tone100 = Color.hsv(hue, 0f, 0f)
         )
     }
 }
