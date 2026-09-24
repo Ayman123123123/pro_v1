@@ -3,6 +3,7 @@ import { Table, Button, Tag, Space, message, Modal, Input, Typography, Card, Des
 import type { ColumnsType } from 'antd/es/table';
 import { CheckOutlined, CloseOutlined, SafetyCertificateOutlined, ReloadOutlined } from '@ant-design/icons';
 import { getPendingApprovals, approveRejectUser } from '../api';
+import { RequireAuth, formatSafeDate, formatSafeTime } from './_shared';
 
 interface DeviceInfo {
   id: string;
@@ -89,7 +90,7 @@ export default function Approvals() {
     {
       title: 'التسجيل',
       dataIndex: 'createdAt',
-      render: (v: string) => (v ? new Date(v).toLocaleString('ar') : '—'),
+      render: (v: string) => (v ? `${formatSafeDate(v, 'ar')} ${formatSafeTime(v, 'ar')}` : '—'),
     },
     {
       title: 'الأجهزة',
@@ -149,6 +150,7 @@ export default function Approvals() {
   ];
 
   return (
+    <RequireAuth>
     <Card
       title="سلطة اعتماد حسابات يونس — الموافقات المعلقة"
       extra={
@@ -160,10 +162,14 @@ export default function Approvals() {
       <Typography.Paragraph type="secondary">
         يعرض البصمة الحقيقية لمفتاح الهوية لكل جهاز — لا توافق قبل التحقق من البصمة عبر قناة موثوقة.
       </Typography.Paragraph>
+      {error && (
+        <Alert type="error" showIcon message="تعذر تحميل طلبات الموافقة" description={error} style={{ marginBottom: 16 }}
+          action={<Button size="small" onClick={load}>إعادة المحاولة</Button>} />
+      )}
       <Table
         dataSource={pendingUsers}
         columns={columns}
-        rowKey="id"
+        rowKey={(r: PendingUser) => r?.id ?? `${r?.redId ?? 'x'}-${r?.username ?? ''}`}
         loading={loading}
         scroll={{ x: 1050 }}
         expandable={
@@ -203,5 +209,6 @@ export default function Approvals() {
         />
       </Modal>
     </Card>
+    </RequireAuth>
   );
 }

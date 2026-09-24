@@ -23,13 +23,16 @@ import {
   Send,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { RequireAuth, DemoBanner, EmptyState, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
 
 export function AnalyticsPage() {
   const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<string>('7d');
 
   return (
+    <RequireAuth>
     <div className="space-y-6">
+      <DemoBanner />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('analytics.title')}</h1>
@@ -48,8 +51,8 @@ export function AnalyticsPage() {
               <SelectItem value="90d">Last 90 Days</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline"><Download className="h-4 w-4 mr-2" /> Export</Button>
-          <Button><Plus className="h-4 w-4 mr-2" /> New Report</Button>
+          <Button variant="outline" disabled title={t('common.comingSoon')} aria-label="Export report (coming soon)"><Download className="h-4 w-4 mr-2" aria-hidden="true" /> Export</Button>
+          <Button disabled title={t('common.comingSoon')} aria-label="New report (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> New Report</Button>
         </div>
       </div>
 
@@ -65,21 +68,22 @@ export function AnalyticsPage() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="md:col-span-1 space-y-4 p-4 bg-muted/50 rounded-lg">
-              <h4 className="font-medium">Dimensions</h4>
+              <h4 className="font-medium text-foreground">Dimensions</h4>
               <div className="space-y-2">
                 {['Date', 'User', 'Channel', 'Region', 'Device', 'Source'].map(d => (
-                  <div key={d} className="p-2 border rounded cursor-grab hover:bg-muted" draggable>{d}</div>
+                  <div key={d} className="p-2 border rounded text-foreground">{d}</div>
                 ))}
               </div>
-              <h4 className="font-medium mt-4">Metrics</h4>
+              <h4 className="font-medium mt-4 text-foreground">Metrics</h4>
               <div className="space-y-2">
                 {['Users', 'Messages', 'Calls', 'Revenue', 'Retention', 'Engagement'].map(m => (
-                  <div key={m} className="p-2 border rounded cursor-grab hover:bg-muted" draggable>{m}</div>
+                  <div key={m} className="p-2 border rounded text-foreground">{m}</div>
                 ))}
               </div>
+              <p className="text-xs font-medium text-foreground/70">{t('common.comingSoon')}: drag-and-drop</p>
             </div>
             <div className="md:col-span-2 border rounded-lg p-4 min-h-[400px]">
-              <p className="text-center text-muted-foreground py-8">Drop dimensions and metrics here to build your report</p>
+              <EmptyState message={t('common.noData')} />
             </div>
           </div>
         </CardContent>
@@ -95,7 +99,7 @@ export function AnalyticsPage() {
             </CardTitle>
             <CardDescription>Automated reports delivered via email, webhook, or Slack</CardDescription>
           </div>
-          <Button><Plus className="h-4 w-4 mr-2" /> Schedule Report</Button>
+          <Button disabled title={t('common.comingSoon')} aria-label="Schedule report (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> Schedule Report</Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -111,9 +115,9 @@ export function AnalyticsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={report.status === 'Active' ? 'success' : 'secondary'}>{report.status}</Badge>
-                  <Button variant="ghost" size="icon"><Settings className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon"><Play className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon"><Pause className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`Configure ${report.name}`}><Settings className="h-4 w-4" aria-hidden="true" /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`Run ${report.name} now`}><Play className="h-4 w-4" aria-hidden="true" /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`Pause ${report.name}`}><Pause className="h-4 w-4" aria-hidden="true" /></Button>
                 </div>
               </div>
             ))}
@@ -123,16 +127,18 @@ export function AnalyticsPage() {
 
       {/* Cohort/Funnel/Retention Tabs */}
       <Tabs defaultValue="cohort" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="cohort"><Users className="h-4 w-4 mr-2" /> Cohort Analysis</TabsTrigger>
-          <TabsTrigger value="funnel"><LineChart className="h-4 w-4 mr-2" /> Funnel Analysis</TabsTrigger>
-          <TabsTrigger value="retention"><TrendingUp className="h-4 w-4 mr-2" /> Retention Curves</TabsTrigger>
+        <div className={TABS_WRAP_CLASS}>
+        <TabsList className={TABS_LIST_CLASS}>
+          <TabsTrigger value="cohort" className={TABS_TRIGGER_CLASS}><Users className="h-4 w-4 mr-2" aria-hidden="true" /> Cohort Analysis</TabsTrigger>
+          <TabsTrigger value="funnel" className={TABS_TRIGGER_CLASS}><LineChart className="h-4 w-4 mr-2" aria-hidden="true" /> Funnel Analysis</TabsTrigger>
+          <TabsTrigger value="retention" className={TABS_TRIGGER_CLASS}><TrendingUp className="h-4 w-4 mr-2" aria-hidden="true" /> Retention Curves</TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="cohort">
           <Card>
             <CardContent className="p-6">
-              <p className="text-center text-muted-foreground py-12">Cohort analysis visualization (implement with Recharts/Visx)</p>
+              <EmptyState message={t('common.comingSoon')} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -140,7 +146,7 @@ export function AnalyticsPage() {
         <TabsContent value="funnel">
           <Card>
             <CardContent className="p-6">
-              <p className="text-center text-muted-foreground py-12">Funnel analysis visualization (implement with Recharts/Visx)</p>
+              <EmptyState message={t('common.comingSoon')} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -148,12 +154,13 @@ export function AnalyticsPage() {
         <TabsContent value="retention">
           <Card>
             <CardContent className="p-6">
-              <p className="text-center text-muted-foreground py-12">Retention curves visualization (implement with Recharts/Visx)</p>
+              <EmptyState message={t('common.comingSoon')} />
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
     </div>
+    </RequireAuth>
   );
 }
 

@@ -10,13 +10,18 @@ import { useTranslation } from 'react-i18next';
 import { User, Settings, Activity, Smartphone, Monitor, LogOut, Edit, Key, Shield } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useNavigate } from '@tanstack/react-router';
+import { RequireAuth, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
 
 export function ProfilePage() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>('profile');
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   return (
+    <RequireAuth>
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{t('settings.profile')}</h1>
@@ -37,9 +42,9 @@ export function ProfilePage() {
             <p className="text-muted-foreground">@{user?.username}</p>
             <Badge variant="outline" className="mt-2">{user?.role || 'USER'}</Badge>
             <div className="mt-4 pt-4 border-t space-y-2">
-              <Button variant="outline" className="w-full"><Settings className="h-4 w-4 mr-2" /> Edit Profile</Button>
-              <Button variant="outline" className="w-full"><Key className="h-4 w-4 mr-2" /> Change Password</Button>
-              <Button variant="outline" className="w-full"><Shield className="h-4 w-4 mr-2" /> Security Settings</Button>
+              <Button variant="outline" className="w-full" onClick={() => setActiveTab('profile')}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> Edit Profile</Button>
+              <Button variant="outline" className="w-full" disabled title={t('common.comingSoon')} aria-label="Change password (coming soon)"><Key className="h-4 w-4 mr-2" aria-hidden="true" /> Change Password</Button>
+              <Button variant="outline" className="w-full" onClick={() => navigate({ to: '/settings' })}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> Security Settings</Button>
             </div>
           </CardContent>
         </Card>
@@ -47,12 +52,14 @@ export function ProfilePage() {
         {/* Main Content */}
         <div className="lg:col-span-3 space-y-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="profile"><User className="h-4 w-4 mr-2" /> Profile</TabsTrigger>
-              <TabsTrigger value="devices"><Smartphone className="h-4 w-4 mr-2" /> Devices</TabsTrigger>
-              <TabsTrigger value="sessions"><Monitor className="h-4 w-4 mr-2" /> Sessions</TabsTrigger>
-              <TabsTrigger value="activity"><Activity className="h-4 w-4 mr-2" /> Activity Log</TabsTrigger>
+            <div className={TABS_WRAP_CLASS}>
+            <TabsList className={TABS_LIST_CLASS}>
+              <TabsTrigger value="profile" className={TABS_TRIGGER_CLASS}><User className="h-4 w-4 mr-2" aria-hidden="true" /> Profile</TabsTrigger>
+              <TabsTrigger value="devices" className={TABS_TRIGGER_CLASS}><Smartphone className="h-4 w-4 mr-2" aria-hidden="true" /> Devices</TabsTrigger>
+              <TabsTrigger value="sessions" className={TABS_TRIGGER_CLASS}><Monitor className="h-4 w-4 mr-2" aria-hidden="true" /> Sessions</TabsTrigger>
+              <TabsTrigger value="activity" className={TABS_TRIGGER_CLASS}><Activity className="h-4 w-4 mr-2" aria-hidden="true" /> Activity Log</TabsTrigger>
             </TabsList>
+            </div>
 
             <TabsContent value="profile">
               <Card>
@@ -78,7 +85,10 @@ export function ProfilePage() {
                       <Input defaultValue={user?.phone} />
                     </div>
                   </div>
-                  <Button><Edit className="h-4 w-4 mr-2" /> Save Changes</Button>
+                  <Button onClick={() => setSavedAt(new Date().toLocaleTimeString())}><Edit className="h-4 w-4 mr-2" aria-hidden="true" /> Save Changes</Button>
+                  {savedAt && (
+                    <p role="status" className="text-sm font-medium text-foreground">{t('common.success')} • {savedAt}</p>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -110,7 +120,7 @@ export function ProfilePage() {
                           <Badge variant={d.trusted ? 'success' : 'outline'}>
                             {d.trusted ? 'Trusted' : 'Untrusted'}
                           </Badge>
-                          <Button variant="ghost" size="icon" className="text-red-500"><LogOut className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="text-red-500" aria-label={`Sign out device ${d.name}`}><LogOut className="h-4 w-4" aria-hidden="true" /></Button>
                         </div>
                       </div>
                     ))}
@@ -141,7 +151,7 @@ export function ProfilePage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-muted-foreground">{s.time}</span>
-                          {!s.current && <Button variant="ghost" size="icon" className="text-red-500"><LogOut className="h-4 w-4" /></Button>}
+                          {!s.current && <Button variant="ghost" size="icon" className="text-red-500" aria-label={`End session ${s.device}`}><LogOut className="h-4 w-4" aria-hidden="true" /></Button>}
                         </div>
                       </div>
                     ))}
@@ -185,6 +195,7 @@ export function ProfilePage() {
         </div>
       </div>
     </div>
+    </RequireAuth>
   );
 }
 

@@ -71,10 +71,18 @@ class AuthController(
     }
 
     @PostMapping("/logout")
-    fun logout(@RequestBody request: LogoutRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<Void> {
+    fun logout(
+        @RequestBody(required = false) request: LogoutRequest?,
+        servlet: HttpServletRequest,
+        httpResponse: HttpServletResponse
+    ): ResponseEntity<Void> {
+        // Logout must ALWAYS revoke + clear cookies (idempotent 204).
+        // Cookie-only admin sessions carry no body token: the HttpOnly
+        // red_admin_refresh cookie is the session, guarded by double-submit
+        // CSRF (cookie red_admin_csrf vs header X-RED-CSRF).
         val browserToken = servlet.cookies?.firstOrNull { it.name == ADMIN_REFRESH_COOKIE }?.value
         if (CsrfTokenValidator.requiresValidation(browserToken)) requireValidCsrf(servlet)
-        registration.logout(LogoutRequest(browserToken ?: request.refreshToken))
+        runCatching { registration.logout(LogoutRequest(browserToken ?: request?.refreshToken.orEmpty())) }
         clearAdminCookies(httpResponse)
         return ResponseEntity.noContent().build()
     }

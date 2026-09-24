@@ -12,6 +12,7 @@ import {
   deleteAdminPost, getAdminPosts, getPostsOverview, restoreAdminPost,
   type AdminPost
 } from '../api';
+import { RequireAuth, formatSafeDate } from './_shared';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -30,6 +31,7 @@ export default function PostsManagement() {
   const [search, setSearch] = useState('');
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const loadOverview = useCallback(async () => {
     try { setOverview(await getPostsOverview()); } catch { /* الإحصائيات ثانوية */ }
@@ -37,11 +39,17 @@ export default function PostsManagement() {
 
   const loadPosts = useCallback(async (p = page, s = pageSize, q = search, deleted = includeDeleted) => {
     setLoading(true);
+    setLoadError('');
     try {
       const data = await getAdminPosts({ q: q || undefined, includeDeleted: deleted, page: p, size: s });
-      setPosts(data.content);
-      setTotal(data.totalElements);
+      // ✅ 2026-09-24: تحصين ضد شكل mock ناقص (content غير مصفوفة / حقول مفقودة)
+      const list = Array.isArray(data?.content) ? data.content : [];
+      setPosts(list);
+      setTotal(typeof data?.totalElements === 'number' ? data.totalElements : list.length);
     } catch (e: any) {
+      setPosts([]);
+      setTotal(0);
+      setLoadError(e?.message || 'تعذّر تحميل المنشورات');
       message.error(e?.message || 'تعذّر تحميل المنشورات');
     } finally {
       setLoading(false);
@@ -52,6 +60,10 @@ export default function PostsManagement() {
   useEffect(() => { loadPosts(); }, [loadPosts]);
 
   const onDelete = async (post: AdminPost) => {
+    if (!post?.id) {
+      message.error('معرّف المنشور مفقود');
+      return;
+    }
     try {
       await deleteAdminPost(post.id);
       message.success('حُذف المنشور');
@@ -63,6 +75,10 @@ export default function PostsManagement() {
   };
 
   const onRestore = async (post: AdminPost) => {
+    if (!post?.id) {
+      message.error('معرّف المنشور مفقود');
+      return;
+    }
     try {
       await restoreAdminPost(post.id);
       message.success('استُعيد المنشور');
@@ -74,17 +90,19 @@ export default function PostsManagement() {
   };
 
   const reactionsTotal = (p: AdminPost) =>
-    Object.values(p.reactionCounts || {}).reduce((sum, n) => sum + n, 0);
+    Object.values(p?.reactionCounts ?? {}).reduce((sum, n) => sum + (typeof n === 'number' && Number.isFinite(n) ? n : 0), 0);
+
+  const authorName = (p: AdminPost) => p?.authorDisplayName?.trim() || p?.authorUsername?.trim() || '—';
 
   const columns = [
     {
       title: 'الكاتب', key: 'author', width: 170,
       render: (_: unknown, p: AdminPost) => (
         <Space>
-          <Avatar size="small">{p.authorDisplayName?.trim()?.charAt(0) || '؟'}</Avatar>
+          <Avatar size="small">{authorName(p).charAt(0)}</Avatar>
           <div>
-            <div>{p.authorDisplayName}</div>
-            <Text type="secondary" style={{ fontSize: 11 }}>@{p.authorUsername}</Text>
+            <div>{authorName(p)}</div>
+            <Text type="secondary" style={{ fontSize: 11 }}>@{p?.authorUsername?.trim() || '—'}</Text>
           </div>
         </Space>
       ),
@@ -95,9 +113,9 @@ export default function PostsManagement() {
         <div>
           <Paragraph ellipsis={{ rows: 2 }} style={{ margin: 0 }}>{v || <Text type="secondary" italic>بلا نص</Text>}</Paragraph>
           <Space size={4} wrap>
-            {p.kind === 'POLL' && <Tag color="purple">استطلاع</Tag>}
-            {p.mediaCount > 0 && <Tag icon={<PictureOutlined />} color="blue">{p.mediaCount} وسائط</Tag>}
-            {p.hashtags.slice(0, 3).map((h) => <Tag key={h}>#{h}</Tag>)}
+            {p?.kind === 'POLL' && <Tag color="purple">استطلاع</Tag>}
+            {(p?.mediaCount ?? 0) > 0 && <Tag icon={<PictureOutlined />} color="blue">{p.mediaCount} وسائط</Tag>}
+            {(p?.hashtags ?? []).slice(0, 3).map((h) => <Tag key={h}>#{h}</Tag>)}
           </Space>
         </div>
       ),
@@ -105,7 +123,7 @@ export default function PostsManagement() {
     {
       title: 'الظهور', dataIndex: 'visibility', key: 'visibility', width: 110,
       render: (v: string) => {
-        const vis = VISIBILITY_LABELS[v] || { label: v, color: 'default' };
+        const vis = (v && VISIBILITY_LABELS[v]) || { label: v || '—', color: 'default' };
         return <Tag color={vis.color}>{vis.label}</Tag>;
       },
     },
@@ -114,24 +132,24 @@ export default function PostsManagement() {
       render: (_: unknown, p: AdminPost) => (
         <Space size={10}>
           <Tooltip title="تفاعلات"><span><LikeOutlined /> {reactionsTotal(p)}</span></Tooltip>
-          <Tooltip title="ردود"><span><MessageOutlined /> {p.replyCount}</span></Tooltip>
-          <Tooltip title="إعادات نشر"><span><RetweetOutlined /> {p.repostCount}</span></Tooltip>
+          <Tooltip title="ردود"><span><MessageOutlined /> {p?.replyCount ?? '—'}</span></Tooltip>
+          <Tooltip title="إعادات نشر"><span><RetweetOutlined /> {p?.repostCount ?? '—'}</span></Tooltip>
         </Space>
       ),
     },
     {
       title: 'الحالة', key: 'status', width: 90,
       render: (_: unknown, p: AdminPost) =>
-        p.deleted ? <Tag color="red">محذوف</Tag> : <Tag color="gold">منشور</Tag>,
+        p?.deleted ? <Tag color="red">محذوف</Tag> : <Tag color="gold">منشور</Tag>,
     },
     {
       title: 'نُشر', dataIndex: 'createdAt', key: 'createdAt', width: 120,
-      render: (v: string) => new Date(v).toLocaleDateString('ar-YE'),
+      render: (v: string) => formatSafeDate(v),
     },
     {
       title: 'إجراءات', key: 'actions', width: 110,
       render: (_: unknown, p: AdminPost) =>
-        p.deleted ? (
+        p?.deleted ? (
           <Popconfirm
             title="استعادة المنشور؟" okText="استعادة" cancelText="إلغاء"
             onConfirm={() => onRestore(p)}
@@ -145,13 +163,14 @@ export default function PostsManagement() {
             okText="حذف" cancelText="إلغاء" okButtonProps={{ danger: true }}
             onConfirm={() => onDelete(p)}
           >
-            <Button size="small" danger icon={<DeleteOutlined />} />
+            <Button size="small" danger icon={<DeleteOutlined />} aria-label={`حذف منشور ${authorName(p)}`} />
           </Popconfirm>
         ),
     },
   ];
 
   return (
+    <RequireAuth>
     <div>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} md={6}>
@@ -193,10 +212,11 @@ export default function PostsManagement() {
         }
       >
         <Table
-          rowKey="id"
+          rowKey={(r: AdminPost) => r?.id ?? Math.random().toString(36)}
           loading={loading}
           columns={columns}
-          dataSource={posts}
+          dataSource={Array.isArray(posts) ? posts : []}
+          locale={{ emptyText: loadError || 'لا توجد منشورات' }}
           pagination={{
             current: page + 1,
             pageSize,
@@ -212,5 +232,6 @@ export default function PostsManagement() {
         />
       </Card>
     </div>
+    </RequireAuth>
   );
 }

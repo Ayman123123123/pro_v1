@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, Row, Col, Statistic, Button, Modal, Input, Alert, Tag, Space, Table, message, Tabs, Typography } from 'antd';
 import { SafetyOutlined, WarningOutlined, DeleteOutlined, LockOutlined, KeyOutlined, AuditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { activateKillSwitch, requestSecurityWipe, getAuditLog, apiFetch } from '../api';
+import { RequireAuth, formatSafeDate, formatSafeTime } from './_shared';
 
 // مركز الأمان الموحد — بيانات حقيقية
 export default function SecurityCenter() {
@@ -36,6 +37,7 @@ export default function SecurityCenter() {
   };
 
   return (
+    <RequireAuth>
     <Space direction="vertical" size="large" style={{width:'100%'}}>
       <div>
         <Typography.Title level={2} style={{color:'#FF4D4F', margin:0}}><SafetyOutlined /> مركز الأمان السيادي — موحد</Typography.Title>
@@ -53,10 +55,11 @@ export default function SecurityCenter() {
             children: (
               <Space direction="vertical" size="middle" style={{width:'100%'}}>
                 <Row gutter={[16,16]}>
-                  <Col xs={24} md={12} xl={6}><Card><Statistic title="تنبيهات أمنية آخر 24 ساعة" value={operational?.moderation?.securityAlerts24h ?? 0} prefix={<SafetyOutlined />} valueStyle={{color:(operational?.moderation?.securityAlerts24h ?? 0) > 0 ? '#ff4d4f' : '#B78A2E'}} /></Card></Col>
-                  <Col xs={24} md={12} xl={6}><Card><Statistic title="الأجهزة الملغاة" value={operational?.devices?.revoked ?? 0} prefix={<LockOutlined />} valueStyle={{color:'#ff4d4f'}} /></Card></Col>
-                  <Col xs={24} md={12} xl={6}><Card><Statistic title="جلسات التجديد النشطة" value={operational?.devices?.activeRefreshSessions ?? 0} prefix={<SafetyOutlined />} valueStyle={{color:'#1890ff'}} /></Card></Col>
-                  <Col xs={24} md={12} xl={6}><Card><Statistic title="بلاغات قيد المعالجة" value={operational?.moderation?.openReports ?? 0} prefix={<ExclamationCircleOutlined />} valueStyle={{color:(operational?.moderation?.openReports ?? 0) > 0 ? '#faad14' : '#B78A2E'}} /></Card></Col>
+                  {/* ✅ 2026-09-24: '—' بدل 0 عند غياب المقاييس حتى لا يُقرأ الانقطاع كصفر */}
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="تنبيهات أمنية آخر 24 ساعة" value={operational?.moderation?.securityAlerts24h ?? '—'} prefix={<SafetyOutlined />} valueStyle={{color:(operational?.moderation?.securityAlerts24h ?? 0) > 0 ? '#ff4d4f' : '#B78A2E'}} /></Card></Col>
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="الأجهزة الملغاة" value={operational?.devices?.revoked ?? '—'} prefix={<LockOutlined />} valueStyle={{color:'#ff4d4f'}} /></Card></Col>
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="جلسات التجديد النشطة" value={operational?.devices?.activeRefreshSessions ?? '—'} prefix={<SafetyOutlined />} valueStyle={{color:'#1890ff'}} /></Card></Col>
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="بلاغات قيد المعالجة" value={operational?.moderation?.openReports ?? '—'} prefix={<ExclamationCircleOutlined />} valueStyle={{color:(operational?.moderation?.openReports ?? 0) > 0 ? '#faad14' : '#B78A2E'}} /></Card></Col>
                 </Row>
                 <Row gutter={[16,16]}>
                   <Col span={12}>
@@ -70,11 +73,11 @@ export default function SecurityCenter() {
                   </Col>
                   <Col span={12}>
                     <Card title={<Space><AuditOutlined /> أحداث الأمان الأخيرة</Space>} extra={<Space><Button size="small" onClick={loadOperational}>المقاييس</Button><Button size="small" onClick={loadAudit}>التدقيق</Button></Space>}>
-                      <Table dataSource={events} rowKey="id" size="small" pagination={{pageSize:6}} locale={{emptyText:'لا توجد أحداث'}} columns={[
+                      <Table dataSource={events} rowKey={(r: any) => r?.id ?? `${r?.action ?? 'x'}-${r?.createdAt ?? ''}`} size="small" pagination={{pageSize:6}} locale={{emptyText:'لا توجد أحداث'}} columns={[
                         {title:'الإجراء', dataIndex:'action', render:(v:string)=><Tag color={v?.includes('KILL')?'red':'blue'}>{v}</Tag>},
                         {title:'الهدف', dataIndex:'targetId', render:(v:string)=>v||'—'},
                         {title:'المدير', dataIndex:'adminUsername', render:(v:string)=>v||'SYSTEM'},
-                        {title:'الوقت', dataIndex:'createdAt', render:(v:string)=>v?new Date(v).toLocaleString('ar'):'—'},
+                        {title:'الوقت', dataIndex:'createdAt', render:(v:string)=>v?`${formatSafeDate(v, 'ar')} ${formatSafeTime(v, 'ar')}`:'—'},
                       ]} />
                     </Card>
                   </Col>
@@ -93,5 +96,6 @@ export default function SecurityCenter() {
         ]}
       />
     </Space>
+    </RequireAuth>
   );
 }

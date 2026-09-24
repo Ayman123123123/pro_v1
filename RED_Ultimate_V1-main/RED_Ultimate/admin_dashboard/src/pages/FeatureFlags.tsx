@@ -8,6 +8,7 @@ import {
   CloseCircleOutlined, ExperimentOutlined, RiseOutlined
 } from '@ant-design/icons';
 import { getFeatureFlags, updateFeatureFlag } from '../api';
+import { RequireAuth } from './_shared';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -24,8 +25,10 @@ export default function FeatureFlags() {
     setLoading(true);
     try {
       const items = await getFeatureFlags();
-      setFlags(items);
-      const enabled = items.filter((f: any) => f.enabled);
+      // ✅ 2026-09-24: تحصين ضد شكل استجابة غير مصفوفة
+      const list = Array.isArray(items) ? items : [];
+      setFlags(list);
+      const enabled = list.filter((f: any) => f.enabled);
       setStats({
         total: items.length,
         enabled: enabled.length,
@@ -169,6 +172,7 @@ export default function FeatureFlags() {
   ];
 
   return (
+    <RequireAuth>
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
@@ -229,7 +233,7 @@ export default function FeatureFlags() {
           <Empty description="لا توجد أعلام ميزات" />
         ) : (
           <Table
-            rowKey="id"
+            rowKey={(r: any) => r?.id ?? r?.flagName ?? `${r?.description ?? 'x'}`}
             columns={columns}
             dataSource={flags}
             loading={loading}
@@ -264,5 +268,6 @@ export default function FeatureFlags() {
         </Form>
       </Modal>
     </Space>
+    </RequireAuth>
   );
 }

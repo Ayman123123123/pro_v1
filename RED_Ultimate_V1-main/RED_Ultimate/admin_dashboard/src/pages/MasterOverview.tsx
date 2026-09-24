@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import { apiFetch } from '../api';
 import { usePolling } from '../hooks/usePolling';
+import { RequireAuth, formatSafeTime } from './_shared';
 
 /** Live overview for the RED application services and media layer. */
 export default function MasterOverview() {
@@ -44,6 +45,7 @@ export default function MasterOverview() {
   }, [health]);
 
   return (
+    <RequireAuth>
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Typography.Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
@@ -59,13 +61,13 @@ export default function MasterOverview() {
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
           <Card>
-            <Statistic title="المستخدمون المعتمدون" value={stats.active_users || 0} prefix={<ThunderboltFilled />} />
+            <Statistic title="المستخدمون المعتمدون" value={stats.active_users ?? '—'} prefix={<ThunderboltFilled />} />
             <Tag color="gold">LIVE</Tag>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card>
-            <Statistic title="طلبات الموافقة" value={stats.pending_approvals || 0} prefix={<SafetyCertificateFilled />} />
+            <Statistic title="طلبات الموافقة" value={stats.pending_approvals ?? '—'} prefix={<SafetyCertificateFilled />} />
             <Tag color="orange">AUTHORITY</Tag>
           </Card>
         </Col>
@@ -101,7 +103,7 @@ export default function MasterOverview() {
       <Card title="المكالمات النشطة عبر SFU">
         <Table
           size="small"
-          rowKey={(r) => r.id || `${r.room}-${r.startedAt}`}
+          rowKey={(r) => r?.id ?? `${r?.room ?? 'x'}-${r?.startedAt ?? ''}`}
           pagination={false}
           dataSource={calls}
           locale={{ emptyText: 'لا توجد مكالمات نشطة' }}
@@ -110,7 +112,7 @@ export default function MasterOverview() {
             { title: 'الغرفة', dataIndex: 'room' },
             { title: 'المشاركون', dataIndex: 'participants' },
             { title: 'Bitrate', dataIndex: 'bitrateKbps', render: (v: number) => (v ? `${v} kbps` : '—') },
-            { title: 'بدأت', dataIndex: 'startedAt', render: (v: string) => (v ? new Date(v).toLocaleTimeString('ar') : '—') },
+            { title: 'بدأت', dataIndex: 'startedAt', render: (v: string) => formatSafeTime(v, 'ar') },
           ]}
         />
       </Card>
@@ -127,5 +129,6 @@ export default function MasterOverview() {
         </Card>
       )}
     </Space>
+    </RequireAuth>
   );
 }

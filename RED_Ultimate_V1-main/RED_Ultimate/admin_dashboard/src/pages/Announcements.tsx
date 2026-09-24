@@ -10,6 +10,7 @@ import {
 import {
   getAnnouncements, createAnnouncement, publishAnnouncement, deleteAnnouncement
 } from '../api';
+import { RequireAuth, formatSafeDate } from './_shared';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -148,10 +149,10 @@ export default function Announcements() {
       key: 'period',
       render: (r: any) => (
         <Space direction="vertical" size={0}>
-          <Text style={{ fontSize: 12 }}>{new Date(r.showFrom).toLocaleDateString('ar-EG')}</Text>
-          {r.showUntil && (
+          <Text style={{ fontSize: 12 }}>{formatSafeDate(r?.showFrom, 'ar-EG')}</Text>
+          {r?.showUntil && (
             <Text type="secondary" style={{ fontSize: 10 }}>
-              إلى {new Date(r.showUntil).toLocaleDateString('ar-EG')}
+              إلى {formatSafeDate(r.showUntil, 'ar-EG')}
             </Text>
           )}
         </Space>
@@ -186,6 +187,7 @@ export default function Announcements() {
             danger
             size="small"
             icon={<DeleteOutlined />}
+            aria-label={`حذف الإعلان ${r?.title ?? ''}`}
             onClick={() => handleDelete(r)}
           />
         </Space>
@@ -194,6 +196,7 @@ export default function Announcements() {
   ];
 
   return (
+    <RequireAuth>
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
@@ -257,7 +260,7 @@ export default function Announcements() {
           <Empty description="لا توجد إعلانات" />
         ) : (
           <Table
-            rowKey="id"
+            rowKey={(r: any) => r?.id ?? `${r?.title ?? 'x'}-${r?.showFrom ?? ''}`}
             columns={columns}
             dataSource={announcements}
             loading={loading}
@@ -339,5 +342,6 @@ export default function Announcements() {
         </Form>
       </Modal>
     </Space>
+    </RequireAuth>
   );
 }

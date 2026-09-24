@@ -46,16 +46,17 @@ import java.util.concurrent.TimeUnit
  * - **Circuit Breaker**: حماية من cascade failure
  * - **مُقاييس مفصلة**: Prometheus-ready metrics
  *
- * ## التدفق
- * 1. يقرأ حتى 20 رسالة `PENDING` حان وقتها (`nextAttemptAt <= now`) مرتبة بأولوية.
- * 2. إن لم يوجد، يعود `success` — لا إعادة جدولة.
- * 3. لكل رسالة: يضعها `SENDING`، يرسل عبر Intent إلى `RedConnectionService`،
- *    وإن نجح يضعها `SENT` ويحذفها بعد 24 ساعة.
- * 4. على الفشل، يحسب التأخير الأسي ويُحدّث `nextAttemptAt` ويُعيد الجدولة.
- * 5. يراعي Circuit Breaker — لا يرسل إذا كان مفتوحاً
- * 6. ينقل للـ Dead Letter بعد تجاوز العتبة
- * 7. يحذف ملفات الوسائط المؤقتة بعد الإرسال
- * 8. يسجل المقاييس لكل عملية
+  * ## التدفق
+  * 1. يقرأ حتى 20 رسالة `PENDING` حان وقتها (`nextAttemptAt <= now`) مرتبة بأولوية.
+  * 2. إن لم يوجد، يعود `success` — لا إعادة جدولة.
+  * 3. لكل رسالة: يضعها `SENDING`، يرسل عبر Intent إلى `RedConnectionService`
+  *    كتسليم فقط (handoff) بنفس `clientId`/uuid لمنع التكرار — ولا يعلّم `SENT`
+  *    ولا يحذف ملف الوسائط هنا؛ الإقرار `SERVER_ACK` من الخدمة هو من يُتمم.
+  * 4. على الفشل، يحسب التأخير الأسي ويُحدّث `nextAttemptAt` ويُعيد الجدولة.
+  * 5. يراعي Circuit Breaker — لا يرسل إذا كان مفتوحاً
+  * 6. ينقل للـ Dead Letter بعد تجاوز العتبة
+  * 7. حذف ملفات الوسائط المؤقتة يتم فقط بعد `SERVER_ACK` في الخدمة — لا هنا
+  * 8. يسجل المقاييس لكل عملية
  */
 class OutboxRetryWorker(
     appContext: Context,
@@ -155,17 +156,12 @@ class OutboxRetryWorker(
             val sendResult = trySendViaService(msg)
             if (sendResult) {
                 anySuccess = true
-                repository.recordSuccess()
-                _workerSentCount.value++
-                // تسليم الخدمة = خروج من الطابور (الخدمة تملك pendingSends الخاص بها
-                // وتعيد المحاولة عند الاتصال) — كان يبقى SENDING للأبد ويتراكم.
-                try { dao.updateStatus(msg.id, OutboxMessageEntity.STATUS_SENT) } catch (e: Exception) { Log.w(TAG, "mark SENT failed for ${msg.id}", e) }
-                // حذف ملف الوسائط المؤقت بعد الإرسال الناجح
-                val sentMediaPath = msg.localMediaPath
-                if (sentMediaPath != null) {
-                    try { deleteMediaFile(sentMediaPath) } catch (e: Exception) { Log.w(TAG, "deleteMediaFile failed for $sentMediaPath", e) }
-                }
-                // تنظيف بعد 24 ساعة — ستتم عبر cleanupSent
+                // تسليم فقط (handoff) بنفس clientId/uuid — idempotent عبر unique index الخادم.
+                // لا SENT ولا حذف ملف هنا: الخدمة تضع QUEUED عند الكتابة على السلك،
+                // وSERVER_ACK (ثم DELIVERED/READ) هو من يُتمم outbox ويحذف الملف.
+                // يبقى الصف SENDING فيُحييه resetStuckSending عند موت العملية قبل ACK.
+                try { db.redDao().updateMessageStatus(msg.id, "QUEUED") } catch (_: Exception) {}
+                // تنظيف بعد 24 ساعة — ستتم عبر cleanupSent بعد اكتمال SERVER_ACK
             } else {
                 anyRetry = true
                 repository.recordFailure()
@@ -256,6 +252,8 @@ class OutboxRetryWorker(
         else -> null
     }
 
+    // محفوظة للتوافق — الحذف الفعلي يتم فقط بعد SERVER_ACK في RedConnectionService.
+    // لا تُستدعى من doWork (حذف مبكر = فقدان الوسائط عند موت العملية قبل الإقرار).
     private fun deleteMediaFile(path: String) {
         try {
             java.io.File(path).delete()

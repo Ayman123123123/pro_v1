@@ -77,6 +77,12 @@ class SecurityConfig(
                     // ومع اختصار معرّف يونس إلى خمسة أرقام صار فضاء
                     // المعرّفات (89,999) قابلًا للتعداد الكامل، فما كان
                     // صعبًا عمليًا صار زحفًا مباشرًا على الدليل كله.
+                    // ── V2 groups/calls: authenticated only; identity ALWAYS from
+                    // Authentication (JWT principal = user UUID). The legacy
+                    // `X-RED-ID` request header is NEVER trusted for identity —
+                    // controllers must take `Authentication` and ignore that header.
+                    .requestMatchers("/api/groups/v2/**").authenticated()
+                    .requestMatchers("/api/calls/v2/**").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/identity/directory/**").authenticated()
                     // التفاصيل الكاملة لقواعد البيانات والمضيف للمسؤولين فقط؛
                     // المساران العامان أدناه يُبقيان الحالة وحدها.
@@ -136,6 +142,11 @@ class SecurityConfig(
             }
             // ✅ HttpOnly + SameSite for refresh cookie — CSRF enabled for admin panel
             // Admin dashboard uses Bearer JWT (stateless), but future HttpOnly cookie will set SameSite=Strict
+            // NOTE: Spring CSRF stays disabled because mobile Bearer flows are stateless;
+            // browser admin-cookie flows (refresh/logout) enforce custom double-submit
+            // CSRF via CsrfTokenValidator (cookie red_admin_csrf vs header X-RED-CSRF).
+            // X-RED-ID is deliberately absent from allowedHeaders: it must never
+            // become an identity source; JwtAuthenticationFilter is the sole binder.
             .headers { headers ->
                 headers
                     .xssProtection { it.disable() }

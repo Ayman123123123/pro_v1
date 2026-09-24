@@ -1,5 +1,5 @@
-import { createFileRoute, Outlet, Link, useLoaderData, useRouter } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { createFileRoute, Outlet, Link, useRouter, redirect } from '@tanstack/react-router';
+import { useEffect, useState } from 'react';
 import { LayoutDashboard, Users, BarChart3, Shield, Settings, Lock, LogOut, User, Menu, X, Sun, Moon, Monitor, Bell, ChevronDown, ChevronRight, Boxes, FileText, Newspaper, ScrollText, CheckCircle2, Megaphone, Flag, PhoneCall, Archive, Activity, Database, Gauge, KeyRound } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useSidebar } from '@/components/providers/SidebarProvider';
@@ -44,13 +44,32 @@ const navItems = [
 ];
 
 const navGroupLabels: Record<string, string> = {
-  general: 'عام',
-  community: 'المجتمع',
-  oversight: 'الإشراف',
-  system: 'النظام',
+  general: 'navigation.groupGeneral',
+  community: 'navigation.groupCommunity',
+  oversight: 'navigation.groupOversight',
+  system: 'navigation.groupSystem',
 };
 
 export const Route = createFileRoute('/_layout')({
+  // ✅ 2026-09-24: حارس مبكر قبل العرض — يمنع وميض المحتوى الخاص قبل التوجيه.
+  // ملاحظة معمارية: صفحات routeTree الحالية أشقاء لهذا الـ layout (الأب root)،
+  // لذا لا يحميها هذا الحارس وحده؛ كل صفحة خاصة مُغلَّفة أيضاً بـ RequireAuth
+  // (src/pages/_shared.tsx). عند إعادة هيكلة الشجرة إلى `_layout.*` يصبح هذا
+  // الحارس هو الحامي الوحيد وتُزال الأغلفة — الزملاء: لا تحذفوه.
+  beforeLoad: () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const token = sessionStorage.getItem('red_admin_access');
+      const user = sessionStorage.getItem('red_admin_user');
+      if (!token || !user) {
+        throw redirect({ to: '/login' });
+      }
+    } catch (err) {
+      // redirect يجب أن يُرمى كما هو؛ أي خطأ قراءة تخزين = غير موثّق
+      if (err && typeof err === 'object' && 'to' in (err as Record<string, unknown>)) throw err;
+      throw redirect({ to: '/login' });
+    }
+  },
   component: () => {
     const { user, isAuthenticated, isLoading, logout } = useAuth();
     const { isOpen, isCollapsed, toggleSidebar, setSidebarOpen, toggleCollapse } = useSidebar();
@@ -84,9 +103,9 @@ export const Route = createFileRoute('/_layout')({
     };
 
     const themeIcons = {
-      light: <Sun className="h-4 w-4" />,
-      dark: <Moon className="h-4 w-4" />,
-      system: <Monitor className="h-4 w-4" />,
+      light: <Sun className="h-4 w-4" aria-hidden="true" />,
+      dark: <Moon className="h-4 w-4" aria-hidden="true" />,
+      system: <Monitor className="h-4 w-4" aria-hidden="true" />,
     };
 
     return (
@@ -99,7 +118,7 @@ export const Route = createFileRoute('/_layout')({
               !isOpen && 'translate-x-[-100%] lg:translate-x-0',
               mobileMenuOpen && 'translate-x-0'
             )}
-            aria-label="Sidebar"
+            aria-label={t('common.sidebar')}
           >
             <div className="flex h-full flex-col">
               <div className="flex h-16 items-center justify-between border-b border-border px-4">
@@ -115,13 +134,14 @@ export const Route = createFileRoute('/_layout')({
                   className="h-8 w-8"
                   onClick={toggleCollapse}
                   aria-label={isCollapsed ? t('common.expand') : t('common.collapse')}
+                  aria-expanded={!isCollapsed}
                 >
                   {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
               </div>
 
               <ScrollArea className="flex-1 py-4">
-                <nav className={cn('px-2', isCollapsed && 'px-1')} aria-label="Main navigation">
+                <nav className={cn('px-2', isCollapsed && 'px-1')} aria-label={t('common.mainNav')}>
                   <ul className="space-y-1" role="list">
                     {Object.entries(
                       filteredNavItems.reduce<Record<string, typeof filteredNavItems>>((acc, item) => {
@@ -131,8 +151,8 @@ export const Route = createFileRoute('/_layout')({
                     ).map(([group, items]) => (
                       <li key={group} className="mb-1">
                         {!isCollapsed && (
-                          <p className="px-3 pt-2 pb-1 text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
-                            {navGroupLabels[group] || group}
+                          <p className="px-3 pt-2 pb-1 text-[0.65rem] font-bold uppercase tracking-wider text-foreground/70">
+                            {t(navGroupLabels[group] || group)}
                           </p>
                         )}
                         {items.map((item) => (
@@ -198,7 +218,7 @@ export const Route = createFileRoute('/_layout')({
                 {isCollapsed && user && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 mx-auto">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 mx-auto" aria-label={user.displayName || user.username}>
                         <Avatar className="h-8 w-8">
                           <AvatarImage src={user.avatarUrl} alt={user.displayName || user.username} />
                           <AvatarFallback>{(user.displayName || user.username).charAt(0).toUpperCase()}</AvatarFallback>
@@ -221,9 +241,10 @@ export const Route = createFileRoute('/_layout')({
                     size="icon"
                     className="lg:hidden"
                     onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                    aria-label="Toggle menu"
+                    aria-label={t('common.toggleMenu')}
+                    aria-expanded={mobileMenuOpen}
                   >
-                    <Menu className="h-5 w-5" />
+                    <Menu className="h-5 w-5" aria-hidden="true" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -239,7 +260,7 @@ export const Route = createFileRoute('/_layout')({
                 <div className="flex items-center gap-2">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
+                      <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label={t('common.toggleTheme')}>
                         {themeIcons[theme]}
                       </Button>
                     </TooltipTrigger>
@@ -250,13 +271,13 @@ export const Route = createFileRoute('/_layout')({
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="relative">
-                        <Bell className="h-5 w-5" />
-                        <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-xs text-destructive-foreground flex items-center justify-center">3</span>
+                      <Button variant="ghost" size="icon" className="relative" aria-label={t('common.notifications')}>
+                        <Bell className="h-5 w-5" aria-hidden="true" />
+                        <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-xs text-destructive-foreground flex items-center justify-center" aria-hidden="true">3</span>
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="center">
-                      Notifications
+                      {t('common.notifications')}
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -280,5 +301,3 @@ export const Route = createFileRoute('/_layout')({
     );
   },
 });
-
-import { useState } from 'react';

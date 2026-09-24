@@ -3,6 +3,7 @@ import { Alert, Button, Card, Col, Descriptions, Empty, Row, Spin, Statistic, Ta
 import { DatabaseOutlined, ReloadOutlined } from '@ant-design/icons';
 import { getOperationsOverview } from '../api';
 import { usePolling } from '../hooks/usePolling';
+import { RequireAuth, formatSafeDate, formatSafeTime } from './_shared';
 
 /**
  * قيمة المقياس قد تكون `null` عندما يكون مصدر البيانات غير متاح.
@@ -70,7 +71,8 @@ export default function DataOverview() {
 
   const downSources = Object.entries(data?.dataSources || {}).filter(([, s]) => !s.available);
 
-  return <div>
+  return <RequireAuth>
+  <div>
     <Typography.Title level={2} style={{ color: '#D4B16A', marginTop: 0 }}><DatabaseOutlined /> جرد بيانات المنصة</Typography.Title>
     <Typography.Paragraph type="secondary">
       عرض تشغيلي شامل للبيانات المتاحة للإدارة. الأرقام مجمعة فقط ولا تعرض نصوص الرسائل المشفرة أو الأسرار أو مفاتيح الهوية.
@@ -82,7 +84,7 @@ export default function DataOverview() {
     {error && <Alert type="error" showIcon closable message="فشل التحميل" description={error} style={{ marginBottom: 16 }}
       action={<Button size="small" onClick={() => void load()}>إعادة المحاولة</Button>} />}
     <Card extra={<Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>تحديث</Button>}
-      title={data?.generatedAt ? `آخر تحديث: ${new Date(data.generatedAt).toLocaleString('ar')}` : (error ? 'تعذر تحميل الجرد' : 'جاري تحميل الجرد')}>
+      title={data?.generatedAt ? `آخر تحديث: ${formatSafeDate(data.generatedAt, 'ar')} ${formatSafeTime(data.generatedAt, 'ar')}` : (error ? 'تعذر تحميل الجرد' : 'جاري تحميل الجرد')}>
       <Spin spinning={loading && !data}>
         {!data ? <Empty description="لا توجد بيانات بعد" /> : <>
           {data.dataSources && <Card size="small" title="حالة مصادر البيانات" style={{ marginBottom: 16 }}>
@@ -117,5 +119,6 @@ export default function DataOverview() {
         </>}
       </Spin>
     </Card>
-  </div>;
+  </div>
+  </RequireAuth>;
 }

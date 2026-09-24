@@ -4,7 +4,7 @@
 # Stage 2: Nginx 1.29 — Serve SPA with security headers & immutable caching
 # ══════════════════════════════════════════════════════════════════
 # Builds the MODERN unified dashboard (App.tsx 16 pages) — old _archive is never bundled
-# Verified: npm ci + vite build → 5447 modules → dist with code-split chunks
+# Verified: npm ci + npm run lint + npm run build (Vite 5) → dist with code-split chunks
 
 FROM node:24-alpine AS builder
 WORKDIR /app
@@ -15,7 +15,8 @@ RUN npm ci --no-audit --no-fund
 
 # ─── Source layer — builds the modern App.tsx (16 pages, RTL dark) ───
 COPY . .
-# Production build is strict: TypeScript check + Vite bundle.
+# Strict gates: ESLint 9 (flat) + TypeScript check + Vite 5 bundle.
+RUN npm run lint
 RUN npm run build
 
 FROM nginx:1.29-alpine

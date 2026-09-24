@@ -32,6 +32,18 @@ class MediaGrantService(
     fun revokeAll(ownerId: UUID, objectKey: String) {
         jdbc.update("DELETE FROM media_grants WHERE object_key=? AND owner_id=?", objectKey, ownerId)
     }
+
+    /**
+     * مفاتيح الوسائط ذات المنح السارية (غير المنتهية) — تُحفظ في Postgres
+     * (جدول media_grants) وليست في MongoDB. أي مفتاح هنا له مرجع حي
+     * ويجب ألا يحذفه منظّف الأيتام أبدًا.
+     */
+    fun listActiveGrantedKeys(): Set<String> {
+        return jdbc.queryForList(
+            "SELECT DISTINCT object_key FROM media_grants WHERE expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP",
+            String::class.java
+        ).filter { it.isNotBlank() }.toSet()
+    }
 }
 
 data class MediaGrantRequest(val objectKey: String = "", val targetRedId: String = "")

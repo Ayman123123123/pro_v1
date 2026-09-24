@@ -1,33 +1,58 @@
 package com.red.server.storage
 
+import com.red.server.database.ChannelDocument
+import com.red.server.groups.GroupDocument
+import com.red.server.media.MediaGrantService
 import com.red.server.media.MediaService
-import com.red.server.social.CommunityDocument
 import com.red.server.social.PostDocument
+import com.red.server.stories.StoryDocument
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import java.time.Duration
 
 /**
- * 🧹 تنظيف يومي للملفات اليتيمة — يحذف كائنات MinIO بدون مرجع في MongoDB
- * يعمل كل يوم 03:00 Asia/Aden
+ * 🧹 تنظيف يومي للملفات اليتيمة — يحذف كائنات MinIO بدون مرجع حي.
+ * يعمل كل يوم 03:00 Asia/Aden.
  *
- * يجمع الـ object keys المُشار إليها من:
- * 1. PostDocument.media[].objectKey (المنشورات)
- * 2. StoryDocument.mediaKey (القصص) — يفحص collection "stories"
- * 3. GroupDocument.avatarKey (صور المجموعات)
- * 4. CommunityDocument.avatarKey + bannerKey (المجتمعات)
- * 5. media_grants collection (صلاحيات الوصول)
+ * ضمانات السلامة (fail-closed):
+ * 1. dryRun=true هو الافتراضي — لا حذف حقيقي إلا بتفعيل صريح
+ *    (red.media.cleanup.dry-run=false).
+ * 2. الجردة fail-closed: فشل أي مصدر مراجع يُلغي دورة الحذف كاملةً.
+ * 3. فترة سماح (red.media.cleanup.grace-days، افتراضي 7): الكائنات الجديدة
+ *    (رفوعات جارية، شظايا ‎.partN، وسائط لم تُربط بعد) محمية دائمًا.
+ * 4. العمر المجهول (فشل stat) = حماية، لا حذف.
+ *
+ * مصادر المراجع (أسماء الحقول/الجداول الصحيحة):
+ * 1. posts (Mongo): media[].objectKey + poll.options[].imageUrl — غير المحذوفة
+ * 2. stories (Mongo): mediaKey — كل المستندات غير المحذوفة (find مُرقَّم، لا firstBatch)
+ * 3. groups (Mongo): avatarMediaKey (وليس avatarKey)
+ * 4. channels (Mongo): avatarMediaKey
+ * 5. messages/group_messages/channel_messages (Mongo): attachments[].mediaKey
+ *    (distinct بخادم Mongo على المسار المنقّط — بلا تحميل للمستندات كاملةً)
+ * 6. users.avatar_url (Postgres/JDBC): صور البروفايل
+ * 7. media_grants.object_key (Postgres/JDBC — المنح السارية فقط): ليست في MongoDB
+ * 8. مشتقات thumbs/<key>: محمية تبعًا لأصلها
+ * ملاحظة: المجتمعات بلا مفاتيح وسائط (أفاتار لوني إجرائي avatarColor فقط) —
+ * لا تُجرد. تسجيلات المكالمات/البث عناوين خارجية (vodUrl/hlsUrl) لا مفاتيح MinIO.
  */
 @Component
 @EnableScheduling
 class OrphanCleanupScheduler(
     private val storage: StorageMonitorService,
     private val media: MediaService,
-    private val mongo: MongoTemplate
+    private val mongo: MongoTemplate,
+    private val jdbc: JdbcTemplate,
+    private val grants: MediaGrantService,
+    /** معاينة فقط افتراضيًا — اقلبها false صراحةً لتفعيل الحذف بعد المراجعة. */
+    @Value("\${red.media.cleanup.dry-run:true}") private val dryRunDefault: Boolean,
+    @Value("\${red.media.cleanup.grace-days:7}") private val graceDays: Long
 ) {
     private val log = LoggerFactory.getLogger(OrphanCleanupScheduler::class.java)
 
@@ -36,12 +61,25 @@ class OrphanCleanupScheduler(
         try {
             val stats = storage.getLocalUsageStats()
             log.info("Orphan scan — media_files: {} bytes, db_records: {}", stats["media_files"], stats["database_records"])
-            val referenced = collectReferencedMediaKeys()
-            log.info("Collected {} referenced media keys from MongoDB", referenced.size)
-            // Remove orphaned media objects — dryRun=false after verification
-            val orphans = media.deleteOrphans(referenced, dryRun = false)
-            if (orphans.isNotEmpty()) {
-                log.warn("Deleted {} orphan media keys. First 10: {}", orphans.size, orphans.take(10))
+            val inventory = collectReferencedMediaKeys()
+            log.info("Collected {} referenced media keys (complete={})", inventory.keys.size, inventory.complete)
+            if (!inventory.complete) {
+                log.error(
+                    "Reference inventory INCOMPLETE (failed sources: {}) — skipping deletion entirely (fail-closed)",
+                    inventory.failures
+                )
+                return
+            }
+            val grace = Duration.ofDays(graceDays.coerceAtLeast(0))
+            val candidates = media.deleteOrphans(inventory.keys, dryRun = dryRunDefault, gracePeriod = grace)
+            if (dryRunDefault) {
+                if (candidates.isNotEmpty()) {
+                    log.warn("DRY-RUN preview: {} orphan candidates NOT deleted. First 10: {}", candidates.size, candidates.take(10))
+                } else {
+                    log.info("No orphan media keys found ✓")
+                }
+            } else if (candidates.isNotEmpty()) {
+                log.warn("Deleted {} orphan media keys. First 10: {}", candidates.size, candidates.take(10))
             } else {
                 log.info("No orphan media keys found ✓")
             }
@@ -51,87 +89,121 @@ class OrphanCleanupScheduler(
     }
 
     /**
-     * يجمع كل الـ object keys المُشار إليها في قاعدة البيانات
-     * مفهرسة لتحسين الأداء — نتجاهل الـ deletedAt/deleted records
+     * يجمع كل الـ object keys المُشار إليها حيًّا. فشل أي مصدر يُسجَّل في
+     * [ReferenceInventory.failures] ويجعل الجردة ناقصة — والمجدول عندها
+     * لا يحذف شيئًا إطلاقًا.
      */
-    internal fun collectReferencedMediaKeys(): Set<String> {
+    fun collectReferencedMediaKeys(): ReferenceInventory {
         val keys = mutableSetOf<String>()
+        val failures = mutableListOf<String>()
 
-        // 1) PostDocument.media[].objectKey (المنشورات) — فقط غير المحذوفة
+        // 1) المنشورات — media[].objectKey + صور خيارات الاستطلاعات
         try {
             mongo.find(
                 Query(Criteria.where("deletedAt").`is`(null)),
                 PostDocument::class.java
             ).forEach { post ->
-                post.media.forEach { media ->
-                    if (media.objectKey.isNotBlank()) keys.add(media.objectKey)
-                }
+                post.media.forEach { m -> normalizeMediaKey(m.objectKey)?.let { keys.add(it) } }
+                post.poll?.options?.forEach { opt -> normalizeMediaKey(opt.imageUrl)?.let { keys.add(it) } }
             }
         } catch (e: Exception) {
-            log.warn("Failed to scan PostDocument: {}", e.message)
+            failures.add("posts:${e.message}")
+            log.warn("Failed to scan posts: {}", e.message)
         }
 
-        // 2) StoryDocument — collection "stories"
-        try {
-            val storyResults = mongo.executeCommand(
-                org.bson.Document("find", "stories")
-                    .append("projection", org.bson.Document("mediaKey", 1).append("backgroundKey", 1).append("archived", 1))
-            )
-            @Suppress("UNCHECKED_CAST")
-            val batch = storyResults["cursor"] as? org.bson.Document
-            val firstBatch = batch?.get("firstBatch") as? List<org.bson.Document> ?: emptyList()
-            firstBatch.forEach { story ->
-                if (story.getBoolean("archived", false) == false) {
-                    story.getString("mediaKey")?.takeIf { it.isNotBlank() }?.let { keys.add(it) }
-                    story.getString("backgroundKey")?.takeIf { it.isNotBlank() }?.let { keys.add(it) }
-                }
-            }
-        } catch (e: Exception) {
-            log.debug("stories collection scan skipped: {}", e.message)
-        }
-
-        // 3) GroupDocument avatar
-        try {
-            mongo.executeCommand(
-                org.bson.Document("distinct", "groups")
-                    .append("key", "avatarKey")
-            ).get("values")?.let { values ->
-                @Suppress("UNCHECKED_CAST")
-                (values as? List<String>)?.forEach { key ->
-                    if (key.isNotBlank()) keys.add(key)
-                }
-            }
-        } catch (e: Exception) {
-            log.debug("groups avatar scan skipped: {}", e.message)
-        }
-
-        // 4) CommunityDocument — avatarKey, bannerKey
+        // 2) القصص — كل المستندات غير المحذوفة (find مُرقَّم من السائق، لا firstBatch)
         try {
             mongo.find(
-                Query(Criteria.where("archived").`is`(false)),
-                CommunityDocument::class.java
-            ).forEach { community ->
-                // نستخدم الـ id كـ banner key (Avatar is rendered procedurally)
-                keys.add("community-banner:${community.id}")
+                Query(Criteria.where("deletedAt").`is`(null)),
+                StoryDocument::class.java
+            ).forEach { story ->
+                normalizeMediaKey(story.mediaKey)?.let { keys.add(it) }
             }
         } catch (e: Exception) {
-            log.debug("CommunityDocument scan skipped: {}", e.message)
+            failures.add("stories:${e.message}")
+            log.warn("Failed to scan stories: {}", e.message)
         }
 
-        // 5) media_grants — keys المصرح لها
+        // 3) صور المجموعات — الحقل الصحيح avatarMediaKey
         try {
-            val grantsResult = mongo.executeCommand(
-                org.bson.Document("distinct", "media_grants")
-                    .append("key", "objectKey")
-            )
-            @Suppress("UNCHECKED_CAST")
-            (grantsResult.get("values") as? List<String>)?.forEach { key ->
-                if (key.isNotBlank()) keys.add(key)
+            mongo.find(Query(), GroupDocument::class.java).forEach { group ->
+                normalizeMediaKey(group.avatarMediaKey)?.let { keys.add(it) }
             }
         } catch (e: Exception) {
-            log.debug("media_grants scan skipped: {}", e.message)
+            failures.add("groups:${e.message}")
+            log.warn("Failed to scan groups: {}", e.message)
         }
 
-        return keys
+        // 4) صور القنوات — avatarMediaKey
+        try {
+            mongo.find(Query(), ChannelDocument::class.java).forEach { channel ->
+                normalizeMediaKey(channel.avatarMediaKey)?.let { keys.add(it) }
+            }
+        } catch (e: Exception) {
+            failures.add("channels:${e.message}")
+            log.warn("Failed to scan channels: {}", e.message)
+        }
+
+        // 5) مرفقات المحادثات (خاصة/مجموعات/قنوات) — الحقل الصحيح attachments.mediaKey
+        mapOf(
+            "messages" to "messages",
+            "group_messages" to "group_messages",
+            "channel_messages" to "channel_messages"
+        ).forEach { (source, collection) ->
+            try {
+                mongo.getCollection(collection)
+                    .distinct("attachments.mediaKey", String::class.java)
+                    .forEach { raw -> normalizeMediaKey(raw)?.let { keys.add(it) } }
+            } catch (e: Exception) {
+                failures.add("$source:${e.message}")
+                log.warn("Failed to scan {}: {}", collection, e.message)
+            }
+        }
+
+        // 6) صور البروفايل — users.avatar_url في Postgres
+        try {
+            jdbc.queryForList(
+                "SELECT DISTINCT avatar_url FROM users WHERE avatar_url IS NOT NULL AND avatar_url <> ''",
+                String::class.java
+            ).forEach { raw -> normalizeMediaKey(raw)?.let { keys.add(it) } }
+        } catch (e: Exception) {
+            failures.add("users.avatar_url:${e.message}")
+            log.warn("Failed to scan users.avatar_url: {}", e.message)
+        }
+
+        // 7) المنح السارية — media_grants في Postgres (ليست MongoDB!)
+        try {
+            grants.listActiveGrantedKeys().forEach { raw -> normalizeMediaKey(raw)?.let { keys.add(it) } }
+        } catch (e: Exception) {
+            failures.add("media_grants:${e.message}")
+            log.warn("Failed to scan media_grants: {}", e.message)
+        }
+
+        // 8) المصغّرات المشتقة thumbs/<key> تتبع أصلها المرجعي
+        val derived = keys.filter { !it.startsWith("thumbs/") }.map { "thumbs/$it" }
+        keys.addAll(derived)
+
+        return ReferenceInventory(keys = keys, complete = failures.isEmpty(), failures = failures)
+    }
+
+    /**
+     * تطبيع مفتاح الوسائط: يقبل المفتاح الخام أو مسار ‎/api/media/‎ الكامل
+     * أو URL كاملًا، ويعيد المفتاح الخام (users/…‎). فارغ/فارغ-المعنى → null.
+     */
+    internal fun normalizeMediaKey(raw: String?): String? {
+        var key = raw?.trim().orEmpty()
+        if (key.isBlank()) return null
+        val apiMarker = "/api/media/"
+        val markerAt = key.indexOf(apiMarker)
+        if (markerAt >= 0) key = key.substring(markerAt + apiMarker.length)
+        key = key.substringBefore('?').trim()
+        return key.takeIf { it.isNotBlank() }
     }
 }
+
+/** نتيجة جردة المراجع: complete=false تعني إلغاء أي حذف (fail-closed). */
+data class ReferenceInventory(
+    val keys: Set<String>,
+    val complete: Boolean,
+    val failures: List<String> = emptyList()
+)

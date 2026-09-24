@@ -16,6 +16,7 @@ import {
   getStickerPacks, createStickerPack, publishStickerPack, deleteStickerPack,
   type Poll, type Event, type Hashtag, type StickerPack
 } from '../api';
+import { RequireAuth, formatSafeDate, formatSafeTime } from './_shared';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -61,6 +62,7 @@ export default function ContentManagement() {
   const [activeTab, setActiveTab] = useState('polls');
 
   return (
+    <RequireAuth>
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
@@ -98,6 +100,7 @@ export default function ContentManagement() {
         ]}
       />
     </Space>
+    </RequireAuth>
   );
 }
 
@@ -229,7 +232,7 @@ function PollsTab() {
       title: 'ينتهي',
       dataIndex: 'endsAt',
       key: 'endsAt',
-      render: (e: string) => e ? <Text style={{ fontSize: 12 }}>{new Date(e).toLocaleDateString('ar-EG')}</Text> : <Tag>مفتوح</Tag>,
+      render: (e: string) => e ? <Text style={{ fontSize: 12 }}>{formatSafeDate(e, 'ar-EG')}</Text> : <Tag>مفتوح</Tag>,
     },
     {
       title: 'إجراءات',
@@ -238,11 +241,11 @@ function PollsTab() {
         <Space size="small">
           {r.status === 'ACTIVE' && (
             <Tooltip title="إغلاق">
-              <Button size="small" icon={<StopOutlined />} onClick={() => handleClose(r.id)} />
+              <Button size="small" icon={<StopOutlined />} aria-label={`إغلاق الاستطلاع ${r?.question ?? r?.id ?? ''}`} onClick={() => handleClose(r.id)} />
             </Tooltip>
           )}
           <Popconfirm title="حذف؟" onConfirm={() => handleDelete(r.id)}>
-            <Button danger size="small" icon={<DeleteOutlined />} />
+            <Button danger size="small" icon={<DeleteOutlined />} aria-label={`حذف الاستطلاع ${r?.question ?? r?.id ?? ''}`} />
           </Popconfirm>
         </Space>
       ),
@@ -488,8 +491,8 @@ function EventsTab() {
       key: 'startsAt',
       render: (d: string) => (
         <Space direction="vertical" size={0}>
-          <Text style={{ fontSize: 12 }}>{new Date(d).toLocaleDateString('ar-EG')}</Text>
-          <Text type="secondary" style={{ fontSize: 10 }}>{new Date(d).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</Text>
+          <Text style={{ fontSize: 12 }}>{formatSafeDate(d, 'ar-EG')}</Text>
+          <Text type="secondary" style={{ fontSize: 10 }}>{formatSafeTime(d)}</Text>
         </Space>
       ),
     },
@@ -511,7 +514,7 @@ function EventsTab() {
             <Button size="small" danger onClick={() => handleCancel(r.id)}>إلغاء</Button>
           )}
           <Popconfirm title="حذف؟" onConfirm={() => handleDelete(r.id)}>
-            <Button danger size="small" icon={<DeleteOutlined />} />
+            <Button danger size="small" icon={<DeleteOutlined />} aria-label={`حذف الحدث ${r?.title ?? r?.id ?? ''}`} />
           </Popconfirm>
         </Space>
       ),
@@ -841,7 +844,7 @@ function StickersTab() {
             <Button size="small" type="primary" onClick={() => handlePublish(r.id)}>نشر</Button>
           )}
           <Popconfirm title="حذف؟" onConfirm={() => handleDelete(r.id)}>
-            <Button danger size="small" icon={<DeleteOutlined />} />
+            <Button danger size="small" icon={<DeleteOutlined />} aria-label={`حذف حزمة الملصقات ${r?.name ?? r?.id ?? ''}`} />
           </Popconfirm>
         </Space>
       ),

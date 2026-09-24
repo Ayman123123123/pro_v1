@@ -11,6 +11,7 @@ import {
   deleteAdminGroup, getAdminGroupDetails, getAdminGroups, getGroupsOverview,
   removeGroupMember, type AdminGroup, type AdminGroupDetails
 } from '../api';
+import { RequireAuth, formatSafeDate } from './_shared';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -41,9 +42,13 @@ export default function GroupsManagement() {
     setLoading(true);
     try {
       const data = await getAdminGroups({ q: q || undefined, page: p, size: s });
-      setGroups(data.content);
-      setTotal(data.totalElements);
+      // ✅ 2026-09-24: تحصين ضد شكل mock ناقص
+      const list = Array.isArray(data?.content) ? data.content : [];
+      setGroups(list);
+      setTotal(typeof data?.totalElements === 'number' ? data.totalElements : list.length);
     } catch (e: any) {
+      setGroups([]);
+      setTotal(0);
       message.error(e?.message || 'تعذّر تحميل المجموعات');
     } finally {
       setLoading(false);
@@ -54,6 +59,10 @@ export default function GroupsManagement() {
   useEffect(() => { loadGroups(); }, [loadGroups]);
 
   const openDetails = async (group: AdminGroup) => {
+    if (!group?.id) {
+      message.error('معرّف المجموعة مفقود');
+      return;
+    }
     setDrawerOpen(true);
     setDetailsLoading(true);
     try {
@@ -67,9 +76,13 @@ export default function GroupsManagement() {
   };
 
   const onDeleteGroup = async (group: AdminGroup) => {
+    if (!group?.id) {
+      message.error('معرّف المجموعة مفقود');
+      return;
+    }
     try {
       await deleteAdminGroup(group.id);
-      message.success(`حُذفت المجموعة «${group.name}»`);
+      message.success(`حُذفت المجموعة «${group.name ?? '—'}»`);
       setDrawerOpen(false);
       loadGroups();
       loadOverview();
@@ -79,7 +92,10 @@ export default function GroupsManagement() {
   };
 
   const onRemoveMember = async (userId: string, username: string) => {
-    if (!details) return;
+    if (!details?.id || !userId) {
+      message.error('تعذّرت إزالة العضو: بيانات ناقصة');
+      return;
+    }
     try {
       await removeGroupMember(details.id, userId);
       message.success(`أُزيل ${username} من المجموعة`);
@@ -96,23 +112,23 @@ export default function GroupsManagement() {
       title: 'المجموعة', key: 'name',
       render: (_: unknown, g: AdminGroup) => (
         <Space>
-          <Avatar src={g.avatarUrl || undefined} icon={<TeamOutlined />} />
+          <Avatar src={g?.avatarUrl || undefined} icon={<TeamOutlined />} />
           <div>
-            <div><Text strong>{g.name}</Text></div>
-            {g.description && <Text type="secondary" style={{ fontSize: 12 }}>{g.description}</Text>}
+            <div><Text strong>{g?.name?.trim() || '—'}</Text></div>
+            {g?.description && <Text type="secondary" style={{ fontSize: 12 }}>{g.description}</Text>}
           </div>
         </Space>
       ),
     },
-    { title: 'المالك', dataIndex: 'ownerRedId', key: 'ownerRedId', render: (v: string) => <Text code>{v}</Text> },
+    { title: 'المالك', dataIndex: 'ownerRedId', key: 'ownerRedId', render: (v: string) => <Text code>{v?.trim() || '—'}</Text> },
     {
       title: 'الأعضاء', dataIndex: 'memberCount', key: 'memberCount', width: 100,
-      sorter: (a: AdminGroup, b: AdminGroup) => a.memberCount - b.memberCount,
-      render: (v: number) => <Tag icon={<UserOutlined />} color="cyan">{v}</Tag>,
+      sorter: (a: AdminGroup, b: AdminGroup) => (a?.memberCount ?? 0) - (b?.memberCount ?? 0),
+      render: (v: number) => <Tag icon={<UserOutlined />} color="cyan">{v ?? '—'}</Tag>,
     },
     {
       title: 'أُنشئت', dataIndex: 'createdAt', key: 'createdAt', width: 130,
-      render: (v: string) => new Date(v).toLocaleDateString('ar-YE'),
+      render: (v: string) => formatSafeDate(v),
     },
     {
       title: 'إجراءات', key: 'actions', width: 190,
@@ -120,19 +136,22 @@ export default function GroupsManagement() {
         <Space>
           <Button size="small" onClick={() => openDetails(g)}>التفاصيل</Button>
           <Popconfirm
-            title={`حذف «${g.name}» نهائيًا؟`}
+            title={`حذف «${g?.name ?? '—'}» نهائيًا؟`}
             description="تُحذف المجموعة وكل عضوياتها."
             okText="حذف" cancelText="إلغاء" okButtonProps={{ danger: true }}
             onConfirm={() => onDeleteGroup(g)}
           >
-            <Button size="small" danger icon={<DeleteOutlined />} />
+            <Button size="small" danger icon={<DeleteOutlined />} aria-label={`حذف المجموعة ${g?.name ?? ''}`} />
           </Popconfirm>
         </Space>
       ),
     },
   ];
 
+  const members = Array.isArray(details?.members) ? details.members : [];
+
   return (
+    <RequireAuth>
     <div>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} md={6}>
@@ -142,7 +161,7 @@ export default function GroupsManagement() {
           <Card><Statistic title="إجمالي العضويات" value={overview?.totalMembers ?? '—'} prefix={<UserOutlined />} /></Card>
         </Col>
         <Col xs={12} md={6}>
-          <Card><Statistic title="متوسط الأعضاء" value={overview ? overview.avgMembersPerGroup.toFixed(1) : '—'} /></Card>
+          <Card><Statistic title="متوسط الأعضاء" value={typeof overview?.avgMembersPerGroup === 'number' ? overview.avgMembersPerGroup.toFixed(1) : '—'} /></Card>
         </Col>
         <Col xs={12} md={6}>
           <Card><Statistic title="أُنشئت اليوم" value={overview?.createdToday ?? '—'} valueStyle={{ color: '#B78A2E' }} /></Card>
@@ -167,10 +186,11 @@ export default function GroupsManagement() {
         }
       >
         <Table
-          rowKey="id"
+          rowKey={(r: AdminGroup) => r?.id ?? Math.random().toString(36)}
           loading={loading}
           columns={columns}
-          dataSource={groups}
+          dataSource={Array.isArray(groups) ? groups : []}
+          locale={{ emptyText: 'لا توجد مجموعات' }}
           pagination={{
             current: page + 1,
             pageSize,
@@ -190,7 +210,7 @@ export default function GroupsManagement() {
         title={details ? (
           <Space>
             <Avatar src={details.avatarUrl || undefined} icon={<TeamOutlined />} />
-            <span>{details.name}</span>
+            <span>{details.name?.trim() || '—'}</span>
           </Space>
         ) : 'تفاصيل المجموعة'}
         open={drawerOpen}
@@ -202,16 +222,17 @@ export default function GroupsManagement() {
           <>
             {details.description && <Paragraph type="secondary">{details.description}</Paragraph>}
             <Paragraph>
-              <Text type="secondary">المالك: </Text><Text code>{details.ownerRedId}</Text>
+              <Text type="secondary">المالك: </Text><Text code>{details.ownerRedId?.trim() || '—'}</Text>
               <br />
-              <Text type="secondary">أُنشئت: </Text>{new Date(details.createdAt).toLocaleString('ar-YE')}
+              <Text type="secondary">أُنشئت: </Text>{formatSafeDate(details.createdAt)}
             </Paragraph>
-            <Title level={5}>الأعضاء ({details.members.length})</Title>
+            <Title level={5}>الأعضاء ({members.length})</Title>
             <Table
-              rowKey="userId"
+              rowKey={(m) => m?.userId ?? m?.redId ?? Math.random().toString(36)}
               size="small"
-              dataSource={details.members}
-              pagination={details.members.length > 10 ? { pageSize: 10 } : false}
+              dataSource={members}
+              pagination={members.length > 10 ? { pageSize: 10 } : false}
+              locale={{ emptyText: 'لا يوجد أعضاء' }}
               columns={[
                 {
                   title: 'العضو', key: 'username',
@@ -219,8 +240,8 @@ export default function GroupsManagement() {
                     <Space>
                       <Avatar size="small" icon={<UserOutlined />} />
                       <div>
-                        <div>{m.username}</div>
-                        <Text type="secondary" style={{ fontSize: 11 }} code>{m.redId}</Text>
+                        <div>{m?.username?.trim() || '—'}</div>
+                        <Text type="secondary" style={{ fontSize: 11 }} code>{m?.redId?.trim() || '—'}</Text>
                       </div>
                     </Space>
                   ),
@@ -228,23 +249,23 @@ export default function GroupsManagement() {
                 {
                   title: 'الدور', dataIndex: 'role', key: 'role', width: 90,
                   render: (v: string) => {
-                    const r = ROLE_LABELS[v] || { label: v, color: 'default' };
+                    const r = (v && ROLE_LABELS[v]) || { label: v || '—', color: 'default' };
                     return <Tag icon={v === 'OWNER' ? <CrownOutlined /> : undefined} color={r.color}>{r.label}</Tag>;
                   },
                 },
                 {
                   title: 'انضم', dataIndex: 'joinedAt', key: 'joinedAt', width: 110,
-                  render: (v: string) => new Date(v).toLocaleDateString('ar-YE'),
+                  render: (v: string) => formatSafeDate(v),
                 },
                 {
                   title: '', key: 'actions', width: 60,
-                  render: (_: unknown, m) => m.role !== 'OWNER' && (
+                  render: (_: unknown, m) => m?.role !== 'OWNER' && m?.userId && (
                     <Popconfirm
-                      title={`إزالة ${m.username}؟`}
+                      title={`إزالة ${m?.username ?? '—'}؟`}
                       okText="إزالة" cancelText="إلغاء" okButtonProps={{ danger: true }}
-                      onConfirm={() => onRemoveMember(m.userId, m.username)}
+                      onConfirm={() => onRemoveMember(m.userId, m.username ?? '—')}
                     >
-                      <Button size="small" danger type="text" icon={<DeleteOutlined />} />
+                      <Button size="small" danger type="text" icon={<DeleteOutlined />} aria-label={`إزالة ${m?.username ?? ''} من المجموعة`} />
                     </Popconfirm>
                   ),
                 },
@@ -254,5 +275,6 @@ export default function GroupsManagement() {
         )}
       </Drawer>
     </div>
+    </RequireAuth>
   );
 }

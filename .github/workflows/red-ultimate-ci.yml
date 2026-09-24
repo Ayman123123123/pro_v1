@@ -158,13 +158,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: ${{ env.PROJECT }}/admin_dashboard/package-lock.json
       - name: Install and run static checks
         working-directory: ${{ env.PROJECT }}/admin_dashboard
         run: |
           npm ci --no-audit --no-fund
+          npm run lint
           npm run check
           npm run build
 

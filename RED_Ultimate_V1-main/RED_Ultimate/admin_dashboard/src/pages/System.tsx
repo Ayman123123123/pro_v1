@@ -11,30 +11,44 @@ import { useTranslation } from 'react-i18next';
 import { Settings, Database, HardDrive, CloudUpload, GitBranch, Zap, ToggleLeft, ToggleRight, Plus, Edit, Trash2, Eye, RefreshCw } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { RequireAuth, DemoBanner, EmptyState, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
+
+const INITIAL_FLAGS = [
+  { key: 'new_ui', name: 'New UI Rollout', enabled: true, rollout: 25, targeting: 'Beta users', updated: '2024-01-15' },
+  { key: 'dark_mode', name: 'Dark Mode', enabled: true, rollout: 100, targeting: 'All users', updated: '2024-01-10' },
+  { key: 'voice_chat', name: 'Voice Chat', enabled: false, rollout: 0, targeting: 'Premium only', updated: '2024-01-05' },
+];
 
 export function SystemPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>('flags');
+  // ✅ 2026-09-24: ربط المفاتيح الوهمية بحالة محلية
+  const [flags, setFlags] = useState(INITIAL_FLAGS);
+  const [lastFlushed, setLastFlushed] = useState<string | null>(null);
 
   return (
+    <RequireAuth>
     <div className="space-y-6">
+      <DemoBanner />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('system.title')}</h1>
           <p className="text-muted-foreground">{t('system.subtitle')}</p>
         </div>
-        <Button><Plus className="h-4 w-4 mr-2" /> Add</Button>
+        <Button disabled title={t('common.comingSoon')} aria-label="Add (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> Add</Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="flags"><Zap className="h-4 w-4 mr-2" /> Feature Flags</TabsTrigger>
-          <TabsTrigger value="config"><Settings className="h-4 w-4 mr-2" /> Configuration</TabsTrigger>
-          <TabsTrigger value="audit"><Shield className="h-4 w-4 mr-2" /> Audit Logs</TabsTrigger>
-          <TabsTrigger value="backups"><CloudUpload className="h-4 w-4 mr-2" /> Backups</TabsTrigger>
-          <TabsTrigger value="migrations"><GitBranch className="h-4 w-4 mr-2" /> Migrations</TabsTrigger>
-          <TabsTrigger value="cache"><Database className="h-4 w-4 mr-2" /> Cache</TabsTrigger>
+        <div className={TABS_WRAP_CLASS}>
+        <TabsList className={TABS_LIST_CLASS}>
+          <TabsTrigger value="flags" className={TABS_TRIGGER_CLASS}><Zap className="h-4 w-4 mr-2" aria-hidden="true" /> Feature Flags</TabsTrigger>
+          <TabsTrigger value="config" className={TABS_TRIGGER_CLASS}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> Configuration</TabsTrigger>
+          <TabsTrigger value="audit" className={TABS_TRIGGER_CLASS}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> Audit Logs</TabsTrigger>
+          <TabsTrigger value="backups" className={TABS_TRIGGER_CLASS}><CloudUpload className="h-4 w-4 mr-2" aria-hidden="true" /> Backups</TabsTrigger>
+          <TabsTrigger value="migrations" className={TABS_TRIGGER_CLASS}><GitBranch className="h-4 w-4 mr-2" aria-hidden="true" /> Migrations</TabsTrigger>
+          <TabsTrigger value="cache" className={TABS_TRIGGER_CLASS}><Database className="h-4 w-4 mr-2" aria-hidden="true" /> Cache</TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="flags">
           <Card>
@@ -43,15 +57,11 @@ export function SystemPage() {
                 <CardTitle>Feature Flags</CardTitle>
                 <CardDescription>Percentage rollout, targeting rules, and experimentation</CardDescription>
               </div>
-              <Button><Plus className="h-4 w-4 mr-2" /> New Flag</Button>
+              <Button disabled title={t('common.comingSoon')} aria-label="New flag (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> New Flag</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  { key: 'new_ui', name: 'New UI Rollout', enabled: true, rollout: 25, targeting: 'Beta users', updated: '2024-01-15' },
-                  { key: 'dark_mode', name: 'Dark Mode', enabled: true, rollout: 100, targeting: 'All users', updated: '2024-01-10' },
-                  { key: 'voice_chat', name: 'Voice Chat', enabled: false, rollout: 0, targeting: 'Premium only', updated: '2024-01-05' },
-                ].map((flag) => (
+                {flags.map((flag) => (
                   <div key={flag.key} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
@@ -61,9 +71,13 @@ export function SystemPage() {
                       <p className="text-sm text-muted-foreground">Rollout: {flag.rollout}% • Targeting: {flag.targeting}</p>
                     </div>
                     <div className="flex items-center gap-4">
-                      <Switch checked={flag.enabled} onCheckedChange={() => {}} />
-                      <Button variant="ghost" size="icon"><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                      <Switch
+                        checked={flag.enabled}
+                        onCheckedChange={(v) => setFlags((prev) => prev.map((f) => (f.key === flag.key ? { ...f, enabled: v } : f)))}
+                        aria-label={`Toggle flag ${flag.name}`}
+                      />
+                      <Button variant="ghost" size="icon" aria-label={`Edit flag ${flag.name}`}><Edit className="h-4 w-4" aria-hidden="true" /></Button>
+                      <Button variant="ghost" size="icon" aria-label={`Delete flag ${flag.name}`}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
                     </div>
                   </div>
                 ))}
@@ -103,8 +117,8 @@ export function SystemPage() {
                       <TableCell>v{config.version}</TableCell>
                       <TableCell>{config.updated}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon"><Eye className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon"><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" aria-label={`View config ${config.key}`}><Eye className="h-4 w-4" aria-hidden="true" /></Button>
+                        <Button variant="ghost" size="icon" aria-label={`Edit config ${config.key}`}><Edit className="h-4 w-4" aria-hidden="true" /></Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -121,7 +135,7 @@ export function SystemPage() {
               <CardDescription>Immutable, searchable, exportable audit trail</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-center text-muted-foreground py-12">Audit log viewer with search and export</p>
+              <EmptyState message={t('common.comingSoon')} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -140,8 +154,8 @@ export function SystemPage() {
                     <p className="text-sm text-muted-foreground">Size: 2.4 GB • Status: Completed</p>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm"><CloudUpload className="h-4 w-4 mr-1" /> Download</Button>
-                    <Button variant="outline" size="sm"><RefreshCw className="h-4 w-4 mr-1" /> Restore</Button>
+                    <Button variant="outline" size="sm" disabled title={t('common.comingSoon')} aria-label="Download backup (coming soon)"><CloudUpload className="h-4 w-4 mr-1" aria-hidden="true" /> Download</Button>
+                    <Button variant="outline" size="sm" disabled title={t('common.comingSoon')} aria-label="Restore backup (coming soon)"><RefreshCw className="h-4 w-4 mr-1" aria-hidden="true" /> Restore</Button>
                   </div>
                 </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -149,9 +163,9 @@ export function SystemPage() {
                     <p className="font-medium">Incremental - 2024-01-15 14:00</p>
                     <p className="text-sm text-muted-foreground">Size: 150 MB • Status: Completed</p>
                   </div>
-                  <Button variant="outline" size="sm"><RefreshCw className="h-4 w-4 mr-1" /> Restore</Button>
+                    <Button variant="outline" size="sm" disabled title={t('common.comingSoon')} aria-label="Restore incremental backup (coming soon)"><RefreshCw className="h-4 w-4 mr-1" aria-hidden="true" /> Restore</Button>
                 </div>
-                <Button onClick={() => {}}><Plus className="h-4 w-4 mr-2" /> Create Backup Now</Button>
+                <Button disabled title={t('common.comingSoon')} aria-label="Create backup now (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> Create Backup Now</Button>
               </div>
             </CardContent>
           </Card>
@@ -187,7 +201,7 @@ export function SystemPage() {
                       <TableCell><Badge variant={m.status === 'applied' ? 'success' : 'warning'}>{m.status}</Badge></TableCell>
                       <TableCell>{m.applied}</TableCell>
                       <TableCell>{m.duration}</TableCell>
-                      <TableCell><Button variant="ghost" size="icon"><Eye className="h-4 w-4" /></Button></TableCell>
+                      <TableCell><Button variant="ghost" size="icon" aria-label={`View migration ${m.version}`}><Eye className="h-4 w-4" aria-hidden="true" /></Button></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -208,12 +222,16 @@ export function SystemPage() {
                 <Card className="p-4"><p className="text-sm text-muted-foreground">Memory Used</p><p className="text-3xl font-bold">1.2 GB</p></Card>
                 <Card className="p-4"><p className="text-sm text-muted-foreground">Keys</p><p className="text-3xl font-bold">1.5M</p></Card>
               </div>
-              <Button variant="outline" className="mt-4"><RefreshCw className="h-4 w-4 mr-2" /> Flush Cache</Button>
+              <Button variant="outline" className="mt-4" onClick={() => setLastFlushed(new Date().toLocaleTimeString())} aria-label="Flush cache"><RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" /> Flush Cache</Button>
+              {lastFlushed && (
+                <p role="status" className="mt-2 text-sm font-medium text-foreground">{t('common.success')} • {lastFlushed}</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
     </div>
+    </RequireAuth>
   );
 }
 

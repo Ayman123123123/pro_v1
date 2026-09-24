@@ -6,16 +6,23 @@ import org.springframework.web.bind.annotation.*
 
 /**
  * متحكم المكالمات الحديث - يدير كل أنواع المكالمات بشكل منفصل ومنظم
- * 
- * كل نوع له عمله الأساسي والمتعارف وواجهته المناسبة:
- * 
+ *
+ * العقد الوحيد لـ `/api/calls/v2` (المتحكم المكرر UnifiedCallsControllerV2 عُطّل
+ * وأُزيل تسجيله حتى لا تتسابق نسختان in-memory على نفس المسارات).
+ *
+ * - الهوية من Authentication فقط (JWT principal) — لا تُقرأ أي ترويسة X-RED-ID.
+ * - السجل الدائم عبر CallHistoryService (Mongo call_history) — لا ConcurrentHashMap هنا.
+ * - التسليم عبر UnifiedCallDeliveryService (WebSocket + Push + mailbox).
+ * - الأنواع الخزنية هي CallType الستة؛ الأسماء القديمة (CONFERENCE/PSTN/LAN/…)
+ *   تُطبع على أقرب نظير دائم (موثق أدناه) بدل كيانين متوازيين.
+ *
  * 1. فردية صوت/فيديو: P2P WebRTC مباشر، ترن وتتعرف، E2EE
  * 2. جماعية: Mesh حتى 8، SFU بعد ذلك، ترن الجميع حتى 32 (مثل واتساب)
- * 3. مؤتمر/Zoom: حتى 100 مشارك عبر SFU، غرف جانبية، رفع يد
- * 4. بث مباشر: 1-to-N مع دردشة وهدايا، عام/خاص بكلمة سر
- * 5. مساحات صوتية: صوت فقط، مضيف ومتحدثون ومستمعون
- * 6. هاتف يمني: عبر DINSTAR وشرائح يمنية
- * 7. محلي P2P: بلا إنترنت ولا خادم، نفس الواي فاي
+ * 3. مؤتمر/Zoom: حتى 100 مشارك عبر SFU، غرف جانبية، رفع يد (يُخزَّن GROUP_VIDEO)
+ * 4. بث مباشر: 1-to-N مع دردشة وهدايا، عام/خاص بكلمة سر (LIVE_STREAM)
+ * 5. مساحات صوتية: صوت فقط، مضيف ومتحدثون ومستمعون (SPACE)
+ * 6. هاتف يمني: عبر DINSTAR وشرائح يمنية (يُخزَّن AUDIO_1V1 + route RED)
+ * 7. محلي P2P: بلا إنترنت ولا خادم، نفس الواي فاي (يُخزَّن AUDIO_1V1 + route RED)
  */
 
 data class StartCallRequest(
@@ -45,57 +52,63 @@ class ModernCallsController(
     private val deliveryService: UnifiedCallDeliveryService
 ) {
 
+    /** طباعة النوع المطلوب على نظيره الدائم (CallType لا يملك CONFERENCE/PSTN/LAN). */
+    private fun persistentType(requested: String): CallType = when (requested.uppercase()) {
+        "AUDIO_1V1", "PSTN", "LAN" -> CallType.AUDIO_1V1
+        "VIDEO_1V1" -> CallType.VIDEO_1V1
+        "GROUP_AUDIO" -> CallType.GROUP_AUDIO
+        "GROUP_VIDEO", "CONFERENCE" -> CallType.GROUP_VIDEO
+        "LIVE" -> CallType.LIVE_STREAM
+        "SPACE" -> CallType.SPACE
+        else -> CallType.AUDIO_1V1
+    }
+
     @PostMapping("/start")
     fun startCall(
         @RequestBody request: StartCallRequest,
         authentication: Authentication
     ): ResponseEntity<CallResponse> {
         val callerId = authentication.name
-        
+
         // التحقق من الصلاحيات والحدود
         when (request.type.uppercase()) {
             "GROUP_AUDIO", "GROUP_VIDEO" -> {
                 require(request.participantIds.size <= 32) { "Group call limit is 32 (WhatsApp limit)" }
-                require(request.participantIds.isNotEmpty()) { "Participants required for group call" }
+                require(request.participantIds.isNotEmpty() || !request.groupId.isNullOrBlank()) { "Participants required for group call" }
             }
             "CONFERENCE" -> {
                 require(request.participantIds.size <= 100) { "Conference limit is 100" }
             }
-            "AUDIO_1V1", "VIDEO_1V1" -> {
+            "AUDIO_1V1", "VIDEO_1V1", "PSTN", "LAN" -> {
                 require(!request.targetId.isNullOrBlank()) { "Target required for 1-1 call" }
                 require(request.targetId != callerId) { "Cannot call yourself" }
             }
         }
-        
+
         val callId = "call_${System.currentTimeMillis()}_${(1000..9999).random()}"
-        
-        // حفظ في التاريخ
-        val callType = when (request.type.uppercase()) {
-            "AUDIO_1V1" -> CallType.AUDIO_1V1
-            "VIDEO_1V1" -> CallType.VIDEO_1V1
-            "GROUP_AUDIO" -> CallType.GROUP_AUDIO
-            "GROUP_VIDEO" -> CallType.GROUP_VIDEO
-            "CONFERENCE" -> CallType.CONFERENCE
-            "LIVE" -> CallType.LIVE_STREAM
-            "SPACE" -> CallType.SPACE
-            "PSTN" -> CallType.PSTN
-            else -> CallType.AUDIO_1V1
-        }
-        
-        val route = when (request.type.uppercase()) {
-            "PSTN" -> CallRoute.DINSTAR
-            "LAN" -> CallRoute.LAN_P2P
-            else -> CallRoute.RED
-        }
-        
+        val callType = persistentType(request.type)
+        // السجل الدائم أولاً (fail-closed: لا رنين بلا سجل مشاركين).
+        val primaryTarget = request.targetId?.takeIf { it.isNotBlank() }
+            ?: request.groupId?.takeIf { !it.isNullOrBlank() }
+            ?: request.participantIds.firstOrNull()
+            ?: callerId
+        history.start(
+            initiator = callerId,
+            target = primaryTarget,
+            targetLabel = primaryTarget,
+            type = callType,
+            route = CallRoute.RED,
+            requestedId = callId
+        )
+
         // تسليم المكالمة عبر المسارات المتعددة
-        if (request.type.uppercase() in listOf("GROUP_AUDIO", "GROUP_VIDEO")) {
+        if (request.type.uppercase() in listOf("GROUP_AUDIO", "GROUP_VIDEO", "CONFERENCE")) {
             deliveryService.deliverGroupCall(
                 callId = callId,
                 hostId = callerId,
                 hostName = callerId,
                 memberIds = request.participantIds,
-                isVideo = request.isVideo,
+                isVideo = request.isVideo || request.type.uppercase() == "GROUP_VIDEO",
                 groupId = request.groupId
             )
         } else if (!request.targetId.isNullOrBlank()) {
@@ -111,13 +124,13 @@ class ModernCallsController(
                 )
             )
         }
-        
+
         // إنشاء ICE servers
         val iceServers = listOf(
             mapOf("urls" to listOf("stun:stun.l.google.com:19302")),
             mapOf("urls" to listOf("stun:stun1.l.google.com:19302"))
         )
-        
+
         return ResponseEntity.ok(
             CallResponse(
                 callId = callId,
@@ -128,15 +141,20 @@ class ModernCallsController(
             )
         )
     }
-    
+
     @PostMapping("/{callId}/answer")
     fun answerCall(
         @PathVariable callId: String,
         authentication: Authentication
     ): ResponseEntity<CallResponse> {
         val answererId = authentication.name
-        deliveryService.onCallAnswered(callId, answererId)
-        
+        // ACL دائم: المُستدعى وحده يجيب (يطابق CallHistoryService.answer).
+        val doc = history.findById(callId)
+            ?: return ResponseEntity.notFound().build()
+        require(doc.targetId == answererId) { "Only the called account can answer" }
+        history.answer(callId, answererId)
+        runCatching { deliveryService.onCallAnswered(callId, answererId) }
+
         return ResponseEntity.ok(
             CallResponse(
                 callId = callId,
@@ -146,15 +164,18 @@ class ModernCallsController(
             )
         )
     }
-    
+
     @PostMapping("/{callId}/ringing")
     fun confirmRinging(
         @PathVariable callId: String,
         authentication: Authentication
     ): ResponseEntity<CallResponse> {
         val targetId = authentication.name
-        deliveryService.onRingingConfirmed(callId, targetId)
-        
+        val doc = history.findById(callId)
+            ?: return ResponseEntity.notFound().build()
+        require(doc.targetId == targetId || doc.initiatorId == targetId) { "Only call participants can confirm ringing" }
+        runCatching { deliveryService.onRingingConfirmed(callId, targetId) }
+
         return ResponseEntity.ok(
             CallResponse(
                 callId = callId,
@@ -164,7 +185,7 @@ class ModernCallsController(
             )
         )
     }
-    
+
     @PostMapping("/{callId}/end")
     fun endCall(
         @PathVariable callId: String,
@@ -172,8 +193,14 @@ class ModernCallsController(
         authentication: Authentication
     ): ResponseEntity<CallResponse> {
         val enderId = authentication.name
-        deliveryService.onCallEnded(callId, enderId, reason ?: "COMPLETED")
-        
+        val doc = history.findById(callId)
+            ?: return ResponseEntity.ok(
+                CallResponse(callId, "END", "ENDED", "Call already ended")
+            )
+        require(doc.initiatorId == enderId || doc.targetId == enderId) { "Only call participants can end" }
+        history.end(callId, enderId)
+        runCatching { deliveryService.onCallEnded(callId, enderId, reason ?: "COMPLETED") }
+
         return ResponseEntity.ok(
             CallResponse(
                 callId = callId,
@@ -183,15 +210,19 @@ class ModernCallsController(
             )
         )
     }
-    
+
     @PostMapping("/{callId}/reject")
     fun rejectCall(
         @PathVariable callId: String,
         authentication: Authentication
     ): ResponseEntity<CallResponse> {
         val rejecterId = authentication.name
-        deliveryService.onCallEnded(callId, rejecterId, "REJECTED")
-        
+        val doc = history.findById(callId)
+            ?: return ResponseEntity.notFound().build()
+        require(doc.targetId == rejecterId) { "Only the called account can reject" }
+        history.rejected(callId, rejecterId)
+        runCatching { deliveryService.onCallEnded(callId, rejecterId, "REJECTED") }
+
         return ResponseEntity.ok(
             CallResponse(
                 callId = callId,
@@ -201,7 +232,31 @@ class ModernCallsController(
             )
         )
     }
-    
+
+    @GetMapping("/{callId}")
+    fun getCall(
+        @PathVariable callId: String,
+        authentication: Authentication
+    ): ResponseEntity<Any> {
+        val callerId = authentication.name
+        val doc = history.findById(callId)
+            ?: return ResponseEntity.notFound().build()
+        if (doc.initiatorId != callerId && doc.targetId != callerId) {
+            return ResponseEntity.status(403).body(mapOf("error" to "NOT_CALL_PARTICIPANT"))
+        }
+        return ResponseEntity.ok(doc)
+    }
+
+    @GetMapping("/active")
+    fun listActiveCalls(authentication: Authentication): ResponseEntity<List<CallHistoryItem>> {
+        val callerId = authentication.name
+        // السجل الدائم هو المصدر؛ النشط = RINGING/ACTIVE فقط.
+        val active = history.history(callerId, limit = 50).filter {
+            it.status == CallStatus.RINGING || it.status == CallStatus.ACTIVE
+        }
+        return ResponseEntity.ok(active)
+    }
+
     @GetMapping("/types")
     fun getCallTypes(): ResponseEntity<List<Map<String, String>>> {
         val types = listOf(
@@ -287,12 +342,13 @@ class ModernCallsController(
                 "tech" to "NSD/mDNS + WebRTC Host-Only + No Internet"
             )
         )
-        
+
         return ResponseEntity.ok(types)
     }
-    
+
     @GetMapping("/stats")
     fun getCallStats(authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        authentication.name // مصادقة فقط — الإحصاء تشغيلي لا يكشف أطرافاً.
         return ResponseEntity.ok(mapOf(
             "pendingDeliveries" to deliveryService.getPendingCount(),
             "supportedTypes" to 9,

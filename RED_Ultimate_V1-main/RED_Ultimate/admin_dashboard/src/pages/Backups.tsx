@@ -11,6 +11,7 @@ import {
 import {
   getBackups, createBackup, restoreBackup, deleteBackup
 } from '../api';
+import { RequireAuth, formatSafeDate, formatSafeTime } from './_shared';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -37,6 +38,8 @@ const TRIGGERED_BY_LABELS: Record<string, string> = {
 };
 
 function formatBytes(bytes: number): string {
+  // ✅ 2026-09-24: قيمة ناقصة/تالفة كانت تُعرض "undefined B" خاماً
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return '—';
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
   if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(2)} MB`;
   if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(2)} KB`;
@@ -190,7 +193,7 @@ export default function Backups() {
       title: 'استعادة',
       dataIndex: 'restoreCount',
       key: 'restoreCount',
-      render: (c: number) => c > 0 ? <Tag color="orange">{c}x</Tag> : <Text type="secondary">0</Text>,
+      render: (c: number) => (typeof c === 'number' && c > 0) ? <Tag color="orange">{c}x</Tag> : <Text type="secondary">0</Text>,
     },
     {
       title: 'التاريخ',
@@ -198,8 +201,8 @@ export default function Backups() {
       key: 'startedAt',
       render: (d: string) => (
         <Space direction="vertical" size={0}>
-          <Text style={{ fontSize: 12 }}>{new Date(d).toLocaleDateString('ar-EG')}</Text>
-          <Text type="secondary" style={{ fontSize: 10 }}>{new Date(d).toLocaleTimeString('ar-EG')}</Text>
+          <Text style={{ fontSize: 12 }}>{formatSafeDate(d, 'ar-EG')}</Text>
+          <Text type="secondary" style={{ fontSize: 10 }}>{formatSafeTime(d)}</Text>
         </Space>
       ),
       sorter: (a: any, b: any) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime(),
@@ -231,7 +234,7 @@ export default function Backups() {
             okText="نعم"
             cancelText="إلغاء"
           >
-            <Button danger size="small" icon={<DeleteOutlined />} />
+            <Button danger size="small" icon={<DeleteOutlined />} aria-label={`حذف النسخة ${r?.fileName ?? r?.id ?? ''}`} />
           </Popconfirm>
         </Space>
       ),
@@ -246,6 +249,7 @@ export default function Backups() {
   ];
 
   return (
+    <RequireAuth>
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
@@ -387,11 +391,11 @@ export default function Backups() {
         />
         <div style={{ marginTop: 16 }}>
           <Paragraph>
-            <strong>النوع:</strong> {TYPE_LABELS[selectedBackup?.backupType]?.label}
+            <strong>النوع:</strong> {TYPE_LABELS[selectedBackup?.backupType]?.label ?? selectedBackup?.backupType ?? '—'}
             <br />
             <strong>الحجم:</strong> {selectedBackup ? formatBytes(selectedBackup.sizeBytes) : '—'}
             <br />
-            <strong>التاريخ:</strong> {selectedBackup ? new Date(selectedBackup.startedAt).toLocaleString('ar-EG') : '—'}
+            <strong>التاريخ:</strong> {selectedBackup?.startedAt ? `${formatSafeDate(selectedBackup.startedAt, 'ar-EG')} ${formatSafeTime(selectedBackup.startedAt)}` : '—'}
           </Paragraph>
         </div>
         <Form form={restoreForm} layout="vertical">
@@ -430,5 +434,6 @@ export default function Backups() {
         ]}
       />
     </Space>
+    </RequireAuth>
   );
 }

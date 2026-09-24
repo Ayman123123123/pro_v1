@@ -12,17 +12,29 @@ import { Settings, Palette, Globe, Bell, Shield, Key, Database, Trash2, Download
 import { cn } from '@/utils/cn';
 import { useTheme } from '@/components/providers/ThemeProvider';
 import { Label } from '@/components/ui/label';
+import { RequireAuth, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
 
 export function SettingsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<string>('appearance');
-  const [language, setLanguage] = useState('ar');
+  const [language, setLanguage] = useState(i18n.language?.startsWith('ar') ? 'ar' : 'en');
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [weeklyDigest, setWeeklyDigest] = useState(false);
+  // ✅ 2026-09-24: ربط المفاتيح الوهمية بحالة محلية
+  const [securityAlerts, setSecurityAlerts] = useState(true);
+  const [developerMode, setDeveloperMode] = useState(false);
+  const [betaFeatures, setBetaFeatures] = useState(false);
+  const [telemetry, setTelemetry] = useState(true);
+
+  const changeLanguage = (lng: string) => {
+    setLanguage(lng);
+    void i18n.changeLanguage(lng);
+  };
 
   return (
+    <RequireAuth>
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{t('settings.title')}</h1>
@@ -30,13 +42,15 @@ export function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="appearance"><Palette className="h-4 w-4 mr-2" /> Appearance</TabsTrigger>
-          <TabsTrigger value="notifications"><Bell className="h-4 w-4 mr-2" /> Notifications</TabsTrigger>
-          <TabsTrigger value="security"><Shield className="h-4 w-4 mr-2" /> Security</TabsTrigger>
-          <TabsTrigger value="data"><Database className="h-4 w-4 mr-2" /> Data</TabsTrigger>
-          <TabsTrigger value="advanced"><Settings className="h-4 w-4 mr-2" /> Advanced</TabsTrigger>
+        <div className={TABS_WRAP_CLASS}>
+        <TabsList className={TABS_LIST_CLASS}>
+          <TabsTrigger value="appearance" className={TABS_TRIGGER_CLASS}><Palette className="h-4 w-4 mr-2" aria-hidden="true" /> Appearance</TabsTrigger>
+          <TabsTrigger value="notifications" className={TABS_TRIGGER_CLASS}><Bell className="h-4 w-4 mr-2" aria-hidden="true" /> Notifications</TabsTrigger>
+          <TabsTrigger value="security" className={TABS_TRIGGER_CLASS}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> Security</TabsTrigger>
+          <TabsTrigger value="data" className={TABS_TRIGGER_CLASS}><Database className="h-4 w-4 mr-2" aria-hidden="true" /> Data</TabsTrigger>
+          <TabsTrigger value="advanced" className={TABS_TRIGGER_CLASS}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> Advanced</TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="appearance">
           <div className="grid gap-6 md:grid-cols-2">
@@ -50,7 +64,10 @@ export function SettingsPage() {
                   {(['light', 'dark', 'system'] as const).map((t) => (
                     <button
                       key={t}
+                      type="button"
                       onClick={() => setTheme(t)}
+                      aria-pressed={theme === t}
+                      aria-label={`Theme ${t}`}
                       className={cn(
                         'p-4 border-2 rounded-lg transition-all',
                         theme === t
@@ -83,7 +100,7 @@ export function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Language</Label>
-                  <Select value={language} onValueChange={setLanguage}>
+                  <Select value={language} onValueChange={changeLanguage}>
                     <SelectTrigger><SelectValue placeholder="Select language" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ar">العربية (Arabic)</SelectItem>
@@ -147,7 +164,7 @@ export function SettingsPage() {
                       <p className="font-medium">Security alerts</p>
                       <p className="text-sm text-muted-foreground">Critical security events</p>
                     </div>
-                    <Switch checked={true} onCheckedChange={() => {}} />
+                    <Switch checked={securityAlerts} onCheckedChange={setSecurityAlerts} aria-label="Toggle security alert emails" />
                   </label>
                 </div>
               </div>
@@ -180,21 +197,21 @@ export function SettingsPage() {
                     <p className="font-medium">Two-Factor Authentication</p>
                     <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
                   </div>
-                  <Button variant="outline">Enable 2FA</Button>
+                  <Button variant="outline" disabled title={t('common.comingSoon')} aria-label="Enable 2FA (coming soon)">Enable 2FA</Button>
                 </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
                     <p className="font-medium">Passkeys (WebAuthn)</p>
                     <p className="text-sm text-muted-foreground">Use hardware keys or biometrics</p>
                   </div>
-                  <Button variant="outline">Add Passkey</Button>
+                  <Button variant="outline" disabled title={t('common.comingSoon')} aria-label="Add passkey (coming soon)">Add Passkey</Button>
                 </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
                     <p className="font-medium">Active Sessions</p>
                     <p className="text-sm text-muted-foreground">Manage your logged-in devices</p>
                   </div>
-                  <Button variant="outline">View Sessions</Button>
+                  <Button variant="outline" disabled title={t('common.comingSoon')} aria-label="View sessions (coming soon)">View Sessions</Button>
                 </div>
               </div>
             </CardContent>
@@ -209,8 +226,8 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
-                <Button variant="outline"><Download className="h-4 w-4 mr-2" /> Export My Data</Button>
-                <Button variant="outline"><Upload className="h-4 w-4 mr-2" /> Import Data</Button>
+                <Button variant="outline" disabled title={t('common.comingSoon')} aria-label="Export my data (coming soon)"><Download className="h-4 w-4 mr-2" aria-hidden="true" /> Export My Data</Button>
+                <Button variant="outline" disabled title={t('common.comingSoon')} aria-label="Import data (coming soon)"><Upload className="h-4 w-4 mr-2" aria-hidden="true" /> Import Data</Button>
               </div>
               <div className="p-4 border rounded-lg bg-destructive/10">
                 <div className="flex items-center justify-between">
@@ -218,7 +235,7 @@ export function SettingsPage() {
                     <p className="font-medium text-destructive">Delete Account</p>
                     <p className="text-sm text-muted-foreground">Permanently delete your account and all data</p>
                   </div>
-                  <Button variant="destructive">Delete Account</Button>
+                  <Button variant="destructive" disabled title={t('common.comingSoon')} aria-label="Delete account (coming soon)">Delete Account</Button>
                 </div>
               </div>
             </CardContent>
@@ -238,21 +255,21 @@ export function SettingsPage() {
                     <p className="font-medium">Developer Mode</p>
                     <p className="text-sm text-muted-foreground">Enable debug features and verbose logging</p>
                   </div>
-                  <Switch checked={false} onCheckedChange={() => {}} />
+                  <Switch checked={developerMode} onCheckedChange={setDeveloperMode} aria-label="Toggle developer mode" />
                 </label>
                 <label className="flex items-center justify-between">
                   <div>
                     <p className="font-medium">Beta Features</p>
                     <p className="text-sm text-muted-foreground">Access experimental features early</p>
                   </div>
-                  <Switch checked={false} onCheckedChange={() => {}} />
+                  <Switch checked={betaFeatures} onCheckedChange={setBetaFeatures} aria-label="Toggle beta features" />
                 </label>
                 <label className="flex items-center justify-between">
                   <div>
                     <p className="font-medium">Telemetry</p>
                     <p className="text-sm text-muted-foreground">Send anonymous usage data to improve the product</p>
                   </div>
-                  <Switch checked={true} onCheckedChange={() => {}} />
+                  <Switch checked={telemetry} onCheckedChange={setTelemetry} aria-label="Toggle telemetry" />
                 </label>
               </div>
             </CardContent>
@@ -260,6 +277,7 @@ export function SettingsPage() {
         </TabsContent>
       </Tabs>
     </div>
+    </RequireAuth>
   );
 }
 

@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { Shield, Flag, Trash2, CheckCircle, XCircle, AlertTriangle, Search, Filter, Eye, MoreVertical } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { RequireAuth, DemoBanner, EmptyState, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
 
 interface ModerationItem {
   id: string;
@@ -37,8 +38,12 @@ export function ModerationPage() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  // ✅ 2026-09-24: ربط الإجراءات بحالة محلية بدل console.log
+  const [items, setItems] = useState<ModerationItem[]>(mockData);
+  const [broadcastSent, setBroadcastSent] = useState(false);
+  const [broadcastMsg, setBroadcastMsg] = useState('');
 
-  const filteredData = mockData.filter(item => {
+  const filteredData = items.filter(item => {
     if (filterType !== 'all' && item.type !== filterType) return false;
     if (filterPriority !== 'all' && item.priority !== filterPriority) return false;
     if (search && !item.content.toLowerCase().includes(search.toLowerCase()) && !item.author.toLowerCase().includes(search.toLowerCase())) return false;
@@ -46,26 +51,39 @@ export function ModerationPage() {
   });
 
   const handleAction = (action: string, item: ModerationItem) => {
-    console.log(`${action} item ${item.id}`);
+    const next: Record<string, ModerationItem['status']> = {
+      approve: 'approved',
+      reject: 'rejected',
+      delete: 'deleted',
+    };
+    const status = next[action];
+    if (status) {
+      setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, status } : it)));
+    }
+    // warn / view: لا تغيير حالة — يُبقي العنصر في الطابور للمراجعة
   };
 
   return (
+    <RequireAuth>
     <div className="space-y-6">
+      <DemoBanner />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('moderation.title')}</h1>
           <p className="text-muted-foreground">{t('moderation.subtitle')}</p>
         </div>
-        <Button><Shield className="h-4 w-4 mr-2" /> Auto-Moderate</Button>
+        <Button disabled title={t('common.comingSoon')} aria-label="Auto-moderate (coming soon)"><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> Auto-Moderate</Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="queue"><Flag className="h-4 w-4 mr-2" /> Queue</TabsTrigger>
-          <TabsTrigger value="rules"><Settings className="h-4 w-4 mr-2" /> Rules</TabsTrigger>
-          <TabsTrigger value="analytics"><BarChart3 className="h-4 w-4 mr-2" /> Analytics</TabsTrigger>
-          <TabsTrigger value="broadcast"><Send className="h-4 w-4 mr-2" /> Broadcast</TabsTrigger>
+        <div className={TABS_WRAP_CLASS}>
+        <TabsList className={TABS_LIST_CLASS}>
+          <TabsTrigger value="queue" className={TABS_TRIGGER_CLASS}><Flag className="h-4 w-4 mr-2" aria-hidden="true" /> Queue</TabsTrigger>
+          <TabsTrigger value="rules" className={TABS_TRIGGER_CLASS}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> Rules</TabsTrigger>
+          <TabsTrigger value="analytics" className={TABS_TRIGGER_CLASS}><BarChart3 className="h-4 w-4 mr-2" aria-hidden="true" /> Analytics</TabsTrigger>
+          <TabsTrigger value="broadcast" className={TABS_TRIGGER_CLASS}><Send className="h-4 w-4 mr-2" aria-hidden="true" /> Broadcast</TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="queue">
           <Card>
@@ -102,6 +120,9 @@ export function ModerationPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {filteredData.length === 0 ? (
+                <EmptyState message={t('common.noData')} />
+              ) : (
               <div className="space-y-3">
                 {filteredData.map((item) => (
                   <div key={item.id} className="border rounded-lg p-4">
@@ -123,7 +144,7 @@ export function ModerationPage() {
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" aria-label={`Moderation actions for ${item.author}`}><MoreVertical className="h-4 w-4" aria-hidden="true" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions for {item.author}</DropdownMenuLabel>
@@ -150,6 +171,7 @@ export function ModerationPage() {
                   </div>
                 ))}
               </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -161,7 +183,7 @@ export function ModerationPage() {
               <CardDescription>Configure keyword, regex, and ML-based moderation rules</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-center text-muted-foreground py-12">Rule builder UI (implement with drag-drop)</p>
+              <EmptyState message={t('common.comingSoon')} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -173,7 +195,7 @@ export function ModerationPage() {
               <CardDescription>Growth, engagement, and retention metrics</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-center text-muted-foreground py-12">Analytics charts (implement with Recharts/Visx)</p>
+              <EmptyState message={t('common.comingSoon')} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -198,16 +220,20 @@ export function ModerationPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Message</label>
-                  <textarea className="w-full min-h-[150px] p-4 border rounded-lg" placeholder="Enter your message..." />
+                  <label className="block text-sm font-medium mb-2" htmlFor="broadcast-msg">Message</label>
+                  <textarea id="broadcast-msg" className="w-full min-h-[150px] p-4 border rounded-lg" placeholder="Enter your message..." value={broadcastMsg} onChange={(e) => { setBroadcastMsg(e.target.value); setBroadcastSent(false); }} />
                 </div>
-                <Button><Send className="h-4 w-4 mr-2" /> Send Broadcast</Button>
+                <Button disabled={!broadcastMsg.trim()} title={broadcastMsg.trim() ? undefined : t('common.empty')} onClick={() => setBroadcastSent(true)}><Send className="h-4 w-4 mr-2" aria-hidden="true" /> Send Broadcast</Button>
+                {broadcastSent && (
+                  <p role="status" className="text-sm font-medium text-foreground">{t('common.success')}</p>
+                )}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
     </div>
+    </RequireAuth>
   );
 }
 

@@ -247,7 +247,11 @@ export function loginFailureMessage(status: number | undefined, body: Record<str
   }
   const code = String(body?.error || body?.message || '');
   if (status === 401 || /INVALID_CREDENTIALS/i.test(code)) {
-    return 'بيانات الدخول مرفوضة. استخدم admin / admin123 (أو RED_ADMIN_USERNAME من ملف .env)';
+    // Dev-only credential hint — never leak default creds in production builds.
+    const devHint = (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV)
+      ? ' (تطوير: admin / admin123 أو RED_ADMIN_USERNAME من .env)'
+      : '';
+    return `بيانات الدخول مرفوضة${devHint}`;
   }
   if (status === 403 || status === 423) {
     return 'الحساب موجود لكنه غير معتمد أو محظور. ادخل بحساب المسؤول من .env';
@@ -281,14 +285,23 @@ export async function adminLogin(username: string, password: string) {
 }
 
 export async function adminLogout() {
-  const refreshToken = authStore.refresh();
-  if (refreshToken) {
-    const csrf = csrfToken();
-    await apiFetch('/api/auth/logout', {
+  // Logout must ALWAYS hit the server so the HttpOnly admin cookie is revoked
+  // + cleared — even for cookie-only sessions with no local refresh token.
+  // CSRF double-submit (red_admin_csrf cookie vs X-RED-CSRF header) is sent
+  // whenever readable; backend requires it when the refresh cookie exists.
+  const csrf = csrfToken();
+  try {
+    await fetch('/api/auth/logout', {
       method: 'POST',
-      headers: csrf ? { 'X-RED-CSRF': csrf } : undefined,
-      body: JSON.stringify({ refreshToken: refreshToken || '' })
-    }).catch(() => {}); // Best-effort; clear tokens regardless
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrf ? { 'X-RED-CSRF': csrf } : {}),
+      },
+      body: JSON.stringify({ refreshToken: authStore.refresh() || '' }),
+    });
+  } catch {
+    // Best-effort; clear tokens regardless
   }
   authStore.clear();
 }

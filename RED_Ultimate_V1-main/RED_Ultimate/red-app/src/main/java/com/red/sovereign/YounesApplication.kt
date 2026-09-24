@@ -69,12 +69,12 @@ class YounesApplication : Application() {
             }
             val syncConstraints = androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build()
             try {
-                val syncWork = androidx.work.PeriodicWorkRequestBuilder<com.red.sovereign.workers.AuthRefreshWorker>(15, java.util.concurrent.TimeUnit.MINUTES)
+                val syncWork = androidx.work.PeriodicWorkRequestBuilder<com.red.sovereign.workers.SyncPollWorker>(15, java.util.concurrent.TimeUnit.MINUTES)
                     .setConstraints(syncConstraints)
                     .build()
                 workManager.enqueueUniquePeriodicWork("sync_poll", androidx.work.ExistingPeriodicWorkPolicy.KEEP, syncWork)
             } catch (_: Exception) {
-                val syncWork2 = androidx.work.PeriodicWorkRequestBuilder<com.red.sovereign.workers.AuthRefreshWorker>(java.time.Duration.ofMinutes(15))
+                val syncWork2 = androidx.work.PeriodicWorkRequestBuilder<com.red.sovereign.workers.SyncPollWorker>(java.time.Duration.ofMinutes(15))
                     .setConstraints(syncConstraints)
                     .build()
                 workManager.enqueueUniquePeriodicWork("sync_poll", androidx.work.ExistingPeriodicWorkPolicy.KEEP, syncWork2)
@@ -95,6 +95,8 @@ class YounesApplication : Application() {
         runCatching { com.red.sovereign.calls.PendingOfferPoller.schedule(this) }
         // LEGENDARY: مسح الملفات الحديثة المعلقة (media_uploads PENDING) عند كل إقلاع
         runCatching { com.red.sovereign.core.workers.MediaUploadWorker.enqueue(this) }
+        // استعادة الرسائل المفقودة/العالقة (SENDING/QUEUED) بعد موت العملية — كل 30 دقيقة
+        runCatching { com.red.sovereign.core.workers.MessageRecoveryWorker.enqueue(this) }
 
         // 🖼️ ضبط ذاكرة الصور (Coil 3.x) بحد أقصى 25% من ذاكرة الجهاز لمنع انهيارات OOM
         runCatching {

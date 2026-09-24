@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Card, Col, Radio, Row, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { PhoneOutlined, VideoCameraOutlined, HistoryOutlined, StopOutlined } from '@ant-design/icons';
 import { apiFetch } from '../api';
+import { RequireAuth, formatSafeDate, formatSafeTime } from './_shared';
 
 type HistoryRow = {
   id: string;
@@ -100,7 +101,8 @@ export default function CallHistory() {
     {
       title: 'الاتجاه',
       dataIndex: 'direction',
-      render: (v: string) => (v === 'OUTGOING' ? 'صادر' : 'وارد'),
+      // ✅ 2026-09-24: قيمة ناقصة/غريبة كانت تُعرض "وارد" زوراً
+      render: (v: string) => (v === 'OUTGOING' ? 'صادر' : v === 'INCOMING' ? 'وارد' : (v || '—')),
     },
     {
       title: 'الحالة',
@@ -121,11 +123,12 @@ export default function CallHistory() {
     {
       title: 'البداية',
       dataIndex: 'started_at',
-      render: (v: string) => (v ? new Date(v).toLocaleString('ar') : '—'),
+      render: (v: string) => (v ? `${formatSafeDate(v, 'ar')} ${formatSafeTime(v, 'ar')}` : '—'),
     },
   ];
 
   return (
+    <RequireAuth>
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Typography.Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
@@ -170,6 +173,7 @@ export default function CallHistory() {
             optionType="button"
             buttonStyle="solid"
             size="small"
+            style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: '100%' }}
           >
             <Radio.Button value={undefined}>الكل</Radio.Button>
             <Radio.Button value="MISSED">فائتة</Radio.Button>
@@ -181,7 +185,7 @@ export default function CallHistory() {
       >
         <Table
           size="small"
-          rowKey="id"
+          rowKey={(r: HistoryRow) => r?.id ?? `${r?.caller_id ?? 'x'}-${r?.started_at ?? ''}`}
           loading={loading}
           dataSource={rows}
           columns={columns}
@@ -191,5 +195,6 @@ export default function CallHistory() {
         />
       </Card>
     </Space>
+    </RequireAuth>
   );
 }

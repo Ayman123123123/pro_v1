@@ -131,10 +131,12 @@ function LoginCard({ onSubmit, isLoading, formError, onFormError }: SharedLoginP
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>بيانات الدخول الافتراضية</p>
-            <p className="font-mono text-xs mt-1">admin / admin123</p>
-          </div>
+          {import.meta.env.DEV && (
+            <div className="mt-6 text-center text-sm text-muted-foreground">
+              <p>بيانات الدخول الافتراضية (تطوير فقط)</p>
+              <p className="font-mono text-xs mt-1">admin / admin123</p>
+            </div>
+          )}
 
           <ServerStatusBadge />
           {/* ختم البناء — يعرّف النسخة المعروضة في أي لقطة شاشة */}

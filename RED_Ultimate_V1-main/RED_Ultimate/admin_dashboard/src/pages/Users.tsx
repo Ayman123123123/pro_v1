@@ -66,6 +66,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { RequireAuth, EmptyState } from './_shared';
 
 interface User {
   id: string;
@@ -119,6 +120,7 @@ const ROLE_LABELS: Record<string, string> = {
 // ✅ FIX 2026-09-22: columns كانت ثابت module-level يسترعي handle* (معرّفة داخل
 // UsersPage) → "Cannot find name". الآن دالة تستقبل الـ handlers من المكوّن.
 interface UserActions {
+  t: (key: string) => string;
   handleView: (u: User) => void;
   handleEdit: (u: User) => void;
   handleApprove: (u: User) => void;
@@ -130,7 +132,7 @@ interface UserActions {
 }
 
 function buildColumns(a: UserActions): ColumnDef<User>[] {
-  const { handleView, handleEdit, handleApprove, handleReject, handleBan, handleUnban, handleImpersonate, handleDelete } = a;
+  const { t, handleView, handleEdit, handleApprove, handleReject, handleBan, handleUnban, handleImpersonate, handleDelete } = a;
   return [
   {
     id: 'select',
@@ -218,13 +220,29 @@ function buildColumns(a: UserActions): ColumnDef<User>[] {
   {
     accessorKey: 'createdAt',
     header: 'Created',
-    cell: ({ row }) => format(new Date(row.original.createdAt), 'MMM d, yyyy'),
+    // ✅ 2026-09-24: format() يرمي RangeError على التواريخ التالفة → '—' بدل الانهيار
+    cell: ({ row }) => {
+      try {
+        const d = new Date(row.original.createdAt);
+        return Number.isFinite(d.getTime()) ? format(d, 'MMM d, yyyy') : '—';
+      } catch {
+        return '—';
+      }
+    },
     size: 120,
   },
   {
     accessorKey: 'lastLogin',
     header: 'Last Login',
-    cell: ({ row }) => row.original.lastLogin ? format(new Date(row.original.lastLogin), 'MMM d, yyyy HH:mm') : 'Never',
+    cell: ({ row }) => {
+      if (!row.original.lastLogin) return t('common.never');
+      try {
+        const d = new Date(row.original.lastLogin);
+        return Number.isFinite(d.getTime()) ? format(d, 'MMM d, yyyy HH:mm') : '—';
+      } catch {
+        return '—';
+      }
+    },
     size: 150,
   },
   {
@@ -233,8 +251,8 @@ function buildColumns(a: UserActions): ColumnDef<User>[] {
     cell: ({ row }) => (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MoreVertical className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${row.original.username}`}>
+            <MoreVertical className="h-4 w-4" aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -339,11 +357,12 @@ export function UsersPage() {
   });
 
   const handleView = (user: User) => {
-    console.log('View user:', user);
+    // ✅ 2026-09-24: تغذية راجعة مرئية بدل console.log الصامت
+    toast.info(`Viewing ${user.username}`, 'Detail drawer coming soon');
   };
 
   const handleEdit = (user: User) => {
-    console.log('Edit user:', user);
+    toast.info(`Editing ${user.username}`, 'Edit dialog coming soon');
   };
 
   const handleApprove = (user: User) => {
@@ -367,7 +386,6 @@ export function UsersPage() {
 
   const handleImpersonate = (user: User) => {
     if (confirm(`Impersonate ${user.username}? This will be logged.`)) {
-      console.log('Impersonate:', user);
       toast.info('Impersonation started', 'Activity is being logged');
     }
   };
@@ -398,7 +416,7 @@ export function UsersPage() {
     bulkActionMutation.mutate({ action, ids: selectedIds, reason, durationDays });
   };
 
-  const columns = buildColumns({ handleView, handleEdit, handleApprove, handleReject, handleBan, handleUnban, handleImpersonate, handleDelete });
+  const columns = buildColumns({ t, handleView, handleEdit, handleApprove, handleReject, handleBan, handleUnban, handleImpersonate, handleDelete });
 
   const table = useReactTable({
     data: data?.content || [],
@@ -442,6 +460,7 @@ export function UsersPage() {
   };
 
   return (
+    <RequireAuth>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -528,7 +547,7 @@ export function UsersPage() {
         <Card className="border-yellow-500 bg-yellow-50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <span className="font-medium">{selectedRows.size} {t('users.selected')}</span>
+              <span className="font-medium">{t('users.selected', { count: selectedRows.size })}</span>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => handleBulkAction('approve')}>
                   <CheckCircle className="h-4 w-4 mr-2" /> Approve
@@ -572,9 +591,13 @@ export function UsersPage() {
               </div>
             </div>
           ) : error ? (
-            <div className="p-6 text-center text-red-500">
-              Error loading users: {error.message}
-              <Button variant="outline" className="ml-4" onClick={() => refetch()}>Retry</Button>
+            <div className="p-6 text-center text-red-700 dark:text-red-400" role="alert">
+              {t('common.loadError')}: {error.message}
+              <Button variant="outline" className="ml-4" onClick={() => refetch()}>{t('common.retry')}</Button>
+            </div>
+          ) : (data?.content?.length ?? 0) === 0 ? (
+            <div className="p-6">
+              <EmptyState />
             </div>
           ) : (
             <>
@@ -707,6 +730,7 @@ export function UsersPage() {
         </CardContent>
       </Card>
     </div>
+    </RequireAuth>
   );
 }
 

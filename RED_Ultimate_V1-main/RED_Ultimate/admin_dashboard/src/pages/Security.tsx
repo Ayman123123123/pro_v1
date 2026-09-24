@@ -10,13 +10,21 @@ import { useTranslation } from 'react-i18next';
 import { Shield, Users, Key, Fingerprint, Database, Wifi, Plus, Edit, Trash2, Eye, RefreshCw, RotateCcw } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { RequireAuth, DemoBanner, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
 
 export function SecurityPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>('roles');
+  // ✅ 2026-09-24: ربط المفاتيح الوهمية بحالة محلية بدل onCheckedChange فارغ
+  const [oidcEnabled, setOidcEnabled] = useState(true);
+  const [samlEnabled, setSamlEnabled] = useState(false);
+  const [totpEnabled, setTotpEnabled] = useState(true);
+  const [webauthnEnabled, setWebauthnEnabled] = useState(true);
 
   return (
+    <RequireAuth>
     <div className="space-y-6">
+      <DemoBanner />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('security.title')}</h1>
@@ -25,13 +33,15 @@ export function SecurityPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="roles"><Shield className="h-4 w-4 mr-2" /> Roles & RBAC</TabsTrigger>
-          <TabsTrigger value="sso"><Wifi className="h-4 w-4 mr-2" /> SSO (OIDC/SAML)</TabsTrigger>
-          <TabsTrigger value="mfa"><Fingerprint className="h-4 w-4 mr-2" /> MFA (TOTP/WebAuthn)</TabsTrigger>
-          <TabsTrigger value="sessions"><Database className="h-4 w-4 mr-2" /> Sessions</TabsTrigger>
-          <TabsTrigger value="api-keys"><Key className="h-4 w-4 mr-2" /> API Keys</TabsTrigger>
+        <div className={TABS_WRAP_CLASS}>
+        <TabsList className={TABS_LIST_CLASS}>
+          <TabsTrigger value="roles" className={TABS_TRIGGER_CLASS}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> Roles & RBAC</TabsTrigger>
+          <TabsTrigger value="sso" className={TABS_TRIGGER_CLASS}><Wifi className="h-4 w-4 mr-2" aria-hidden="true" /> SSO (OIDC/SAML)</TabsTrigger>
+          <TabsTrigger value="mfa" className={TABS_TRIGGER_CLASS}><Fingerprint className="h-4 w-4 mr-2" aria-hidden="true" /> MFA (TOTP/WebAuthn)</TabsTrigger>
+          <TabsTrigger value="sessions" className={TABS_TRIGGER_CLASS}><Database className="h-4 w-4 mr-2" aria-hidden="true" /> Sessions</TabsTrigger>
+          <TabsTrigger value="api-keys" className={TABS_TRIGGER_CLASS}><Key className="h-4 w-4 mr-2" aria-hidden="true" /> API Keys</TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="roles">
           <Card>
@@ -40,7 +50,7 @@ export function SecurityPage() {
                 <CardTitle>Roles & Permissions</CardTitle>
                 <CardDescription>Define roles and assign granular permissions</CardDescription>
               </div>
-              <Button><Plus className="h-4 w-4 mr-2" /> New Role</Button>
+              <Button disabled title={t('common.comingSoon')} aria-label="New role (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> New Role</Button>
             </CardHeader>
             <CardContent>
               <Table>
@@ -69,8 +79,8 @@ export function SecurityPage() {
                       <TableCell>{role.perms}</TableCell>
                       <TableCell><Badge variant="success">{role.status}</Badge></TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon"><Eye className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon"><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" aria-label={`View role ${role.name}`}><Eye className="h-4 w-4" aria-hidden="true" /></Button>
+                        <Button variant="ghost" size="icon" aria-label={`Edit role ${role.name}`}><Edit className="h-4 w-4" aria-hidden="true" /></Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -94,7 +104,7 @@ export function SecurityPage() {
                       <p className="font-medium">OIDC Provider</p>
                       <p className="text-sm text-muted-foreground">Google Workspace • Enabled</p>
                     </div>
-                    <Switch checked={true} onCheckedChange={() => {}} />
+                    <Switch checked={oidcEnabled} onCheckedChange={setOidcEnabled} aria-label="Toggle OIDC provider" />
                   </div>
                 </div>
                 <div className="p-4 border rounded-lg">
@@ -103,10 +113,10 @@ export function SecurityPage() {
                       <p className="font-medium">SAML Provider</p>
                       <p className="text-sm text-muted-foreground">Okta • Disabled</p>
                     </div>
-                    <Switch checked={false} onCheckedChange={() => {}} />
+                    <Switch checked={samlEnabled} onCheckedChange={setSamlEnabled} aria-label="Toggle SAML provider" />
                   </div>
                 </div>
-                <Button variant="outline"><Plus className="h-4 w-4 mr-2" /> Add Identity Provider</Button>
+                <Button variant="outline" disabled title={t('common.comingSoon')} aria-label="Add identity provider (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> Add Identity Provider</Button>
               </div>
             </CardContent>
           </Card>
@@ -124,13 +134,19 @@ export function SecurityPage() {
                   <Fingerprint className="h-8 w-8 text-primary mb-2" />
                   <h4 className="font-medium mb-2">TOTP (Authenticator Apps)</h4>
                   <p className="text-sm text-muted-foreground mb-4">Time-based one-time passwords via Google Authenticator, Authy, etc.</p>
-                  <Switch checked={true} onCheckedChange={() => {}}>Enabled</Switch>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={totpEnabled} onCheckedChange={setTotpEnabled} aria-label="Toggle TOTP authentication" />
+                    <span className="text-sm font-medium text-foreground">{totpEnabled ? t('common.enabled') : t('common.disabled')}</span>
+                  </div>
                 </Card>
                 <Card className="p-6">
                   <Key className="h-8 w-8 text-primary mb-2" />
                   <h4 className="font-medium mb-2">WebAuthn (Passkeys)</h4>
                   <p className="text-sm text-muted-foreground mb-4">Hardware security keys and biometric authentication</p>
-                  <Switch checked={true} onCheckedChange={() => {}}>Enabled</Switch>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={webauthnEnabled} onCheckedChange={setWebauthnEnabled} aria-label="Toggle WebAuthn passkeys" />
+                    <span className="text-sm font-medium text-foreground">{webauthnEnabled ? t('common.enabled') : t('common.disabled')}</span>
+                  </div>
                 </Card>
               </div>
               <div className="mt-6 grid gap-4 md:grid-cols-3">
@@ -173,7 +189,7 @@ export function SecurityPage() {
                       <TableCell>{s.location}</TableCell>
                       <TableCell>{s.active}</TableCell>
                       <TableCell><Badge variant={s.trusted ? 'success' : 'outline'}>{s.trusted ? 'Trusted' : 'Untrusted'}</Badge></TableCell>
-                      <TableCell><Button variant="ghost" size="icon" className="text-red-500"><RotateCcw className="h-4 w-4" /></Button></TableCell>
+                      <TableCell><Button variant="ghost" size="icon" className="text-red-500" aria-label={`Revoke session of ${s.user}`}><RotateCcw className="h-4 w-4" aria-hidden="true" /></Button></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -189,7 +205,7 @@ export function SecurityPage() {
                 <CardTitle>API Keys</CardTitle>
                 <CardDescription>Scoped, rotatable API keys for integrations</CardDescription>
               </div>
-              <Button><Plus className="h-4 w-4 mr-2" /> Generate Key</Button>
+              <Button disabled title={t('common.comingSoon')} aria-label="Generate API key (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> Generate Key</Button>
             </CardHeader>
             <CardContent>
               <Table>
@@ -218,9 +234,9 @@ export function SecurityPage() {
                       <TableCell>{k.used}</TableCell>
                       <TableCell><Badge variant={k.status === 'active' ? 'success' : 'destructive'}>{k.status}</Badge></TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon"><Eye className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon"><RotateCcw className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="text-red-500"><Trash2 className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" aria-label={`View key ${k.name}`}><Eye className="h-4 w-4" aria-hidden="true" /></Button>
+                        <Button variant="ghost" size="icon" aria-label={`Rotate key ${k.name}`}><RotateCcw className="h-4 w-4" aria-hidden="true" /></Button>
+                        <Button variant="ghost" size="icon" className="text-red-500" aria-label={`Revoke key ${k.name}`}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -231,6 +247,7 @@ export function SecurityPage() {
         </TabsContent>
       </Tabs>
     </div>
+    </RequireAuth>
   );
 }
 

@@ -11,6 +11,7 @@ import {
 import {
   getReports, resolveReport, dismissReport, assignReport
 } from '../api';
+import { RequireAuth, formatSafeDate, formatSafeTime } from './_shared';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -203,9 +204,9 @@ export default function Reports() {
       key: 'createdAt',
       render: (d: string) => (
         <Space direction="vertical" size={0}>
-          <Text style={{ fontSize: 12 }}>{new Date(d).toLocaleDateString('ar-EG')}</Text>
+          <Text style={{ fontSize: 12 }}>{formatSafeDate(d, 'ar-EG')}</Text>
           <Text type="secondary" style={{ fontSize: 10 }}>
-            <ClockCircleOutlined /> {new Date(d).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+            <ClockCircleOutlined /> {formatSafeTime(d)}
           </Text>
         </Space>
       ),
@@ -243,6 +244,7 @@ export default function Reports() {
   ];
 
   return (
+    <RequireAuth>
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
@@ -324,7 +326,7 @@ export default function Reports() {
           <Empty description={error ? 'تعذر التحميل' : 'لا توجد بلاغات'} />
         ) : (
           <Table
-            rowKey="id"
+            rowKey={(r: any) => r?.id ?? `${r?.category ?? 'x'}-${r?.createdAt ?? ''}-${r?.reporterId ?? ''}`}
             columns={columns}
             dataSource={reports}
             loading={loading}
@@ -382,5 +384,6 @@ export default function Reports() {
         </Form>
       </Modal>
     </Space>
+    </RequireAuth>
   );
 }

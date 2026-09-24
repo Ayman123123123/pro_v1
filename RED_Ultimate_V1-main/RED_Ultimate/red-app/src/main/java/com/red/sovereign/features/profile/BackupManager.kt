@@ -4,7 +4,6 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.system.Os
 import android.util.Log
@@ -281,13 +280,21 @@ class BackupManager(private val context: Context) {
         exitProcess(0)
     }
 
-    /** يفتح tempRestore للقراءة ويتحقق من PRAGMA integrity_check = ok. */
+    /** يفتح tempRestore عبر SQLCipher بالمفتاح الحقيقي ويتحقق من PRAGMA integrity_check = ok. */
     private fun verifySqliteIntegrity(dbFile: File): Boolean {
-        var db: SQLiteDatabase? = null
+        // مفتاح SQLCipher الحقيقي — نفس مخزن RedDatabase (red_database_security/passphrase).
+        // الفتح بلا مفتاح عبر android.database.sqlite يعطي "ملف مشفر" أو ok كاذب.
+        val passphrase = try {
+            com.red.sovereign.core.SecureStore(
+                context.applicationContext, "red_database_security"
+            ).get("passphrase")
+        } catch (_: Exception) { null }
+        if (passphrase.isNullOrBlank()) return false
+        var db: net.zetetic.database.sqlcipher.SQLiteDatabase? = null
         return try {
-            db = SQLiteDatabase.openDatabase(
-                dbFile.absolutePath, null,
-                SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS
+            db = net.zetetic.database.sqlcipher.SQLiteDatabase.openDatabase(
+                dbFile.absolutePath, passphrase, null,
+                net.zetetic.database.sqlcipher.SQLiteDatabase.OPEN_READONLY
             )
             db.rawQuery("PRAGMA integrity_check", null).use { c ->
                 c.moveToFirst() && c.getString(0).equals("ok", ignoreCase = true)

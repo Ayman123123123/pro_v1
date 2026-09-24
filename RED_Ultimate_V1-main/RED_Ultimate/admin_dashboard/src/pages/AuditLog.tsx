@@ -9,6 +9,7 @@ import {
   WarningOutlined, CodeOutlined, DownloadOutlined
 } from '@ant-design/icons';
 import { getAuditLog, getSecurityAlerts, apiFetch } from '../api';
+import { RequireAuth, formatSafeDate, formatSafeTime } from './_shared';
 
 const { Title, Text, Paragraph } = Typography;
 const { Search } = Input;
@@ -168,7 +169,7 @@ export default function AuditLog() {
             <UserOutlined />
             <Text strong>{u ?? 'system'}</Text>
           </Space>
-          {r.adminId && <Text type="secondary" style={{ fontSize: 10 }}>{r.adminId.slice(0, 8)}...</Text>}
+          {r.adminId && <Text type="secondary" style={{ fontSize: 10 }}>{String(r.adminId).slice(0, 8)}...</Text>}
         </Space>
       ),
     },
@@ -178,7 +179,7 @@ export default function AuditLog() {
       render: (r: any) => r.targetId ? (
         <Space direction="vertical" size={0}>
           <Tag>{r.targetType}</Tag>
-          <Text code style={{ fontSize: 10 }}>{r.targetId.slice(0, 12)}...</Text>
+          <Text code style={{ fontSize: 10 }}>{String(r.targetId).slice(0, 12)}...</Text>
         </Space>
       ) : '—',
     },
@@ -214,9 +215,9 @@ export default function AuditLog() {
       key: 'createdAt',
       render: (d: string) => (
         <Space direction="vertical" size={0}>
-          <Text style={{ fontSize: 12 }}>{new Date(d).toLocaleDateString('ar-EG')}</Text>
+          <Text style={{ fontSize: 12 }}>{formatSafeDate(d, 'ar-EG')}</Text>
           <Text type="secondary" style={{ fontSize: 10 }}>
-            <ClockCircleOutlined /> {new Date(d).toLocaleTimeString('ar-EG')}
+            <ClockCircleOutlined /> {formatSafeTime(d)}
           </Text>
         </Space>
       ),
@@ -226,6 +227,7 @@ export default function AuditLog() {
   ];
 
   return (
+    <RequireAuth>
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
@@ -298,7 +300,7 @@ export default function AuditLog() {
                   <Tag color={meta.color}>{meta.label}</Tag>
                   <Text>{a.adminUsername ?? 'system'}</Text>
                   <Text type="secondary" style={{ fontSize: 11 }}>
-                    {new Date(a.createdAt).toLocaleString('ar-EG')}
+                    {formatSafeDate(a?.createdAt, 'ar-EG')} {formatSafeTime(a?.createdAt)}
                   </Text>
                 </Space>
                 {a.description && <Paragraph style={{ marginTop: 4, marginBottom: 0, fontSize: 12 }}>{a.description}</Paragraph>}
@@ -337,7 +339,7 @@ export default function AuditLog() {
           <Empty description="لا توجد سجلات" />
         ) : (
           <Table
-            rowKey="id"
+            rowKey={(r: any) => r?.id ?? `${r?.action ?? 'x'}-${r?.createdAt ?? ''}`}
             columns={columns}
             dataSource={logs}
             loading={loading}
@@ -374,5 +376,6 @@ export default function AuditLog() {
         )}
       </Card>
     </Space>
+    </RequireAuth>
   );
 }

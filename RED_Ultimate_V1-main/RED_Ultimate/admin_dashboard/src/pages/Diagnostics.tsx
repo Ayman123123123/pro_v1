@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Card, List, Spin, Tag, message } from 'antd';
 import { apiFetch } from '../api';
+import { RequireAuth } from './_shared';
 
 type DiagnosticStatus = 'UNKNOWN' | 'READY' | 'ERROR';
 interface DiagnosticResult {
@@ -132,6 +133,7 @@ export default function Diagnostics() {
   }, [runTests]);
 
   return (
+    <RequireAuth>
     <div style={{ padding: 24 }}>
       <h2 style={{ color: '#E0A83C', marginBottom: 8 }}>تشخيص منظومة يونس السيادية</h2>
       <p style={{ color: '#8A9FB2', marginBottom: 20 }}>
@@ -167,5 +169,6 @@ export default function Diagnostics() {
         />
       </Spin>
     </div>
+    </RequireAuth>
   );
 }

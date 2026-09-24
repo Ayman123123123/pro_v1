@@ -12,6 +12,7 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,12 +24,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.calls.*
 import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.core.UnifiedNetworkManager
+import com.red.sovereign.core.YounesId
 import com.red.sovereign.features.chat.*
+import com.red.sovereign.features.contacts.ContactsScreen
+import com.red.sovereign.groups.GroupViewModel
+import com.red.sovereign.media.AttachmentViewModel
+import com.red.sovereign.media.VoiceMessageViewModel
+import com.red.sovereign.settings.SettingsPage
+import com.red.sovereign.settings.SettingsViewModel
+import com.red.sovereign.settings.YounesSettingsSheet
 import com.red.sovereign.groups.GroupViewModel
 import com.red.sovereign.media.AttachmentViewModel
 import com.red.sovereign.media.VoiceMessageViewModel
@@ -79,6 +93,104 @@ fun ModernRedDashboard(
     var showCreateGroup by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDinstar by remember { mutableStateOf(false) }
+    // ربط حقيقي (من RedDashboard): بحث شامل + جهات اتصال + هدف دردشة معلّق + صفحة إعدادات مستهدفة.
+    var showSearch by remember { mutableStateOf(false) }
+    var showContacts by remember { mutableStateOf(false) }
+    var pendingChatTarget by remember { mutableStateOf<String?>(null) }
+    var settingsInitialPage by remember { mutableStateOf(SettingsPage.ROOT) }
+    val openSettingsAt: (SettingsPage) -> Unit = { page ->
+        settingsInitialPage = page
+        showSettings = true
+    }
+    // حوار البث المباشر (من RedDashboard: عنوان + خاص/عام + كلمة سر).
+    var showLiveCreate by remember { mutableStateOf(false) }
+    var liveTitle by remember { mutableStateOf("") }
+    var liveIsPrivate by remember { mutableStateOf(false) }
+    var livePassword by remember { mutableStateOf("") }
+    // هدف الاتصال المعلق + بوابة الأذونات (من RedDashboard 364-373): لا اتصال بلا RECORD_AUDIO/CAMERA.
+    var pendingDialerTarget by remember { mutableStateOf<String?>(null) }
+    var pendingDialerVideo by remember { mutableStateOf(false) }
+    val settings: SettingsViewModel = viewModel()
+    // مسح الهدف بعد فتح المحادثة حتى لا يُعاد فتحها عند تبديل التبويبات (RedDashboard 333-338).
+    LaunchedEffect(pendingChatTarget, currentSection) {
+        if (pendingChatTarget != null && currentSection == ModernSection.CHATS) {
+            kotlinx.coroutines.delay(600)
+            pendingChatTarget = null
+        }
+    }
+    val dialerCallPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val cameraGranted = !pendingDialerVideo ||
+            grants[Manifest.permission.CAMERA] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val redId = pendingDialerTarget
+        if (audioGranted && cameraGranted && redId != null && YounesId.isValid(redId)) {
+            val callType = if (pendingDialerVideo) CallTypeUnified.ONE_TO_ONE_VIDEO else CallTypeUnified.ONE_TO_ONE_AUDIO
+            UnifiedCallOrchestrator.startCall(
+                context,
+                CallInfo(
+                    callId = "call_${System.currentTimeMillis()}",
+                    type = callType,
+                    peerId = redId,
+                    peerName = redId,
+                    isVideo = pendingDialerVideo
+                )
+            )
+            currentSection = ModernSection.CALLS
+        } else if (redId != null) {
+            android.widget.Toast.makeText(context, "تعذر الاتصال — تحقق من الأذونات والمعرف", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        pendingDialerTarget = null
+    }
+    // بوابة أذونات المؤتمر (صوت+كاميرا) قبل ConferenceService.join — بلا صمت.
+    val conferencePermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val audioOk = grants[Manifest.permission.RECORD_AUDIO] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val camOk = grants[Manifest.permission.CAMERA] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (!audioOk) {
+            android.widget.Toast.makeText(context, "امنح إذن الميكروفون لإنشاء المؤتمر", android.widget.Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        ConferenceService.join(
+            context,
+            "conf-${account.redId}-${System.currentTimeMillis()}",
+            account.redId,
+            camOk,
+            asHost = true,
+            title = "مؤتمر ${account.username}"
+        )
+        currentSection = ModernSection.CALLS
+    }
+    // بوابة أذونات البث (كاميرا+ميك) قبل LiveStreamService.start (RedDashboard 710-724).
+    val livePermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val camOk = grants[Manifest.permission.CAMERA] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val micOk = grants[Manifest.permission.RECORD_AUDIO] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (camOk && micOk) {
+            val titleFinal = liveTitle.trim().ifBlank { "بث مباشر ${account.username}" }
+            val pw = if (liveIsPrivate) livePassword.trim().takeIf { it.isNotBlank() } else null
+            if (liveIsPrivate && pw.isNullOrBlank()) {
+                android.widget.Toast.makeText(context, "أدخل كلمة سر للبث الخاص", android.widget.Toast.LENGTH_SHORT).show()
+                return@rememberLauncherForActivityResult
+            }
+            showLiveCreate = false
+            LiveStreamService.start(
+                context,
+                "stream-${account.redId}-${System.currentTimeMillis()}",
+                account.redId,
+                true,
+                titleFinal,
+                liveIsPrivate,
+                pw
+            )
+            livePassword = ""
+        } else {
+            android.widget.Toast.makeText(context, "البث يحتاج الكاميرا والميكروفون", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
     
     // ViewModels - الأصلية التي تعمل 100% بدون تكرار - أحدث وأفضل
     val groups: GroupViewModel = viewModel()
@@ -123,10 +235,17 @@ fun ModernRedDashboard(
         floatingActionButton = {
             ModernFabForSection(
                 section = currentSection,
-                onChatClick = { /* فتح جهات الاتصال */ },
+                // RedDashboard: زر الدردشة يفتح جهات الاتصال الحقيقية (CONTACTS).
+                onChatClick = { showContacts = true },
                 onGroupClick = { showCreateGroup = true },
                 onCallClick = { showCallDialer = true },
-                onExploreClick = { /* إنشاء محتوى */ }
+                // إنشاء محتوى حقيقي: حوار البث المباشر (بدل no-op).
+                onExploreClick = {
+                    liveTitle = ""
+                    liveIsPrivate = false
+                    livePassword = ""
+                    showLiveCreate = true
+                }
             )
         }
     ) { padding ->
@@ -145,8 +264,9 @@ fun ModernRedDashboard(
                     networkQuality = networkInfo?.quality?.name ?: "UNKNOWN",
                     isLan = networkInfo?.type?.name?.contains("WIFI") == true,
                     isOnline = isOnline,
-                    onSettings = { showSettings = true },
-                    onSearch = { /* بحث شامل */ }
+                    onSettings = { settingsInitialPage = SettingsPage.ROOT; showSettings = true },
+                    // RedDashboard: البحث يفتح RedGlobalSearch الحقيقية (SEARCH).
+                    onSearch = { showSearch = true }
                 )
                 
                 // محتوى التبويب الحالي
@@ -163,7 +283,8 @@ fun ModernRedDashboard(
                             directory = directory,
                             attachments = attachments,
                             voiceMessages = voiceMessages,
-                            deepLinkSender = deepLinkSender,
+                            // RedDashboard 610: الهدف المعلق أولاً ثم deep link الإشعار.
+                            deepLinkSender = pendingChatTarget ?: deepLinkSender,
                             deepLinkConversation = deepLinkConversation
                         )
                         ModernSection.GROUPS -> ModernGroupsScreen(
@@ -182,12 +303,24 @@ fun ModernRedDashboard(
                         )
                         ModernSection.EXPLORE -> ModernExploreScreen(
                             account = account,
-                            onBack = { currentSection = ModernSection.CHATS }
+                            onBack = { currentSection = ModernSection.CHATS },
+                            onStartLive = {
+                                liveTitle = ""
+                                liveIsPrivate = false
+                                livePassword = ""
+                                showLiveCreate = true
+                            },
+                            onCreateConference = {
+                                conferencePermissions.launch(
+                                    arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
+                                )
+                            }
                         )
                         ModernSection.MORE -> ModernMoreScreen(
                             account = account,
                             onDinstar = { showDinstar = true },
-                            onSettings = { showSettings = true }
+                            onSettings = { settingsInitialPage = SettingsPage.ROOT; showSettings = true },
+                            onOpenSettingsPage = openSettingsAt
                         )
                     }
                 }
@@ -195,24 +328,61 @@ fun ModernRedDashboard(
         }
     }
     
-    // Overlays للمكالمات - تعمل على كل الشاشات
+    // Overlays للمكالمات — الموحدة الحقيقية (1:1 + جماعية + مؤتمر + بث) فوق كل التبويبات (RedDashboard 549/658).
     UnifiedCallOverlaysModern()
+    UnifiedCallOverlays()
+
+    // بحث شامل حقيقي (RedGlobalSearch) — كان no-op.
+    if (showSearch) {
+        RedGlobalSearch(
+            onBack = { showSearch = false },
+            onOpenConversation = { redId ->
+                pendingChatTarget = redId
+                showSearch = false
+                currentSection = ModernSection.CHATS
+            }
+        )
+    }
+
+    // جهات اتصال حقيقية (ContactsScreen): دردشة تفتح المحادثة، اتصال يبدأ المكالمة (RedDashboard 545).
+    if (showContacts) {
+        ContactsScreen(
+            directory = directory,
+            onBack = { showContacts = false },
+            onChat = { person ->
+                pendingChatTarget = person.redId
+                showContacts = false
+                currentSection = ModernSection.CHATS
+            },
+            onCall = { person, video ->
+                showContacts = false
+                currentSection = ModernSection.CALLS
+                YounesCallService.start(context, person.redId, video)
+            },
+            onCreateGroup = { showContacts = false; showCreateGroup = true }
+        )
+    }
     
     // حوارات
     if (showCallDialer) {
         ModernCallDialerDialog(
             onDismiss = { showCallDialer = false },
-            onCall = { redId, isVideo ->
-                showCallDialer = false
-                val callType = if (isVideo) CallTypeUnified.ONE_TO_ONE_VIDEO else CallTypeUnified.ONE_TO_ONE_AUDIO
-                val info = CallInfo(
-                    callId = "call_${System.currentTimeMillis()}",
-                    type = callType,
-                    peerId = redId,
-                    peerName = redId,
-                    isVideo = isVideo
-                )
-                UnifiedCallOrchestrator.startCall(context, info)
+            // بوابة RedDashboard: تطبيع + تحقق + أذونات قبل بدء المكالمة.
+            onCall = { redIdRaw, isVideo ->
+                val redId = YounesId.normalizeInput(redIdRaw)
+                if (!YounesId.isValid(redId)) {
+                    android.widget.Toast.makeText(context, YounesId.ERROR_MESSAGE, android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    showCallDialer = false
+                    pendingDialerTarget = redId
+                    pendingDialerVideo = isVideo
+                    dialerCallPermissions.launch(
+                        buildList {
+                            add(Manifest.permission.RECORD_AUDIO)
+                            if (isVideo) add(Manifest.permission.CAMERA)
+                        }.toTypedArray()
+                    )
+                }
             }
         )
     }
@@ -230,16 +400,75 @@ fun ModernRedDashboard(
         )
     }
     
+    // إعدادات حقيقية (YounesSettingsSheet) — كانت طبقة معتمة بلا محتوى (RedDashboard 657).
     if (showSettings) {
-        // إعدادات حديثة
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable { showSettings = false }
-        ) {
-            // سيتم تنفيذ شاشة الإعدادات الحديثة
-        }
+        YounesSettingsSheet(
+            account,
+            settings,
+            authViewModel,
+            authViewModel::logout,
+            { showSettings = false; settingsInitialPage = SettingsPage.ROOT },
+            initialPage = settingsInitialPage
+        )
+    }
+
+    // حوار إنشاء البث المباشر — خاص بكلمة سر أو عام (RedDashboard 709-763).
+    if (showLiveCreate) {
+        AlertDialog(
+            onDismissRequest = { showLiveCreate = false; livePassword = "" },
+            title = { Text("بدء بث مباشر 🔴", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = liveTitle,
+                        onValueChange = { liveTitle = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("عنوان البث (اختياري)") },
+                        singleLine = true
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            if (liveIsPrivate) Icons.Default.Lock else Icons.Default.Public,
+                            null,
+                            tint = if (liveIsPrivate) Color(0xFFE53935) else YounesPrimary
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (liveIsPrivate) "بث خاص بكلمة سر" else "بث عام (بدون كلمة سر)",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                if (liveIsPrivate) "المشاهدون يحتاجون كلمة السر" else "يمكن للجميع المشاهدة",
+                                fontSize = 11.sp,
+                                color = YounesMuted
+                            )
+                        }
+                        Switch(checked = liveIsPrivate, onCheckedChange = { liveIsPrivate = it })
+                    }
+                    if (liveIsPrivate) {
+                        OutlinedTextField(
+                            value = livePassword,
+                            onValueChange = { livePassword = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("كلمة السر") },
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { livePermissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }) {
+                    Text("بدء البث")
+                }
+            },
+            dismissButton = { TextButton({ showLiveCreate = false; livePassword = "" }) { Text("إلغاء") } }
+        )
     }
 }
 
@@ -398,33 +627,73 @@ fun ModernFabForSection(
 @Composable
 fun UnifiedCallOverlaysModern() {
     val callState by UnifiedCallOrchestrator.state.collectAsState()
-    
+    val context = LocalContext.current
+    // بوابة قبول المكالمة الواردة (من CallOverlay.kt 108-121): صوت إجباري، كاميرا تُستكمل صوتياً عند الرفض.
+    var pendingAcceptId by remember { mutableStateOf<String?>(null) }
+    var pendingAcceptVideo by remember { mutableStateOf(false) }
+    val acceptPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val audioOk = grants[Manifest.permission.RECORD_AUDIO] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (!audioOk) {
+            android.widget.Toast.makeText(context, "امنح إذن الميكروفون لاستقبال المكالمات", android.widget.Toast.LENGTH_SHORT).show()
+            pendingAcceptId = null
+            return@rememberLauncherForActivityResult
+        }
+        val camOk = !pendingAcceptVideo ||
+            grants[Manifest.permission.CAMERA] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (pendingAcceptVideo && !camOk) {
+            android.widget.Toast.makeText(context, "الكاميرا غير متاحة — ستستمر المكالمة صوتياً", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        pendingAcceptId?.let { UnifiedCallOrchestrator.acceptCall(context, it) }
+        pendingAcceptId = null
+    }
+    fun requestAccept(callId: String, isVideo: Boolean) {
+        pendingAcceptId = callId
+        pendingAcceptVideo = isVideo
+        val audioOk = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val camOk = !isVideo ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (audioOk && camOk) {
+            UnifiedCallOrchestrator.acceptCall(context, callId)
+            pendingAcceptId = null
+        } else {
+            acceptPermissions.launch(
+                buildList {
+                    add(Manifest.permission.RECORD_AUDIO)
+                    if (isVideo) add(Manifest.permission.CAMERA)
+                }.toTypedArray()
+            )
+        }
+    }
+
     when (val state = callState) {
         is CallStateUnified.Outgoing -> {
-            // عرض شاشة اتصال صادر
+            // شاشة اتصال صادر — الإنهاء يلغي عبر المنسق (يرسل END وينظف).
             CallOverlayModern(
                 peerName = state.info.peerName,
                 peerId = state.info.peerId,
                 callType = state.info.type,
                 ringingState = state.ringingState,
                 isOutgoing = true,
-                onEnd = { /* إنهاء */ }
+                onEnd = { UnifiedCallOrchestrator.endCall(context, CallEndReason.CANCELLED) }
             )
         }
         is CallStateUnified.Incoming -> {
-            // عرض شاشة اتصال وارد مع رنين
+            // شاشة اتصال وارد — قبول حقيقي عبر المنسق ← YounesCallService، رفض = REJECTED.
+            val isVideo = state.info.isVideo || state.info.type == CallTypeUnified.ONE_TO_ONE_VIDEO
             CallOverlayModern(
                 peerName = state.info.peerName,
                 peerId = state.info.peerId,
                 callType = state.info.type,
                 ringingState = RingingState.RINGING,
                 isOutgoing = false,
-                onAccept = { /* قبول */ },
-                onDecline = { /* رفض */ }
+                onAccept = { requestAccept(state.info.callId, isVideo) },
+                onDecline = { UnifiedCallOrchestrator.endCall(context, CallEndReason.REJECTED) }
             )
         }
         is CallStateUnified.Active -> {
-            // عرض شاشة مكالمة نشطة
+            // شاشة مكالمة نشطة — تحكم حي (كتم/سماعة/تعليق/إنهاء) عبر YounesCallService.
             ActiveCallScreenModern(
                 info = state.info,
                 durationMs = state.durationMs,
@@ -525,17 +794,79 @@ fun ActiveCallScreenModern(
     durationMs: Long,
     isHeld: Boolean
 ) {
-    // شاشة مكالمة نشطة حديثة
+    // شاشة مكالمة نشطة بتحكم حي (من YounesCallOverlay/ActiveControls): كتم/سماعة/تعليق/إنهاء + مؤقت.
+    val context = LocalContext.current
+    var micOn by rememberSaveable { mutableStateOf(true) }
+    var elapsedSec by remember(info.callId) { mutableStateOf(durationMs / 1000L) }
+    LaunchedEffect(info.callId, info.startedAt) {
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            elapsedSec = ((System.currentTimeMillis() - info.startedAt) / 1000L).coerceAtLeast(0L)
+        }
+    }
+    val mm = "%02d:%02d".format(elapsedSec / 60, elapsedSec % 60)
     Box(
         Modifier
             .fillMaxSize()
             .background(YounesMidnight),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("مكالمة نشطة: ${info.peerName}", color = Color.White, fontSize = 18.sp)
-            Text("المدة: ${durationMs / 1000}s", color = YounesMuted)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Text("مكالمة نشطة: ${info.peerName.ifBlank { info.peerId }}", color = Color.White, fontSize = 18.sp)
+            Text("المدة: $mm", color = YounesMuted)
             if (isHeld) Text("معلقة", color = YounesAccent)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // كتم الميكروفون — يعكس اختيار المستخدم على الخدمة.
+                IconButton(onClick = {
+                    micOn = !micOn
+                    YounesCallService.action(context, YounesCallService.ACTION_MIC, micOn)
+                }) {
+                    Icon(
+                        if (micOn) Icons.Default.Mic else Icons.Default.MicOff,
+                        "كتم",
+                        tint = if (micOn) Color.White else Color(0xFFE53935)
+                    )
+                }
+                // السماعة.
+                IconButton(onClick = {
+                    YounesCallService.action(context, YounesCallService.ACTION_SPEAKER, !CallRuntime.speaker)
+                }) {
+                    Icon(
+                        Icons.Default.VolumeUp,
+                        "سماعة",
+                        tint = if (CallRuntime.speaker) YounesPrimary else Color.White
+                    )
+                }
+                // تعليق/استئناف — يحافظ على الاتصال حياً.
+                IconButton(onClick = {
+                    YounesCallService.action(
+                        context,
+                        if (isHeld) YounesCallService.ACTION_RESUME else YounesCallService.ACTION_HOLD
+                    )
+                }) {
+                    Icon(
+                        if (isHeld) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        if (isHeld) "استئناف" else "تعليق",
+                        tint = Color.White
+                    )
+                }
+                // إنهاء — عبر المنسق (END + تنظيف + Ended).
+                Button(
+                    onClick = { UnifiedCallOrchestrator.endCall(context, CallEndReason.COMPLETED) },
+                    colors = ButtonDefaults.buttonColors(containerColor = YounesRose)
+                ) {
+                    Icon(Icons.Default.CallEnd, "إنهاء")
+                    Spacer(Modifier.width(8.dp))
+                    Text("إنهاء")
+                }
+            }
         }
     }
 }
@@ -620,7 +951,9 @@ fun ModernCallsScreen(
 @Composable
 fun ModernExploreScreen(
     account: AuthState.Authenticated,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onStartLive: () -> Unit,
+    onCreateConference: () -> Unit
 ) {
     // استكشاف: قنوات ومجتمعات وبث مباشر - بدون شاشة سوداء
     // LiveStreamService موجود ومصلح مع cameraError + retry + isAudioOnly
@@ -654,7 +987,7 @@ fun ModernExploreScreen(
                 }
                 Text("بث مباشر مع جمهور غير محدود - بدون شاشة سوداء، EGL مضمون", fontSize = 12.sp, color = YounesMuted)
                 Button(
-                    onClick = { /* بدء بث */ },
+                    onClick = onStartLive,
                     colors = ButtonDefaults.buttonColors(containerColor = YounesRose),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -685,7 +1018,7 @@ fun ModernExploreScreen(
                 }
                 Text("100 مشارك فيديو vs تويتر 13 صوت فقط + غرف فرعية + تسجيل + مشاركة شاشة - شغالة 100%", fontSize = 12.sp, color = YounesMuted)
                 Button(
-                    onClick = { /* إنشاء مؤتمر */ },
+                    onClick = onCreateConference,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -730,7 +1063,8 @@ fun ModernExploreScreen(
 fun ModernMoreScreen(
     account: AuthState.Authenticated,
     onDinstar: () -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onOpenSettingsPage: (SettingsPage) -> Unit
 ) {
     // المزيد: كل الخدمات السيادية - ألوان مقروءة AAA + دعم كل الهواتف
     LazyColumn(
@@ -745,13 +1079,14 @@ fun ModernMoreScreen(
         }
         
         item {
-            // بطاقات الخدمات - ألوان عالية التباين AAA مقروءة
+            // بطاقات الخدمات - كل بند يفتح وجهته الحية (RedDashboard/MoreScreen + DeviceSettingsScreen):
+            // الأجهزة←صفحة DEVICES (الجلسات الحية)، التخزين←DATA، المساعدة←ABOUT — بلا شارات ميتة.
             val services = listOf(
                 Triple("الهاتف اليمني 🇾🇪", "اتصال بأرقام يمنية عبر DINSTAR", Icons.Default.SimCard) to onDinstar,
                 Triple("الإعدادات", "الخصوصية والأمان والمظهر", Icons.Default.Settings) to onSettings,
-                Triple("الأجهزة المرتبطة", "إدارة الأجهزة", Icons.Default.Devices) to {},
-                Triple("التخزين", "إدارة التخزين والكاش", Icons.Default.Folder) to {},
-                Triple("المساعدة", "الدعم الفني", Icons.Default.Help) to {}
+                Triple("الأجهزة المرتبطة", "إدارة الجلسات النشطة", Icons.Default.Devices) to { onOpenSettingsPage(SettingsPage.DEVICES) },
+                Triple("التخزين", "الكاش والبيانات والتنزيلات", Icons.Default.Folder) to { onOpenSettingsPage(SettingsPage.DATA) },
+                Triple("المساعدة", "الدعم وحول التطبيق", Icons.Default.Help) to { onOpenSettingsPage(SettingsPage.ABOUT) }
             )
             
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -853,11 +1188,15 @@ fun ModernCallDialerDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = redId,
-                    onValueChange = { redId = it },
+                    onValueChange = { redId = YounesId.normalizeInput(it) },
                     label = { Text("معرف يونس RED ID") },
-                    placeholder = { Text("مثال: 10001") },
-                    modifier = Modifier.fillMaxWidth()
+                    placeholder = { Text(YounesId.PLACEHOLDER) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
+                if (redId.isNotBlank() && !YounesId.isValid(redId)) {
+                    Text(YounesId.ERROR_MESSAGE, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = isVideo, onCheckedChange = { isVideo = it })
                     Text("مكالمة فيديو")
@@ -867,7 +1206,7 @@ fun ModernCallDialerDialog(
         confirmButton = {
             Button(
                 onClick = { onCall(redId, isVideo) },
-                enabled = redId.isNotBlank()
+                enabled = YounesId.isValid(redId)
             ) {
                 Text(if (isVideo) "فيديو" else "صوتي")
             }

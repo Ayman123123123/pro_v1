@@ -58,6 +58,7 @@ import { cn } from '@/utils/cn';
 import { useSocket } from '@/components/providers/SocketProvider';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RequireAuth, DemoBanner, EmptyState, ErrorState, LoadingState } from './_shared';
 
 interface MetricCardProps {
   title: string;
@@ -100,9 +101,9 @@ function MetricCard({ title, value, change, icon, iconColor, trend = 'neutral', 
             <p className="text-3xl font-bold tracking-tight">{value}</p>
             {change !== undefined && (
               <div className={cn('flex items-center gap-1 text-sm', trendColor)}>
-                {TrendIcon && <TrendIcon className="h-4 w-4" />}
+                {TrendIcon && <TrendIcon className="h-4 w-4" aria-hidden="true" />}
                 <span>{change >= 0 ? '+' : ''}{change.toFixed(1)}%</span>
-                <span className="text-muted-foreground">vs last period</span>
+                <span className="text-foreground/70">{t('dashboard.vsLastPeriod')}</span>
               </div>
             )}
           </div>
@@ -154,35 +155,39 @@ export function Dashboard() {
   const [realTimeMetrics, setRealTimeMetrics] = useState<Partial<ChartDataPoint>>({});
 
   // Fetch dashboard metrics
-  const { data: metrics, isLoading: metricsLoading } = useQuery({
+  const { data: metrics, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useQuery({
     queryKey: ['dashboard', 'metrics', timeRange],
     queryFn: () => fetchDashboardMetrics(timeRange),
     staleTime: 10_000,
     refetchInterval: 30_000,
+    retry: 1,
   });
 
   // Fetch chart data
-  const { data: chartData, isLoading: chartLoading } = useQuery({
+  const { data: chartData, isLoading: chartLoading, isError: chartError } = useQuery({
     queryKey: ['dashboard', 'charts', timeRange],
     queryFn: () => fetchChartData(timeRange),
     staleTime: 15_000,
     refetchInterval: 60_000,
+    retry: 1,
   });
 
   // Fetch system health
-  const { data: systemHealth, isLoading: healthLoading } = useQuery({
+  const { data: systemHealth, isLoading: healthLoading, isError: healthError } = useQuery({
     queryKey: ['dashboard', 'system-health'],
     queryFn: fetchSystemHealth,
     staleTime: 30_000,
     refetchInterval: 30_000,
+    retry: 1,
   });
 
   // Fetch alerts
-  const { data: alerts, isLoading: alertsLoading } = useQuery({
+  const { data: alerts, isLoading: alertsLoading, isError: alertsError } = useQuery({
     queryKey: ['dashboard', 'alerts'],
     queryFn: fetchAlerts,
     staleTime: 10_000,
     refetchInterval: 15_000,
+    retry: 1,
   });
 
   // Real-time updates via WebSocket
@@ -242,9 +247,14 @@ export function Dashboard() {
   const chartDataPoints = chartData || [];
   const healthData = systemHealth || [];
   const alertData = alerts || [];
+  // ✅ 2026-09-24: بدل الأصفار الصامتة — أي فشل جلب = لافتة تجريبية + حالات صريحة
+  const isDemo = metricsError && !metricsLoading;
+  const fmt = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—');
 
   return (
+    <RequireAuth>
     <div className="space-y-6">
+      {isDemo && <DemoBanner />}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -274,16 +284,19 @@ export function Dashboard() {
       {/* Connection Status */}
       <div className="flex items-center gap-2 text-sm">
         <span className={cn('h-2 w-2 rounded-full', isConnected ? 'bg-green-500' : 'bg-red-500')} />
-        <span className="text-muted-foreground">
-          {isConnected ? t('dashboard.realtime') : 'Disconnected'}
+        <span className="text-foreground/70">
+          {isConnected ? t('dashboard.realtime') : t('dashboard.disconnected')}
         </span>
       </div>
 
       {/* Metric Cards */}
+      {metricsError && !metricsLoading ? (
+        <ErrorState message={t('dashboard.loadError')} onRetry={() => refetchMetrics()} />
+      ) : (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title={t('dashboard.metrics.totalUsers')}
-          value={metrics?.totalUsers?.toLocaleString() || '0'}
+          value={fmt(metrics?.totalUsers)}
           change={metrics?.usersChange}
           icon={<Users className="h-6 w-6 text-white" />}
           iconColor="bg-blue-500"
@@ -292,7 +305,7 @@ export function Dashboard() {
         />
         <MetricCard
           title={t('dashboard.metrics.activeUsers')}
-          value={metrics?.activeUsers?.toLocaleString() || '0'}
+          value={fmt(metrics?.activeUsers)}
           change={metrics?.activeUsersChange}
           icon={<Activity className="h-6 w-6 text-white" />}
           iconColor="bg-green-500"
@@ -301,7 +314,7 @@ export function Dashboard() {
         />
         <MetricCard
           title={t('dashboard.metrics.messages')}
-          value={metrics?.messages?.toLocaleString() || '0'}
+          value={fmt(metrics?.messages)}
           change={metrics?.messagesChange}
           icon={<MessageSquare className="h-6 w-6 text-white" />}
           iconColor="bg-purple-500"
@@ -310,7 +323,7 @@ export function Dashboard() {
         />
         <MetricCard
           title={t('dashboard.metrics.calls')}
-          value={metrics?.calls?.toLocaleString() || '0'}
+          value={fmt(metrics?.calls)}
           change={metrics?.callsChange}
           icon={<Phone className="h-6 w-6 text-white" />}
           iconColor="bg-orange-500"
@@ -319,7 +332,7 @@ export function Dashboard() {
         />
         <MetricCard
           title={t('dashboard.metrics.channels')}
-          value={metrics?.channels?.toLocaleString() || '0'}
+          value={fmt(metrics?.channels)}
           change={metrics?.channelsChange}
           icon={<Hash className="h-6 w-6 text-white" />}
           iconColor="bg-indigo-500"
@@ -328,7 +341,7 @@ export function Dashboard() {
         />
         <MetricCard
           title={t('dashboard.metrics.revenue')}
-          value={`$${(metrics?.revenue || 0).toLocaleString()}`}
+          value={metrics?.revenue != null && Number.isFinite(metrics.revenue) ? `$${metrics.revenue.toLocaleString()}` : '—'}
           change={metrics?.revenueChange}
           icon={<DollarSign className="h-6 w-6 text-white" />}
           iconColor="bg-emerald-500"
@@ -337,7 +350,7 @@ export function Dashboard() {
         />
         <MetricCard
           title={t('dashboard.metrics.mau')}
-          value={metrics?.mau?.toLocaleString() || '0'}
+          value={fmt(metrics?.mau)}
           change={metrics?.mauChange}
           icon={<Users className="h-6 w-6 text-white" />}
           iconColor="bg-cyan-500"
@@ -346,7 +359,7 @@ export function Dashboard() {
         />
         <MetricCard
           title={t('dashboard.metrics.dau')}
-          value={metrics?.dau?.toLocaleString() || '0'}
+          value={fmt(metrics?.dau)}
           change={metrics?.dauChange}
           icon={<Activity className="h-6 w-6 text-white" />}
           iconColor="bg-pink-500"
@@ -354,8 +367,14 @@ export function Dashboard() {
           loading={metricsLoading}
         />
       </div>
+      )}
 
       {/* Charts Row */}
+      {chartLoading ? (
+        <LoadingState />
+      ) : chartError || chartDataPoints.length === 0 ? (
+        chartError ? <ErrorState message={t('dashboard.loadError')} /> : <EmptyState message={t('common.noData')} />
+      ) : (
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Users Chart */}
         <Card>
@@ -397,7 +416,7 @@ export function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>{t('dashboard.charts.messagesOverTime')}</CardTitle>
-            <CardDescription>Messages and calls activity</CardDescription>
+            <CardDescription>{t('dashboard.messagesCallsActivity')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -422,7 +441,7 @@ export function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>{t('dashboard.charts.revenueOverTime')}</CardTitle>
-            <CardDescription>Revenue breakdown by source</CardDescription>
+            <CardDescription>{t('dashboard.revenueBreakdown')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -461,7 +480,7 @@ export function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Retention & Engagement</CardTitle>
-            <CardDescription>DAU/MAU ratio and retention metrics</CardDescription>
+            <CardDescription>{t('dashboard.retentionDesc')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -481,6 +500,7 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* System Health & Alerts */}
       <div className="grid gap-6 lg:grid-cols-3">
@@ -494,6 +514,11 @@ export function Dashboard() {
             <CardDescription>Real-time system health monitoring</CardDescription>
           </CardHeader>
           <CardContent>
+            {healthLoading ? (
+              <LoadingState />
+            ) : healthError || healthData.length === 0 ? (
+              healthError ? <ErrorState message={t('dashboard.loadError')} /> : <EmptyState message={t('common.noData')} />
+            ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {healthData.map((health) => (
                 <div
@@ -565,14 +590,8 @@ export function Dashboard() {
                   </div>
                 </div>
               ))}
-              {healthLoading && (
-                <div className="col-span-full grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <Skeleton key={i} className="h-32" />
-                  ))}
-                </div>
-              )}
             </div>
+            )}
           </CardContent>
         </Card>
 
@@ -587,10 +606,12 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {alertData.length === 0 && !alertsLoading ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <CheckCircle className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                  <p>No active alerts</p>
+              {alertsError && !alertsLoading ? (
+                <ErrorState message={t('dashboard.loadError')} />
+              ) : alertData.length === 0 && !alertsLoading ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="h-12 w-12 mx-auto mb-2 text-green-600" aria-hidden="true" />
+                  <p className="font-medium text-foreground">{t('dashboard.noAlerts')}</p>
                 </div>
               ) : (
                 alertData.map((alert) => (
@@ -620,8 +641,8 @@ export function Dashboard() {
                         </p>
                       </div>
                       {!alert.acknowledged && (
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                          <CheckCircle className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={`Acknowledge alert from ${alert.component}`}>
+                          <CheckCircle className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       )}
                     </div>
@@ -640,6 +661,7 @@ export function Dashboard() {
         </Card>
       </div>
     </div>
+    </RequireAuth>
   );
 }
 

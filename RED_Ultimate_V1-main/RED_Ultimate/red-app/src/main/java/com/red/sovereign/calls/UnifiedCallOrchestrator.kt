@@ -224,15 +224,29 @@ object UnifiedCallOrchestrator {
     fun acceptCall(context: Context, callId: String) {
         when (val current = _state.value) {
             is CallStateUnified.Incoming -> {
+                if (current.info.callId != callId) return
+                val isVideo = current.info.isVideo || current.info.type == CallTypeUnified.ONE_TO_ONE_VIDEO ||
+                    current.info.type == CallTypeUnified.GROUP_VIDEO || current.info.type == CallTypeUnified.CONFERENCE
                 when (current.info.type) {
                     CallTypeUnified.ONE_TO_ONE_AUDIO, CallTypeUnified.ONE_TO_ONE_VIDEO -> {
-                        YounesCallService.accept(context, callId)
+                        // إصلاح: وسائط مسماة + علم الفيديو (كان تمرير callId موضعياً لا يُترجم).
+                        YounesCallService.accept(context, isVideo = isVideo, callId = callId)
                     }
                     CallTypeUnified.GROUP_AUDIO, CallTypeUnified.GROUP_VIDEO -> {
-                        // GroupCallService.accept
+                        GroupCallService.accept(context, current.info.callId, current.info.peerId, isVideo)
                     }
-                    else -> {}
+                    CallTypeUnified.CONFERENCE, CallTypeUnified.SPACE_AUDIO -> {
+                        ConferenceService.accept(context, current.info.callId, current.info.peerId, isVideo)
+                    }
+                    CallTypeUnified.LIVE_STREAM -> {
+                        LiveStreamService.watch(context, current.info.callId, current.info.peerId)
+                    }
+                    // RED_YEMENI عبر AuthViewModel.dialPstn وLAN_P2P عبر LanCallManager — بلا قبول من هنا.
+                    else -> return
                 }
+                // انتقال متفائل Incoming→Active حتى تكتمل دورة الزر (اضغط→حالة→نتيجة)
+                // حتى قبل نداء WebRTC الراجع؛ onCallConnected يعيد التثبيت وهو idempotent.
+                _state.value = CallStateUnified.Active(current.info)
             }
             else -> {}
         }

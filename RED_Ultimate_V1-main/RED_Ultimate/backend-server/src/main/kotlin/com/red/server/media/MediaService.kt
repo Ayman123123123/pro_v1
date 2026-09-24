@@ -15,6 +15,8 @@ import org.springframework.web.multipart.MultipartFile
 import java.awt.image.BufferedImage
 import java.io.File
 import java.io.OutputStream
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 @Service
@@ -194,19 +196,66 @@ class MediaService(
     }
 
     fun deleteOrphans(referencedKeys: Set<String>, dryRun: Boolean = true): List<String> {
+        return deleteOrphans(referencedKeys, dryRun, Duration.ofDays(DEFAULT_ORPHAN_GRACE_DAYS))
+    }
+
+    /**
+     * 🧹 حذف المرشّحين الأيتام مع حماية fail-closed:
+     * - dryRun=true (الافتراضي الآمن): معاينة فقط — يُسجَّل المرشّحون ولا يُحذف شيء،
+     *   وتُعاد قائمة المرشّحين للمراجعة.
+     * - فترة سماح: أي كائن أحدث من [gracePeriod] (رفع جارٍ أو شظايا .partN أو
+     *   وسائط لم تُربط مراجعها بعد) يُحمى ولا يُحذف.
+     * - عمر مجهول (فشل stat): يُحمى ولا يُحذف أبدًا — الشكّ لصالح البقاء.
+     * - dryRun=false: يُحذف فقط المرشّحون القدامى ذوو العمر المؤكد، وتُعاد
+     *   قائمة المحذوف فعلًا.
+     */
+    fun deleteOrphans(
+        referencedKeys: Set<String>,
+        dryRun: Boolean = true,
+        gracePeriod: Duration
+    ): List<String> {
         val all = listAllKeys()
         val orphans = findOrphanKeys(all, referencedKeys)
-        if (!dryRun) {
-            orphans.forEach { key ->
-                try {
-                    minio.removeObject(io.minio.RemoveObjectArgs.builder().bucket(bucket).`object`(key).build())
-                } catch (e: Exception) {
-                    log.warn("Failed removing orphan key {}: {}", key, e.message)
-                }
+        val now = Instant.now()
+        val deletable = mutableListOf<String>()
+        var freshKept = 0
+        var unknownKept = 0
+        orphans.forEach { key ->
+            val modified = objectLastModified(key)
+            when {
+                modified == null -> unknownKept++ // fail-closed: العمر المجهول = حماية
+                Duration.between(modified, now) < gracePeriod -> freshKept++
+                else -> deletable += key
             }
         }
-        return orphans
+        log.warn(
+            "Orphan preview: {} deletable candidates ({} orphans total, {} fresh<{}d kept, {} unknown-age kept). First 10: {}",
+            deletable.size, orphans.size, freshKept, gracePeriod.toDays(), unknownKept, deletable.take(10)
+        )
+        if (dryRun) {
+            log.warn("DRY-RUN — no objects deleted ({} candidates held for review)", deletable.size)
+            return deletable
+        }
+        val deleted = mutableListOf<String>()
+        deletable.forEach { key ->
+            try {
+                minio.removeObject(io.minio.RemoveObjectArgs.builder().bucket(bucket).`object`(key).build())
+                deleted += key
+            } catch (e: Exception) {
+                log.warn("Failed removing orphan key {}: {}", key, e.message)
+            }
+        }
+        return deleted
     }
+
+    /**
+     * آخر تعديل للكائن عبر stat — null عند أي فشل (كائن مفقود/خطأ شبكة).
+     * النوع المُعاد من MinIO (ZonedDateTime) لا يُذكَر صراحةً عمدًا.
+     */
+    fun objectLastModified(key: String): Instant? = runCatching {
+        minio.statObject(StatObjectArgs.builder().bucket(bucket).`object`(key).build())
+            .lastModified()?.toInstant()
+    }.getOrNull()
 
     fun scheduleOrphanCleanup() {
         // Placeholder for @Scheduled — real logic is in OrphanCleanupScheduler which queries MongoDB
@@ -237,6 +286,8 @@ class MediaService(
 
     companion object {
         const val MAX_SIZE = 100L * 1024 * 1024
+        /** فترة السماح الافتراضية قبل اعتبار كائن يتيم قابلًا للحذف (أيام). */
+        const val DEFAULT_ORPHAN_GRACE_DAYS = 7L
         val ALLOWED = setOf("image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "application/pdf", "application/octet-stream")
         val EXTENSIONS = mapOf("image/jpeg" to "jpg", "image/png" to "png", "image/webp" to "webp", "image/gif" to "gif", "video/mp4" to "mp4", "video/webm" to "webm", "audio/ogg" to "ogg", "audio/mp4" to "m4a", "audio/mpeg" to "mp3", "application/pdf" to "pdf", "application/octet-stream" to "bin")
     }

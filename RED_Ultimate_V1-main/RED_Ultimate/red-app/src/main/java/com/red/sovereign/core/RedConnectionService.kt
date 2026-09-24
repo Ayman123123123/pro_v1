@@ -105,21 +105,43 @@ class RedConnectionService : Service() {
         // Phase-2 reliability: re-drive 1:1 rows stuck in SENDING (process death /
         // offline kill before drainSends). Same UUID is reused so the server
         // dedups on its uuid unique index — at-least-once, never lost.
-        // Group rows are skipped (re-drive needs group JSON, not stored).
+        // Group rows: persisted to disk (group JSON + payload per clientId) so they
+        // survive process death too — QUEUED→SERVER_ACK→DELIVERED→READ, idempotent.
         scope.launch {
+            // 1) أعد تحميل معلقات المجموعات المحفوظة على القرص إلى الطوابير الذاكرية
+            val restoredGroups = runCatching { loadPersistedGroupPendings() }.getOrDefault(0)
+            if (restoredGroups > 0) {
+                android.util.Log.i("RedConnectionService", "restored $restoredGroups persisted group pending(s)")
+            }
             val stuck = runCatching { repository.getUnsentOutgoing() }.getOrDefault(emptyList())
-            if (stuck.isEmpty()) return@launch
+            if (stuck.isEmpty()) {
+                if (restoredGroups > 0 && connected) { drainGroupSends(); drainGroupPayloadSends() } else if (restoredGroups > 0) socket.connect()
+                return@launch
+            }
             var redriven = 0
+            var stuckGroups = 0
             for (row in stuck) {
-                if (isGroupConversation(row.conversationId)) continue
+                if (isGroupConversation(row.conversationId)) {
+                    // له ملف معلق محفوظ؟ أُعيد تحميله أعلاه — لا حاجة لإعادة هنا.
+                    // بلا ملف (نسخة قديمة كانت SENT زوراً): يُبقى SENDING لعامل الاستعادة
+                    // بدل إسقاطه أو تعليمه SENT — لا فقدان بعد الموت.
+                    stuckGroups++
+                    continue
+                }
                 val target = runCatching { repository.getConversation(row.conversationId)?.peerId }
                     .getOrNull()?.takeUnless { it.isBlank() } ?: row.conversationId
                 pendingSends.add(PendingSend(target, row.conversationId, row.messageType, row.encryptedPlaintext, row.id))
                 redriven++
             }
+            if (stuckGroups > 0) {
+                android.util.Log.i("RedConnectionService", "$stuckGroups group message(s) stuck in SENDING — awaiting persisted redrive/recovery (never marked SENT)")
+                runCatching { com.red.sovereign.core.workers.MessageRecoveryWorker.enqueue(applicationContext) }
+            }
             if (redriven > 0) {
                 android.util.Log.i("RedConnectionService", "re-driving $redriven unsent 1:1 message(s)")
                 if (connected) drainSends() else socket.connect()
+            } else if (restoredGroups > 0) {
+                if (connected) { drainGroupSends(); drainGroupPayloadSends() } else socket.connect()
             }
         }
     }
@@ -148,7 +170,9 @@ class RedConnectionService : Service() {
             val clientId = intent.getStringExtra(EXTRA_CLIENT_ID)?.takeIf { it.isNotBlank() }
             if (clientId != null) {
                 val gid = runCatching { json.decodeFromString<Group>(encodedGroup).id }.getOrNull()
-                if (gid != null) persistOptimistic(clientId, gid, tokenStore.redId.orEmpty(), text.toByteArray(Charsets.UTF_8), if (isRich) "RICH_TEXT" else "GROUP_MESSAGE", null)
+                if (gid != null) persistOptimistic(clientId, gid, tokenStore.redId.orEmpty(), text.toByteArray(Charsets.UTF_8), if (isRich) "RICH_TEXT" else "GROUP_MESSAGE", gid)
+                // ثبات المجموعات: group JSON على القرص بذات clientId/uuid (idempotent) للنجاة من موت العملية
+                runCatching { persistGroupTextPending(clientId, encodedGroup, text, isRich) }
             }
             pendingGroupSends.add(PendingGroupSend(encodedGroup, text, isRich, clientId))
             if (connected) drainGroupSends() else socket.connect()
@@ -159,7 +183,8 @@ class RedConnectionService : Service() {
             val clientId = intent.getStringExtra(EXTRA_CLIENT_ID)?.takeIf { it.isNotBlank() }
             if (clientId != null) {
                 val gid = runCatching { json.decodeFromString<Group>(encodedGroup).id }.getOrNull()
-                if (gid != null) persistOptimistic(clientId, gid, tokenStore.redId.orEmpty(), payload, type, null)
+                if (gid != null) persistOptimistic(clientId, gid, tokenStore.redId.orEmpty(), payload, type, gid)
+                runCatching { persistGroupPayloadPending(clientId, encodedGroup, type, payload) }
             }
             pendingGroupPayloadSends.add(PendingGroupPayloadSend(encodedGroup, type, payload, clientId))
             if (connected) drainGroupPayloadSends() else socket.connect()
@@ -231,11 +256,11 @@ class RedConnectionService : Service() {
      */
     private fun persistOptimistic(id: String, conversation: String, senderId: String, payload: ByteArray, type: String, peerId: String?) {
         scope.launch {
-            // Phase-2 reliability: 1:1 rows (peerId != null) start as SENDING so a
-            // process death before drain leaves a re-drivable marker; group rows
-            // keep SENT (group re-drive needs group JSON, not stored — future work).
-            // UI already renders SENDING ticks (LuxuryChatBubble).
-            val initialStatus = if (peerId != null) "SENDING" else "SENT"
+            // دورة الحالات: SENDING (متفائل) → QUEUED (على السلك) → SERVER_ACK → DELIVERED → READ.
+            // الكل (فردي + مجموعات) يبدأ SENDING ليبقى قابلاً لإعادة التشغيل بعد موت العملية؛
+            // SENT الزائف للمجموعات كان يفقدها بلا إعادة — أُلغي.
+            // UI يعرض SENDING/PENDING/QUEUED كـ ◷.
+            val initialStatus = "SENDING"
             runCatching { repository.saveLocalHistory(LocalHistoryEntity(id, conversation, senderId, payload, type, System.currentTimeMillis(), true, status = initialStatus)) }
                 .onFailure { e -> android.util.Log.w("RedConnectionService", "optimistic save failed for $id", e) }
             DecryptedMessageBus.publish(DecryptedMessage(id, conversation, senderId, payload, System.currentTimeMillis(), 0, type = type, outgoing = true))
@@ -244,6 +269,73 @@ class RedConnectionService : Service() {
                     .onFailure { e -> android.util.Log.w("RedConnectionService", "optimistic conversation row failed for $conversation", e) }
             }
         }
+    }
+
+    // ─── ثبات المجموعات على القرص (نفس clientId/uuid → idempotent) ───
+    private fun groupOutboxDir(): java.io.File =
+        java.io.File(applicationContext.filesDir, "red_group_outbox").apply { mkdirs() }
+
+    private fun persistGroupTextPending(clientId: String, groupJson: String, text: String, isRich: Boolean) {
+        try {
+            val f = java.io.File(groupOutboxDir(), "$clientId.json")
+            if (f.exists()) return // idempotent — لا تكرار
+            val obj = org.json.JSONObject()
+                .put("kind", "TEXT")
+                .put("clientId", clientId)
+                .put("groupJson", groupJson)
+                .put("text", text)
+                .put("isRich", isRich)
+            f.writeText(obj.toString())
+        } catch (e: Exception) { android.util.Log.w("RedConnectionService", "persist group text failed $clientId", e) }
+    }
+
+    private fun persistGroupPayloadPending(clientId: String, groupJson: String, type: String, payload: ByteArray) {
+        try {
+            val f = java.io.File(groupOutboxDir(), "$clientId.json")
+            if (f.exists()) return
+            val obj = org.json.JSONObject()
+                .put("kind", "PAYLOAD")
+                .put("clientId", clientId)
+                .put("groupJson", groupJson)
+                .put("type", type)
+                .put("payloadB64", android.util.Base64.encodeToString(payload, android.util.Base64.NO_WRAP))
+            f.writeText(obj.toString())
+        } catch (e: Exception) { android.util.Log.w("RedConnectionService", "persist group payload failed $clientId", e) }
+    }
+
+    private fun removeGroupPending(clientId: String?) {
+        if (clientId.isNullOrBlank()) return
+        runCatching { java.io.File(groupOutboxDir(), "$clientId.json").delete() }
+    }
+
+    /** يعيد تحميل المعلق المحفوظ إلى الطوابير الذاكرية بعد موت العملية — يعيد عدد المستعاد. */
+    private fun loadPersistedGroupPendings(): Int {
+        var n = 0
+        val files = try { groupOutboxDir().listFiles { _, name -> name.endsWith(".json") } } catch (_: Exception) { null } ?: return 0
+        for (f in files) {
+            try {
+                val obj = org.json.JSONObject(f.readText())
+                val clientId = obj.optString("clientId").takeIf { it.isNotBlank() } ?: run { f.delete(); continue }
+                // إن اكتملت (SERVER_ACK) أثناء الموت؟ تُحذف عند ACK — الباقي معلق فعلاً.
+                // تجنب التكرار الذاكري لنفس clientId (idempotent).
+                if (pendingGroupSends.any { it.clientId == clientId } || pendingGroupPayloadSends.any { it.clientId == clientId }) continue
+                when (obj.optString("kind")) {
+                    "TEXT" -> {
+                        val g = obj.optString("groupJson"); val t = obj.optString("text")
+                        if (g.isBlank() || t.isBlank()) { f.delete(); continue }
+                        pendingGroupSends.add(PendingGroupSend(g, t, obj.optBoolean("isRich", false), clientId)); n++
+                    }
+                    else -> {
+                        val g = obj.optString("groupJson"); val t = obj.optString("type", "TEXT")
+                        val b64 = obj.optString("payloadB64")
+                        if (g.isBlank() || b64.isBlank()) { f.delete(); continue }
+                        val bytes = android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
+                        pendingGroupPayloadSends.add(PendingGroupPayloadSend(g, t, bytes, clientId)); n++
+                    }
+                }
+            } catch (_: Exception) { runCatching { f.delete() } }
+        }
+        return n
     }
 
     private fun drainSends() {
@@ -272,6 +364,8 @@ class RedConnectionService : Service() {
                         val outgoingRich = if (pending.isRich) com.red.sovereign.core.RichMessage.decode(pending.text.toByteArray(Charsets.UTF_8)) else null
                         if (outgoingRich?.action == "REACTION" || outgoingRich?.action == "REACTION_REMOVE") {
                             applyOutgoingReactionLocally(outgoingRich, group.id, tokenStore.redId.orEmpty())
+                            // تفاعل مطبق محلياً بلا رسالة — نظف المعلق المحفوظ (لا إعادة بعد الموت له)
+                            runCatching { removeGroupPending(pending.clientId) }
                             return@launch
                         }
                         // AUTO-FIX (message reliability): one message UUID must NOT be reused for every
@@ -287,8 +381,12 @@ class RedConnectionService : Service() {
                             if (firstId == null) firstId = id
                         }
                         firstId?.let {
-                            // عرض متفائل مسبق (clientId) → لا حفظ ولا بث مكرر.
-                            if (pending.clientId != null) return@launch
+                            // عرض متفائل مسبق (clientId) → QUEUED بانتظار SERVER_ACK؛ الملف المحفوظ
+                            // يبقى حتى الإقرار (يُحذف في ACK) — idempotent بذات clientId.
+                            if (pending.clientId != null) {
+                                runCatching { repository.updateMessageStatus(pending.clientId, "QUEUED") }
+                                return@launch
+                            }
                             val bytes = pending.text.toByteArray(Charsets.UTF_8); val timestamp = System.currentTimeMillis()
                             repository.saveLocalHistory(LocalHistoryEntity(it, group.id, tokenStore.redId.orEmpty(), bytes, sendType, timestamp, true))
                             DecryptedMessageBus.publish(DecryptedMessage(it, group.id, tokenStore.redId.orEmpty(), bytes, timestamp, 0, type = sendType, outgoing = true))
@@ -327,7 +425,10 @@ class RedConnectionService : Service() {
                             if (firstId == null) firstId = id
                         }
                         firstId?.let {
-                            if (pending.clientId != null) return@launch
+                            if (pending.clientId != null) {
+                                runCatching { repository.updateMessageStatus(pending.clientId, "QUEUED") }
+                                return@launch
+                            }
                             val timestamp = System.currentTimeMillis()
                             repository.saveLocalHistory(LocalHistoryEntity(it, group.id, tokenStore.redId.orEmpty(), pending.payload, sendType, timestamp, true))
                             DecryptedMessageBus.publish(DecryptedMessage(it, group.id, tokenStore.redId.orEmpty(), pending.payload, timestamp, 0, type = sendType, outgoing = true))
@@ -367,9 +468,9 @@ class RedConnectionService : Service() {
                         // عرض متفائل مسبق (clientId) → يُكتفى بتحديث صف المحادثة.
                         if (pending.clientId != null) {
                             val timestamp = System.currentTimeMillis()
-                            // Phase-2 reliability: optimistic row was SENDING — confirm SENT now
-                            // that bytes hit the socket (ACK/READ still advance it further).
-                            runCatching { repository.updateMessageStatus(pending.clientId, "SENT") }
+                            // الكتابة على السلك = QUEUED فقط — SERVER_ACK/DELIVERED/READ تأتي من ACK الخادم.
+                            // SENT المبكر قبل الإقرار كان يفقد الرسالة ويحذف الملف زوراً — أُلغي.
+                            runCatching { repository.updateMessageStatus(pending.clientId, "QUEUED") }
                             runCatching { repository.onMessageStored(pending.conversation, pending.target, decodeMessagePreview(pending.payload).orEmpty(), timestamp, isIncoming = false) }
                             return@launch
                         }
@@ -639,8 +740,29 @@ class RedConnectionService : Service() {
                 }
             }
             RedProtos.RedRED.SignalCase.ACK -> {
-                repository.updateMessageStatus(envelope.ack.messageId, envelope.ack.status)
-                com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(envelope.ack.messageId, envelope.ack.status))
+                // دورة الحالات QUEUED → SERVER_ACK → DELIVERED → READ — idempotent (UPDATE بنفس المعرف).
+                // SENT القديمة تُطبَّع إلى SERVER_ACK؛ الملف/الـ outbox يُتمَّم فقط هنا لا عند بدء الخدمة.
+                val canonical = when (envelope.ack.status.uppercase()) {
+                    "SENT", "SERVER_ACK", "ACK", "RECEIVED", "" -> "SERVER_ACK"
+                    "DELIVERED" -> "DELIVERED"
+                    "READ", "SEEN" -> "READ"
+                    else -> envelope.ack.status.uppercase()
+                }
+                repository.updateMessageStatus(envelope.ack.messageId, canonical)
+                com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(envelope.ack.messageId, canonical))
+                // إتمام الـ outbox وحذف الوسائط فقط بعد إقرار الخادم — لا قبل.
+                scope.launch {
+                    runCatching {
+                        val outboxDao = com.red.sovereign.core.database.RedDatabase.getInstance(applicationContext).outboxDao()
+                        val row = outboxDao.getById(envelope.ack.messageId)
+                        if (row != null && row.status != com.red.sovereign.core.database.OutboxMessageEntity.STATUS_SENT
+                            && row.status != com.red.sovereign.core.database.OutboxMessageEntity.STATUS_DEAD_LETTER) {
+                            outboxDao.updateStatus(row.id, com.red.sovereign.core.database.OutboxMessageEntity.STATUS_SENT)
+                            row.localMediaPath?.let { p -> runCatching { java.io.File(p).delete() } }
+                        }
+                    }
+                    runCatching { removeGroupPending(envelope.ack.messageId) }
+                }
             }
             RedProtos.RedRED.SignalCase.DELETE -> {
                 val delete = envelope.delete
@@ -931,7 +1053,8 @@ class RedConnectionService : Service() {
                 // حفظ في Room + بث + تحديث المحادثة - كلها في IO
                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                     try {
-                        repo.saveLocalHistory(LocalHistoryEntity(id, conversationId, myId, payload, type, System.currentTimeMillis(), true))
+                        // SENDING (لا SENT): يبقى قابلاً لإعادة التشغيل بعد الموت حتى SERVER_ACK.
+                        repo.saveLocalHistory(LocalHistoryEntity(id, conversationId, myId, payload, type, System.currentTimeMillis(), true, status = "SENDING"))
                         DecryptedMessageBus.publish(DecryptedMessage(id, conversationId, myId, payload, System.currentTimeMillis(), 0, type = type, outgoing = true))
                         if (peerId != null) {
                             val preview = try {
