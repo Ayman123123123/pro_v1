@@ -1,20 +1,16 @@
 package com.red.sovereign.calls
 
 /**
- * SDP media policy for YOUNES - 2026 Legendary
- * 
- * تحسينات 2026:
- * - AV1 SVC للفيديو الجماعي والمؤتمرات (أفضل من VP9/H264)
- * - Opus 48kHz مع FEC + DTX + AI noise suppression
- * - Simulcast 3 طبقات: 180p/360p/720p
- * - Insertable Streams E2EE للفيديو
- * - TWCC + GCC للتحكم في الازدحام
- * - أفضل من واتس وتيليجرام وزنجي وزووم وتيك توك ويوتيوب وتويتر X
+ * SDP codec preferences for the WebRTC engine. These functions reorder offered
+ * payload types and add Opus/RTCP attributes; they do not themselves provide
+ * end-to-end encryption, noise suppression, standard simulcast RIDs or SVC.
+ * Media quality and interoperability require tests on real devices/SFU, not
+ * unsupported comparisons with other products.
  */
 
 enum class CallMediaKind {
     VOICE,          // مكالمة صوتية خاصة - P2P، Opus 32k، RNNoise
-    VIDEO,          // مكالمة فيديو خاصة - P2P، AV1/H264، جودة عالية
+    VIDEO,          // مكالمة فيديو خاصة - P2P، H264 للتوافق مع WebRTC وSFU
     GROUP_VOICE,    // مكالمة مجموعة دردشة صوتية - Mesh/SFU
     GROUP_VIDEO,    // مكالمة مجموعة دردشة فيديو - Mesh/SFU fallback
     CONFERENCE,     // مؤتمر فيديو/صوت - SFU، simulcast، AV1 SVC
@@ -26,8 +22,8 @@ enum class CallMediaKind {
     val wantsSimulcast: Boolean get() = this == CONFERENCE || this == LIVE || this == GROUP_VIDEO
     val stereoAudio: Boolean get() = this == LIVE || this == SPACE
     val preferredVideoCodec: String get() = when (this) {
-        CONFERENCE, LIVE, GROUP_VIDEO -> "AV1" // AV1 SVC 2026 - أفضل من VP9
-        VIDEO -> "AV1" // AV1 للخاص أيضاً مع fallback H264
+        CONFERENCE, LIVE, GROUP_VIDEO -> "AV1" // استعمله فقط إن كان معروضًا من الطرفين؛ SFU الحالي يعرض VP9/H264
+        VIDEO -> "H264" // أولوية متوافقة مع الجهاز، ثم VP9/AV1/VP8 عند غيابه
         else -> "H264"
     }
     val opusBitrateBps: Int get() = when (this) {
@@ -102,10 +98,14 @@ object SdpMediaOptimizer {
     fun preferVideoCodec(sdp: String, codec: String): String = preferCodecOnMedia(sdp, "video", codec)
 
     fun preferVideoCodecWithFallback(sdp: String, preferredCodec: String): String {
-        // ترتيب 2026: AV1 -> VP9 -> H264 -> VP8
+        // Never synthesize an absent codec; private H264 and group AV1 use
+        // different fallbacks according to actual endpoint support.
         val order = when (preferredCodec.uppercase()) {
             "AV1" -> listOf("AV1", "VP9", "H264", "VP8")
             "VP9" -> listOf("VP9", "AV1", "H264", "VP8")
+            // The deployed SFU advertises VP9/H264/VP8, not AV1. For private
+            // calls whose H264 is absent, prefer the compatible VP9 fallback.
+            "H264" -> listOf("H264", "VP9", "VP8", "AV1")
             else -> listOf(preferredCodec, "AV1", "VP9", "H264", "VP8")
         }
         for (codec in order) {

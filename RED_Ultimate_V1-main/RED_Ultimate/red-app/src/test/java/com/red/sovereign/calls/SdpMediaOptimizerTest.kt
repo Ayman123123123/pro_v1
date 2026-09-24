@@ -47,6 +47,14 @@ class SdpMediaOptimizerTest {
         assertTrue(Regex("m=video 9 UDP/TLS/RTP/SAVPF 98").containsMatchIn(sdp.replace("\r", "")))
     }
 
+    @Test fun `one to one video falls back to VP9 without offering an absent H264 codec`() {
+        val noH264 = sample
+            .replace("m=video 9 UDP/TLS/RTP/SAVPF 96 98 100", "m=video 9 UDP/TLS/RTP/SAVPF 96 100 102")
+            .replace("a=rtpmap:98 H264/90000", "a=rtpmap:102 AV1/90000")
+        val sdp = SdpMediaOptimizer.optimize(noH264, CallMediaKind.VIDEO)
+        assertTrue(Regex("m=video 9 UDP/TLS/RTP/SAVPF 100 96 102").containsMatchIn(sdp.replace("\r", "")))
+    }
+
     @Test fun `MOS is excellent on a clean LAN and poor on high loss`() {
         assertTrue(SdpMediaOptimizer.mos(40, 0.2) >= 4.0)
         assertTrue(SdpMediaOptimizer.mos(500, 12.0) < 3.2)
@@ -56,6 +64,7 @@ class SdpMediaOptimizerTest {
     @Test fun `media kind flags match product types`() {
         assertEquals(false, CallMediaKind.VOICE.wantsVideo)
         assertEquals(true, CallMediaKind.VIDEO.wantsVideo)
+        assertEquals("H264", CallMediaKind.VIDEO.preferredVideoCodec)
         assertEquals(false, CallMediaKind.SPACE.wantsVideo)
         assertEquals(true, CallMediaKind.CONFERENCE.wantsSvc)
         assertEquals(true, CallMediaKind.LIVE.stereoAudio)
