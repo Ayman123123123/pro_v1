@@ -156,6 +156,40 @@ ACTION_START -> {
                     updateNotification("تعذر بدء المكالمة: المعرّف غير صالح")
                     return START_STICKY
                 }
+                // حارس الانشغال: لا تسحق مكالمة قائمة — رد مشغول بدل التدمير.
+                if (CallServiceIntegration.hasActiveCall(this)) {
+                    outgoingPending = false
+                    CallRuntime.state = CallUiState.Busy(target, mode)
+                    updateNotification("مشغول — أنهِ المكالمة الحالية أولاً")
+                    mainScope.launch {
+                        runCatching {
+                            android.widget.Toast.makeText(this@YounesCallService, "مشغول — أنهِ المكالمة الحالية أولاً", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    return START_STICKY
+                }
+                // حارس الذات: لا تتصل بنفسك.
+                runCatching {
+                    val own = com.red.sovereign.auth.TokenStore(this).redId
+                    if (own.isNotBlank() && target == own) {
+                        outgoingPending = false
+                        CallRuntime.state = CallUiState.Error("لا يمكنك الاتصال بنفسك")
+                        updateNotification("لا يمكنك الاتصال بنفسك")
+                        mainScope.launch {
+                            runCatching {
+                                android.widget.Toast.makeText(this@YounesCallService, "لا يمكنك الاتصال بنفسك", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        return START_STICKY
+                    }
+                }
+                // حارس السيرفر: المنع فقط عند انقطاع مؤكد (OFFLINE) — لا نحظر البدء البارد (CONNECTING).
+                if (com.red.sovereign.core.ConnectionStatusRepository.status.value == com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.OFFLINE) {
+                    outgoingPending = false
+                    CallRuntime.state = CallUiState.Error("السيرفر غير متصل — تحقق من الاتصال وحاول لاحقًا")
+                    updateNotification("السيرفر غير متصل — تعذّر بدء المكالمة")
+                    return START_STICKY
+                }
                 // AUTO-FIX (call audio): outgoing calls must verify RECORD_AUDIO before engine
                 // setup, mirroring the incoming-path permission check.
                 if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -1081,17 +1115,29 @@ override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
             updateNotification("مكالمة يونس نشطة")
         }
     }
+    // عدّاد الفشل المتتابع لقاطع حلقة إعادة الاتصال (يُصفَّر بمرور 60 ثانية بلا فشل).
+    private var failStreak = 0
+    private var lastFailAtMs = 0L
     private fun fail(message: String) {
         clearRingTimeout()
         stopRingback()
         stopRingtone()
         CallRuntime.state = CallUiState.Error(message)
         updateNotification(message)
+        val nowMs = System.currentTimeMillis()
+        failStreak = if (nowMs - lastFailAtMs < 60_000L) failStreak + 1 else 1
+        lastFailAtMs = nowMs
         failJob?.cancel()
         val tokenAtSchedule = sessionGuard.captureToken()
         failJob = scope.launch {
             kotlinx.coroutines.delay(3000)
             if (!sessionGuard.isCurrent(tokenAtSchedule)) return@launch
+            // قاطع حلقة إعادة الاتصال: سيرفر مؤكد الانقطاع أو فشل متكرر =
+            // حالة ثابتة معروضة بدل قصف المحاولات المزعج.
+            if (com.red.sovereign.core.ConnectionStatusRepository.status.value == com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.OFFLINE || failStreak >= 3) {
+                updateNotification("السيرفر غير متصل — تحقق من الاتصال وحاول لاحقًا")
+                return@launch
+            }
             if (CallRuntime.state is CallUiState.Error) {
                 endCall(sendSignal = false)
                 promote(notification("جاهز لاستقبال مكالمات يونس", ongoing = true), media = false)

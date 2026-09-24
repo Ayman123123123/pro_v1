@@ -506,16 +506,30 @@ fun ModernTopBar(
                     isLan = isLan
                 )
             }
+            // مؤشر حالة السيرفر الحقيقية (حالة المقبس لا الشبكة): أخضر=متصل، ذهبي=جارٍ الاتصال، أحمر=طافي مع العد التنازلي.
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                val serverStatus by com.red.sovereign.core.ConnectionStatusRepository.status.collectAsState()
+                val (serverDot, serverLabel, serverColor) = when (serverStatus.state) {
+                    com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.ONLINE ->
+                        Triple(Color(0xFF00C98C), redId, YounesCobalt)
+                    com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.CONNECTING ->
+                        Triple(Color(0xFFE0B551), "جارٍ الاتصال بالسيرفر…", Color(0xFFE0B551))
+                    com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.OFFLINE ->
+                        Triple(
+                            Color(0xFFF25C5C),
+                            if (serverStatus.retryInSec > 0) "السيرفر طافي — إعادة خلال ${serverStatus.retryInSec}ث" else "السيرفر طافي",
+                            Color(0xFFF25C5C)
+                        )
+                }
                 Box(
                     Modifier
                         .size(6.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(if (isOnline) Color(0xFF00C98C) else Color(0xFFF25C5C))
+                        .background(serverDot)
                 )
                 Text(
-                    if (isOnline) redId else "غير متصل - يعمل محلياً P2P",
-                    color = if (isOnline) YounesCobalt else YounesMuted,
+                    serverLabel,
+                    color = serverColor,
                     fontSize = 10.sp,
                     maxLines = 1
                 )

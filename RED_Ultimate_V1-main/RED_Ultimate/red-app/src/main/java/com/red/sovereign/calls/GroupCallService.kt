@@ -1363,6 +1363,12 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             isVideo: Boolean, groupCallId: String = "",
             hostName: String = "", groupId: String = "", groupName: String = ""
         ) {
+            // حارس العضو الواحد: الاتصال بشخص واحد = مكالمة 1:1 — لا غرفة جماعية
+            // (يوقف عرض عدة وجهات لنفس الشخص من أي مدخل).
+            if (inviteeIds.size == 1) {
+                YounesCallService.start(context, inviteeIds.first(), isVideo)
+                return
+            }
             val safeId = if (groupCallId.isBlank()) RoomSeparationPolicy.normalizeGroupCallId(null) else RoomSeparationPolicy.normalizeGroupCallId(groupCallId)
             ContextCompat.startForegroundService(context,
                 Intent(context, GroupCallService::class.java).apply {
