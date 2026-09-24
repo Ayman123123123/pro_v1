@@ -121,6 +121,8 @@ object LiveStreamRuntime {
     /** التعليق المثبّت حاليًا (null = لا يوجد) — يضبطه المذيع عبر PIN_MESSAGE. */
     var pinnedMessage: PinnedLiveMessage? by mutableStateOf(null)
     var isCoHost by mutableStateOf(false)
+    // 📱 تصغير البث المباشر (شريط عائم أثناء التصفح مثل واتساب) — نمط GroupCall/Zoom.
+    var isMinimized by mutableStateOf(false)
 }
 
 class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, LiveStreamSignalingClient.Listener, SfuMediaClient.Events {
@@ -1410,6 +1412,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         LiveStreamRuntime.peakViewers = 0
         LiveStreamRuntime.cameraError = null
         LiveStreamRuntime.audioError = null
+        LiveStreamRuntime.isMinimized = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         if (terminateService) stopSelf()
     }

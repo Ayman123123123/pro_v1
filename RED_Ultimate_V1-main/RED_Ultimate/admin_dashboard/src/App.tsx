@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { Avatar, Badge, Button, ConfigProvider, Divider, Dropdown, Layout, Menu, Segmented, Space, Spin, Tag, Tooltip, theme } from 'antd';
+import { Avatar, Badge, Button, ConfigProvider, Divider, Dropdown, Layout, Menu, Segmented, Space, Spin, Tag, Tooltip } from 'antd';
+import { buildYounesTheme } from './theme';
 import {
   DashboardOutlined,
   GlobalOutlined,
@@ -330,37 +331,7 @@ export default function App() {
   return (
     <ConfigProvider
       direction="rtl"
-      theme={{
-        algorithm: resolvedTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: {
-          colorPrimary: resolvedTheme === 'dark' ? '#B78A2E' : '#9A7524',
-          colorSuccess: '#B78A2E',
-          colorInfo: resolvedTheme === 'dark' ? '#4FC3F7' : '#1976D2',
-          colorWarning: '#C0842B',
-          colorError: '#B91C1C',
-          colorBgBase: resolvedTheme === 'dark' ? '#0A0F14' : '#F7F8FA',
-          borderRadius: 14,
-          fontFamily: "'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif",
-        },
-        components: {
-          Menu: {
-            darkItemBg: 'transparent',
-            darkSubMenuItemBg: 'transparent',
-            darkItemColor: '#9AAEBB',
-            darkItemHoverBg: 'rgba(183,138,46,0.08)',
-            darkItemHoverColor: '#F2F6F8',
-            darkItemSelectedBg: 'linear-gradient(135deg, rgba(183,138,46,0.22) 0%, rgba(79, 195, 247,0.12) 100%)' as unknown as string,
-            darkItemSelectedColor: '#D4B16A',
-            itemBorderRadius: 10,
-            itemMarginInline: 10,
-          },
-          Layout: {
-            siderBg: '#0A1014',
-            headerBg: resolvedTheme === 'dark' ? 'rgba(8, 21, 37, 0.85)' : 'rgba(255,255,255,0.85)',
-            headerHeight: 64,
-          },
-        },
-      }}
+      theme={buildYounesTheme(resolvedTheme)}
     >
       <Layout style={{ minHeight: '100vh', background: resolvedTheme === 'dark' ? '#06110D' : '#F7F8FA' }}>
         <Sider theme="dark" collapsible width={248} className="yns-sider">

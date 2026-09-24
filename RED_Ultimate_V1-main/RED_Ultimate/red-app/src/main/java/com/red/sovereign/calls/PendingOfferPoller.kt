@@ -207,13 +207,48 @@ class PendingOfferPoller(
         }
 
         /** نوع العرض المطبّع: 1:1 + جماعي بأنواعه. */
-        private enum class OfferKind { ONE_TO_ONE, GROUP, CONFERENCE, LIVE }
+        private enum class OfferKind { ONE_TO_ONE, FRIENDS, GROUP, GROUP_VIDEO, GROUP_VOICE, CONFERENCE, LIVE, ZOOM }
 
-        private fun kindOf(mode: String): OfferKind = when (mode.uppercase()) {
-            "GROUP" -> OfferKind.GROUP
-            "CONFERENCE", "CONF", "SPACE" -> OfferKind.CONFERENCE
-            "LIVE", "LIVESTREAM" -> OfferKind.LIVE
-            else -> OfferKind.ONE_TO_ONE
+        /**
+         * تصنيف العرض: البادئات ومعرفات الغرف أولاً ثم mode.
+         * - بادئة callId: GRP_ → مجموعة، FRND_ → أصدقاء، CONF_ → مؤتمر، LIVE_ → بث، ZOOM_/MEET_ → زوم.
+         * - معرفات الغرف: groupCallId → مجموعة، roomId → مؤتمر/زوم، streamId → بث.
+         * - أخيراً mode: GROUP/GROUP_VIDEO/GROUP_VOICE/FRIENDS/ZOOM/CONF/CONFERENCE/SPACE/LIVE.
+         */
+        private fun kindOf(offer: PendingOfferResponse): OfferKind {
+            val upperId = offer.callId.trim().uppercase()
+            val upperMode = offer.mode.trim().uppercase()
+            when {
+                upperId.startsWith("GRP_") -> return when (upperMode) {
+                    "VIDEO", "GROUP_VIDEO" -> OfferKind.GROUP_VIDEO
+                    "VOICE", "AUDIO", "GROUP_VOICE", "GROUP_AUDIO" -> OfferKind.GROUP_VOICE
+                    else -> OfferKind.GROUP
+                }
+                upperId.startsWith("FRND_") -> return OfferKind.FRIENDS
+                upperId.startsWith("CONF_") -> return OfferKind.CONFERENCE
+                upperId.startsWith("LIVE_") -> return OfferKind.LIVE
+                upperId.startsWith("ZOOM_") || upperId.startsWith("MEET_") -> return OfferKind.ZOOM
+            }
+            if (!offer.groupCallId.isNullOrBlank()) return when (upperMode) {
+                "VIDEO", "GROUP_VIDEO" -> OfferKind.GROUP_VIDEO
+                "VOICE", "AUDIO", "GROUP_VOICE", "GROUP_AUDIO" -> OfferKind.GROUP_VOICE
+                else -> OfferKind.GROUP
+            }
+            if (!offer.roomId.isNullOrBlank()) {
+                if (upperMode == "ZOOM" || upperMode == "MEETING") return OfferKind.ZOOM
+                return OfferKind.CONFERENCE
+            }
+            if (!offer.streamId.isNullOrBlank()) return OfferKind.LIVE
+            return when (upperMode) {
+                "GROUP" -> OfferKind.GROUP
+                "GROUP_VIDEO" -> OfferKind.GROUP_VIDEO
+                "GROUP_VOICE", "GROUP_AUDIO" -> OfferKind.GROUP_VOICE
+                "FRIENDS", "FRIEND", "FRND" -> OfferKind.FRIENDS
+                "ZOOM", "MEETING" -> OfferKind.ZOOM
+                "CONFERENCE", "CONF", "SPACE" -> OfferKind.CONFERENCE
+                "LIVE", "LIVESTREAM" -> OfferKind.LIVE
+                else -> OfferKind.ONE_TO_ONE
+            }
         }
 
         /**
@@ -225,9 +260,9 @@ class PendingOfferPoller(
                 Log.d(TAG, "pending offer missing ids — skip")
                 return false
             }
-            val kind = kindOf(offer.mode)
-            // SDP إلزامي لمكالمات 1:1 فقط — دعوات الغرف (GROUP/CONF/LIVE) بلا SDP بطبيعتها.
-            if (kind == OfferKind.ONE_TO_ONE && offer.offerSdp.isBlank()) {
+            val kind = kindOf(offer)
+            // SDP إلزامي لمكالمات 1:1 والأصدقاء فقط — دعوات الغرف (GROUP/CONF/LIVE/ZOOM) بلا SDP بطبيعتها.
+            if ((kind == OfferKind.ONE_TO_ONE || kind == OfferKind.FRIENDS) && offer.offerSdp.isBlank()) {
                 Log.d(TAG, "pending offer without sdp — skip callId=${offer.callId}")
                 return false
             }
@@ -263,10 +298,11 @@ class PendingOfferPoller(
                 return true
             }
             return when (kind) {
-                OfferKind.ONE_TO_ONE -> ringOneToOne(app, offer, myId)
-                OfferKind.GROUP -> ringGroup(app, offer, myId)
+                OfferKind.ONE_TO_ONE, OfferKind.FRIENDS -> ringOneToOne(app, offer, myId)
+                OfferKind.GROUP, OfferKind.GROUP_VIDEO, OfferKind.GROUP_VOICE -> ringGroup(app, offer, myId)
                 OfferKind.CONFERENCE -> ringConference(app, offer, myId)
                 OfferKind.LIVE -> ringLive(app, offer, myId)
+                OfferKind.ZOOM -> ringZoom(app, offer, myId)
             }
         }
 
@@ -306,7 +342,12 @@ class PendingOfferPoller(
 
         /** رنين جماعي GROUP — إشعار موحد + GroupCallService (كانت تُسقط بصمت). */
         private fun ringGroup(app: Context, offer: PendingOfferResponse, myId: String): Boolean {
-            val isVideo = offer.video == true || offer.isVideo == true || offer.mode.equals("VIDEO", ignoreCase = true)
+            val upperMode = offer.mode.trim().uppercase()
+            val isVideo = when (upperMode) {
+                "VIDEO", "GROUP_VIDEO" -> true
+                "VOICE", "AUDIO", "GROUP_VOICE", "GROUP_AUDIO" -> false
+                else -> offer.video == true || offer.isVideo == true || offer.mode.equals("VIDEO", ignoreCase = true)
+            }
             val hostName = offer.hostName?.takeIf { it.isNotBlank() }
                 ?: offer.inviter?.takeIf { it.isNotBlank() }
                 ?: offer.callerId
@@ -367,6 +408,36 @@ class PendingOfferPoller(
             return true
         }
 
+        /** رنين زوم ZOOM — إشعار موحد + ZoomGroupCallService.notifyIncoming. */
+        private fun ringZoom(app: Context, offer: PendingOfferResponse, myId: String): Boolean {
+            val isVideo = offer.video != false && !offer.mode.equals("VOICE", ignoreCase = true)
+            val hostName = offer.hostName?.takeIf { it.isNotBlank() }
+                ?: offer.inviter?.takeIf { it.isNotBlank() }
+                ?: offer.callerId
+            runCatching {
+                CallRingRegistry.showIncoming(
+                    app,
+                    offer.callId,
+                    hostName,
+                    isVideo,
+                    com.red.sovereign.calls.CallNotificationActionReceiver.CALL_TYPE_ZOOM,
+                    myId
+                )
+            }.onFailure { Log.w(TAG, "showIncoming zoom failed: ${it.message}"); return false }
+            runCatching {
+                ZoomGroupCallService.notifyIncoming(
+                    app,
+                    offer.roomId?.takeIf { it.isNotBlank() } ?: offer.callId,
+                    myId,
+                    offer.callerId,
+                    hostName,
+                    isVideo
+                )
+            }.onFailure { Log.w(TAG, "zoom notifyIncoming failed: ${it.message}") }
+            Log.i(TAG, "pending ZOOM ringing callId=${offer.callId} from=${offer.callerId}")
+            return true
+        }
+
         /**
          * تسجيل MISSED واردة لعرض سقط في نافذة 45s..120s (انتهى الرنين، mailbox حي).
          * محلي 100% — نفس تشفير سجل YounesCallService (CallLogCipher + LocalRepository)،
@@ -382,6 +453,10 @@ class PendingOfferPoller(
             val peer = offer.callerId
             val type = when (kind) {
                 OfferKind.GROUP -> "GROUP"
+                OfferKind.GROUP_VIDEO -> "GROUP"
+                OfferKind.GROUP_VOICE -> "GROUP"
+                OfferKind.FRIENDS -> if (offer.mode.equals("VIDEO", ignoreCase = true)) "VIDEO" else "VOICE"
+                OfferKind.ZOOM -> "GROUP"
                 OfferKind.CONFERENCE -> if (offer.mode.equals("SPACE", ignoreCase = true)) "SPACE" else "GROUP"
                 OfferKind.LIVE -> "LIVE"
                 OfferKind.ONE_TO_ONE -> if (offer.mode.equals("VIDEO", ignoreCase = true)) "VIDEO" else "VOICE"

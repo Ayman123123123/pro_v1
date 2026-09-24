@@ -3581,7 +3581,19 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                 when (call.type) {
                     "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
                     "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
-                    "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
+                    "GROUP" -> {
+                        val myId = TokenStore(context).redId.orEmpty()
+                        GroupCallService.startGroupCall(
+                            context = context,
+                            myUserId = myId,
+                            inviteeIds = call.participantIds,
+                            inviteeNames = emptyList(),
+                            isVideo = true,
+                            groupCallId = call.id,
+                            groupId = call.groupId.orEmpty(),
+                            groupName = call.peerLabel
+                        )
+                    }
                     else -> if (call.peerId.matches(RED_ID_PATTERN)) {
                         YounesCallService.start(context, call.peerId, call.type == "VIDEO")
                     }
@@ -3670,7 +3682,19 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                 when (call.type) {
                     "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
                     "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
-                    "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
+                    "GROUP" -> {
+                        val myId = TokenStore(context).redId.orEmpty()
+                        GroupCallService.startGroupCall(
+                            context = context,
+                            myUserId = myId,
+                            inviteeIds = call.participantIds,
+                            inviteeNames = emptyList(),
+                            isVideo = true,
+                            groupCallId = call.id,
+                            groupId = call.groupId.orEmpty(),
+                            groupName = call.peerLabel
+                        )
+                    }
                     else -> if (call.peerId.matches(RED_ID_PATTERN)) {
                         YounesCallService.start(context, call.peerId, call.type == "VIDEO")
                     }

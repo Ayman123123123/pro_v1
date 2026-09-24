@@ -80,17 +80,29 @@ class RedPushService : PushService() {
         }
 
         /**
-         * Opens a v2 sealed envelope with the stored endpoint, falling back to the
-         * legacy plaintext JSON. Returns null when nothing usable could be decoded;
-         * in that case we still nudge a sync so the socket/mailbox can recover.
+         * Opens a sealed envelope: tries v2 (endpoint+secret) first, then falls
+         * back to legacy v1 (endpoint only) inside the rotation window. Returns
+         * null when nothing usable could be decoded - the caller must NOT ring
+         * in that case; we only nudge a sync so the socket/mailbox can recover.
          */
         private fun decodeWake(context: Context, text: String): JSONObject? {
             val body = SovereignPushCipher.envelopeBody(text)
             if (body != null) {
                 val endpoint = VoipPushRegistrar.currentEndpoint(context)
-                val plain = endpoint?.let { SovereignPushCipher.open(it, body) }
+                if (endpoint.isNullOrBlank()) {
+                    Log.w(TAG, "sealed wake with no stored endpoint - blind sync, no ring")
+                    nudgeSync(context)
+                    return null
+                }
+                val secret = VoipPushRegistrar.currentPushSecret(context)
+                // Rotation window: v2 first, then v1.
+                val plain = if (!secret.isNullOrBlank()) {
+                    SovereignPushCipher.open(endpoint, secret, body)
+                } else {
+                    SovereignPushCipher.openV1(endpoint, body)
+                }
                 if (plain != null) return runCatching { JSONObject(plain) }.getOrNull()
-                Log.w(TAG, "sealed wake could not be opened (endpoint rotated?) - blind sync")
+                Log.w(TAG, "sealed wake could not be opened (v2 then v1 failed) - blind sync, no ring")
                 nudgeSync(context)
                 return null
             }

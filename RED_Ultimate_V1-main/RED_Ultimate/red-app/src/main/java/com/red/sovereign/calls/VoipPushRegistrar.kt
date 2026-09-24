@@ -1,11 +1,13 @@
 package com.red.sovereign.calls
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.SecureStore
+import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +56,10 @@ object VoipPushRegistrar {
 
     private const val META_STORE = "red_push_meta"
     private const val META_UPLOADED_AT = "endpoint_uploaded_at"
+    /** Per-device 256-bit push secret (base64url, no padding) for the v2 cipher. */
+    private const val META_PUSH_SECRET = "push_secret"
+    private const val PUSH_SECRET_BYTES = 32
+    private const val B64_FLAGS = Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
@@ -85,8 +91,9 @@ object VoipPushRegistrar {
             val previous = tokens.pushEndpoint
             tokens.savePushEndpoint(endpoint)
             if (tokens.accessToken.isNullOrBlank()) return@launch
-            // Dedup: same URL and a fresh upload -> nothing to do.
-            if (previous == endpoint && !isUploadStale(app)) return@launch
+            val secretNew = ensurePushSecret(app).second
+            // Dedup: same URL and a fresh upload and no fresh secret -> nothing to do.
+            if (previous == endpoint && !secretNew && !isUploadStale(app)) return@launch
             uploadEndpoint(app, tokens, endpoint)
         }
     }
@@ -103,6 +110,11 @@ object VoipPushRegistrar {
     /** Last endpoint URL issued by the distributor, or null. */
     fun currentEndpoint(context: Context): String? =
         TokenStore(context.applicationContext).pushEndpoint?.takeIf { it.isNotBlank() }
+
+    /** Per-device v2 push secret, or null when never generated yet. */
+    fun currentPushSecret(context: Context): String? =
+        SecureStore(context.applicationContext, META_STORE).get(META_PUSH_SECRET)
+            ?.takeIf { it.isNotBlank() }
 
     /**
      * Switches to [pkg] (must be installed) and re-registers.
@@ -167,9 +179,11 @@ object VoipPushRegistrar {
     }
 
     private suspend fun uploadEndpoint(app: Context, tokens: TokenStore, endpoint: String) {
+        val secret = ensurePushSecret(app).first
         val body = JSONObject()
             .put("token", endpoint)
             .put("platform", "ANDROID")
+            .put("secret", secret)
             .toString()
         val result = runCatching { AuthorizedApiClient(tokens).request("POST", "/api/devices/push-token", body) }
             .getOrNull()
@@ -207,6 +221,20 @@ object VoipPushRegistrar {
     private fun isUploadStale(app: Context): Boolean {
         val last = SecureStore(app, META_STORE).get(META_UPLOADED_AT)?.toLongOrNull() ?: 0L
         return System.currentTimeMillis() - last > UPLOAD_REFRESH_MS
+    }
+
+    /**
+     * Returns the stable per-device 256-bit push secret (generating + persisting
+     * it on first use). Second of the pair is true when freshly generated, so
+     * the caller can bypass the endpoint dedup and force a re-upload with it.
+     */
+    private fun ensurePushSecret(app: Context): Pair<String, Boolean> {
+        val store = SecureStore(app, META_STORE)
+        store.get(META_PUSH_SECRET)?.takeIf { it.isNotBlank() }?.let { return it to false }
+        val raw = ByteArray(PUSH_SECRET_BYTES).also { SecureRandom().nextBytes(it) }
+        val secret = Base64.encodeToString(raw, B64_FLAGS)
+        store.put(META_PUSH_SECRET, secret)
+        return secret to true
     }
 
     private fun markUploaded(app: Context) {

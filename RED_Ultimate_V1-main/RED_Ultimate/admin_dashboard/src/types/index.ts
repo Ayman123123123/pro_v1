@@ -262,6 +262,7 @@ export interface RealtimeMetrics {
   disk: number;
   network: number;
   timestamp: string;
+  health?: Record<string, SystemHealthComponent>;
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -273,6 +274,7 @@ export interface Device {
   deviceName: string;
   platform: string;
   status: string;
+  identityFingerprint?: string;
   lastSeen?: string;
   createdAt: string;
 }

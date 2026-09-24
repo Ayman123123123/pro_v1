@@ -10,8 +10,10 @@ import org.springframework.web.socket.handler.TextWebSocketHandler
 import java.util.concurrent.TimeUnit
 
 /**
- * قناة typing الموحدة — كانت تستخدم chat:typing:{conv} بينما RedMasterHandler يستخدم red:typing + red:typing:{conv}:{user}
- * الآن كلاهما ينشر على نفس القناة الموحدة red:typing مع TTL 5s لتوافق الخدمات الخلفية واختبارات التكامل.
+ * قناة typing الموحدة — red:typing + مفتاح red:typing:{conv}:{user} (TTL 5s).
+ * (2026-09-24) حُذف النشر المزدوج على القناة القديمة: بلا أي مستهلك في الخادم
+ * (لا MessageListener ولا مشترك — فحص شامل)، والقناة المعتمدة red:typing
+ * (ينشرها RedMasterHandler وRedisManager.setTyping) مع مفتاح TTL 5s.
  * المسار /ws/typing يبقى للتوافق لكن المسار المفضل هو /ws/master (TypingRED).
  */
 @Component
@@ -27,9 +29,8 @@ class TypingHandler(
      */
     fun broadcastTyping(userId: String, conversationId: String, isTyping: Boolean) {
         val payload = if (isTyping) "1" else "0"
-        // القناة الموحدة
+        // القناة الموحدة فقط (القديمة المزدوجة حُذفت 2026-09-24: بلا مستهلك)
         redis.convertAndSend("red:typing", "$conversationId:$userId:$payload")
-        redis.convertAndSend("chat:typing:$conversationId", "$userId:$payload")
         // TTL 5s عبر RedisManager + مفتاح مباشر للتوافق مع المسارات القديمة
         runCatching { redisManager.setTyping(userId, conversationId) }
         if (isTyping) {

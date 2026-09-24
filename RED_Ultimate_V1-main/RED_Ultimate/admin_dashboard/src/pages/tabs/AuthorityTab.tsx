@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Button, Card, Descriptions, Input, message, Modal, Space, Table, Tag, Typography } from 'antd';
 import { CheckOutlined, CloseOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { apiFetch } from '../../api';
+import type { Device } from '@/types';
 
-interface Device { id: string; deviceName: string; platform: string; identityFingerprint: string; status: string; }
 interface PendingUser { id: string; redId: string; username: string; displayName: string; status: string; createdAt: string; devices: Device[]; }
 
 export default function AuthorityTab() {

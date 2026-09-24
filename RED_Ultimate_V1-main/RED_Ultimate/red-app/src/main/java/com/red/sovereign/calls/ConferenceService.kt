@@ -96,6 +96,8 @@ object ConferenceRuntime {
     var lobbyEnabled by mutableStateOf(false)
     /** المنتظرون في اللوبي (للمضيف/المضيف المشارك) — من LOBBY_REQUEST/ROOM_STATE. */
     var waitingUsers by mutableStateOf(emptyList<String>())
+    // 📱 تصغير المؤتمر/المساحة (شريط عائم أثناء التصفح مثل واتساب) — نمط GroupCall/Zoom.
+    var isMinimized by mutableStateOf(false)
 }
 
 class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingClient.Listener, SfuMediaClient.Events {
@@ -933,6 +935,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         ConferenceRuntime.remoteScreenSharePeerId = ""
         ConferenceRuntime.isRecording = false
         ConferenceRuntime.selfRole = "LISTENER"
+        ConferenceRuntime.isMinimized = false
 
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         if (closingRoomId.isNotBlank()) {

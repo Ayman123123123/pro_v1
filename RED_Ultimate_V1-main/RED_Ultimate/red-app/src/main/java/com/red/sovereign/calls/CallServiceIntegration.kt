@@ -128,7 +128,7 @@ object CallServiceIntegration {
      * ولا تحتاج Context. [context] يبقى في التوقيع للتوافق فقط.
      */
     fun hasActiveCall(context: Context): Boolean {
-        return isOneToOneActive() || isGroupActive() || isConferenceActive()
+        return isOneToOneActive() || isGroupActive() || isZoomActive() || isConferenceActive() || isLiveActive()
     }
 
     /**
@@ -138,7 +138,9 @@ object CallServiceIntegration {
         return when {
             isOneToOneActive() -> "1to1"
             isGroupActive() -> "group"
+            isZoomActive() -> "zoom"
             isConferenceActive() -> "conference"
+            isLiveActive() -> "livestream"
             else -> null
         }
     }
@@ -156,6 +158,18 @@ object CallServiceIntegration {
     /** مؤتمر أو مساحة قائمة — Incoming/Connecting/Active في [ConferenceRuntime.state]. */
     private fun isConferenceActive(): Boolean = when (ConferenceRuntime.state) {
         is ConferenceUiState.Idle, is ConferenceUiState.Error -> false
+        else -> true
+    }
+
+    /** اجتماع زوم قائم — Ringing/Incoming/Active/WaitingRoom في [ZoomRuntime.state]. */
+    private fun isZoomActive(): Boolean = when (ZoomRuntime.state) {
+        is ZoomUiState.Idle, is ZoomUiState.Ended -> false
+        else -> true
+    }
+
+    /** بث مباشر قائم — Incoming/Connecting/Active في [LiveStreamRuntime.state]. */
+    private fun isLiveActive(): Boolean = when (LiveStreamRuntime.state) {
+        is LiveStreamUiState.Idle, is LiveStreamUiState.Error -> false
         else -> true
     }
 

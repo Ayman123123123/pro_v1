@@ -16,6 +16,11 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
  * - مسارات متعددة للتسليم لضمان الوصول
  * - دعم P2P LAN بدون إنترنت
  * - CORS مفتوح للشبكات المحلية
+ *
+ * (2026-09-24) قُرر حذف RedAgentWebSocketHandler التجريبي بدل تسجيله:
+ * صفر مرجع خلفي/عميل (سجل وكلاء الأندرويد محلي فقط)، غير مسجل هنا، ويبثّ
+ * أي حمولة بلا مصادقة. إن أُعيد إحياؤه يُسجَّل خلف jwtHandshakeInterceptor
+ * + فحص دور ADMIN داخل المعالج (نمط AdminLogHandler) لا المصافحة وحدها.
  */
 @Configuration
 @EnableWebSocket
@@ -80,6 +85,8 @@ class WebSocketConfig(
             .setAllowedOriginPatterns(*allOrigins)
 
         // ─── WebSocket المؤتمرات — جماعية + مساحات صوتية ───
+        // المصافحة JWT هنا؛ وإعادة التحقق لكل إطار عبر ApprovedDeviceSessionGuard
+        // (كاش 5s — انظر closeIfRevoked) إلزامية داخل المعالج قبل أي relay.
         registry.addHandler(conferenceWebSocketHandler, "/ws/conference")
             .addInterceptors(jwtHandshakeInterceptor)
             .setAllowedOriginPatterns(*allOrigins)

@@ -59,10 +59,29 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
                 CALL_TYPE_GROUP -> GroupCallService.action(context, GroupCallService.ACTION_TOGGLE_VIDEO)
                 else -> YounesCallService.action(context, YounesCallService.ACTION_CAMERA)
             }
-            ACTION_HOLD -> YounesCallService.action(context, YounesCallService.ACTION_HOLD)
-            ACTION_RESUME -> YounesCallService.action(context, YounesCallService.ACTION_RESUME)
-            ACTION_SWITCH_CAMERA -> YounesCallService.action(context, YounesCallService.ACTION_SWITCH_CAMERA)
-            ACTION_BLUETOOTH -> YounesCallService.action(context, YounesCallService.ACTION_BLUETOOTH)
+            // HOLD/RESUME/BLUETOOTH قدرات 1-1 فقط — توجيهها لغيرها كان يكتم/يحوّل
+            // مكالمة 1-1 خاطئة أثناء الجماعية. SWITCH_CAMERA يوجَّه لخدمة نوع المكالمة.
+            ACTION_HOLD -> when (callType) {
+                CALL_TYPE_1TO1 -> YounesCallService.action(context, YounesCallService.ACTION_HOLD)
+                else -> Unit
+            }
+            ACTION_RESUME -> when (callType) {
+                CALL_TYPE_1TO1 -> YounesCallService.action(context, YounesCallService.ACTION_RESUME)
+                else -> Unit
+            }
+            ACTION_SWITCH_CAMERA -> when (callType) {
+                CALL_TYPE_GROUP -> GroupCallService.action(context, GroupCallService.ACTION_SWITCH_CAMERA)
+                CALL_TYPE_ZOOM -> ZoomGroupCallService.action(context, ZoomGroupCallService.ACTION_SWITCH_CAMERA)
+                CALL_TYPE_LIVESTREAM -> LiveStreamService.action(context, LiveStreamService.ACTION_SWITCH_CAMERA)
+                CALL_TYPE_CONFERENCE -> Unit
+                else -> YounesCallService.action(context, YounesCallService.ACTION_SWITCH_CAMERA)
+            }
+            ACTION_BLUETOOTH -> when (callType) {
+                CALL_TYPE_1TO1 -> YounesCallService.action(context, YounesCallService.ACTION_BLUETOOTH)
+                CALL_TYPE_GROUP -> GroupCallService.action(context, GroupCallService.ACTION_TOGGLE_SPEAKER)
+                CALL_TYPE_ZOOM -> ZoomGroupCallService.action(context, ZoomGroupCallService.ACTION_TOGGLE_SPEAKER)
+                else -> Unit
+            }
             ACTION_SILENCE -> YounesCallService.silenceRinger(context)
             ACTION_HOLD_ACTIVE -> YounesCallService.holdActiveCall(context)
             ACTION_RESUME_RINGER -> YounesCallService.resumeRinger(context)

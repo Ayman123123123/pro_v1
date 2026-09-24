@@ -242,7 +242,7 @@ fun GroupsScreen(
                     // زر المعاينة أولاً (لا انضمام أعمى)
                     TextButton(
                         onClick = {
-                            val clean = com.red.sovereign.groups.parseInviteTokenQrAware(joinToken)
+                            val clean = com.red.sovereign.core.DeepLinkHandler.parseGroupInviteToken(joinToken)
                             if (clean.isBlank()) { previewError = "رمز غير صالح"; return@TextButton }
                             previewLoading = true; previewError = null
                             previewScope.launch {
@@ -257,7 +257,7 @@ fun GroupsScreen(
                     ) { Text("معاينة") }
                     Button(
                         onClick = {
-                            val token = com.red.sovereign.groups.parseInviteTokenQrAware(joinToken)
+                            val token = com.red.sovereign.core.DeepLinkHandler.parseGroupInviteToken(joinToken)
                             if (token.isNotBlank()) {
                                 groups.joinWithToken(token) { showJoinDialog = false; joinToken = ""; previewJson = null }
                             }
