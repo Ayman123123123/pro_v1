@@ -32,7 +32,7 @@ FIREBASE_HITS=$(grep -rni -E "firebase|fcm[^a-z]|googleapis\.com.*fcm|google-ser
   | grep -v "/_archive/" | grep -v "db/migration" | grep -v "docs/الأرشيف/" \
   | grep -v "res/drawable/younes_icon_master.png" \
   | grep -v "younes_icon_clean_pro.png" | grep -v "younes_icon_ultimate.png" \
-  | grep -v "younes_icon_8k_new.png" | grep -v "mipmap-.*/ic_launcher.png" \
+  | grep -v "younes_icon_8k_new.png" | grep -v "mipmap-.*ic_launcher\.png" \
   || true)
 if [ -n "$FIREBASE_HITS" ]; then
   fail "Firebase/FCM tokens in shipped code:"; say "$FIREBASE_HITS"
@@ -50,7 +50,7 @@ TELEPHONY_HITS=$(grep -rni -E "pstn|dinstar|telecom_gateways|gateway_(sim|port|r
   | grep -v "android\.telecom" \
   | grep -v "SIP_REALM" \
   | grep -v "younes_icon_clean_pro.png" | grep -v "younes_icon_ultimate.png" \
-  | grep -v "younes_icon_8k_new.png" | grep -v "mipmap-.*/ic_launcher.png" \
+  | grep -v "younes_icon_8k_new.png" | grep -v "mipmap-.*ic_launcher\.png" \
   | grep -v -F "purge stale PSTN keys" \
   | grep -v -F "اليومي PSTN" \
   | grep -v -F "PSTN اليومي" \
