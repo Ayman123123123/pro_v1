@@ -81,7 +81,7 @@ function LoginCard({ onSubmit, isLoading, formError, onFormError }: SharedLoginP
                 <Input
                   id="username"
                   type="text"
-                  placeholder="admin"
+                  placeholder="اسم المستخدم"
                   value={username}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
                   className={cn('pl-10', errors.username && 'border-destructive')}

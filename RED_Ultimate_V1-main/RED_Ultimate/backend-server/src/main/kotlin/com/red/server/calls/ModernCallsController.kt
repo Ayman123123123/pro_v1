@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*
  * - الهوية من Authentication فقط (JWT principal) — لا تُقرأ أي ترويسة X-RED-ID.
  * - السجل الدائم عبر CallHistoryService (Mongo call_history) — لا ConcurrentHashMap هنا.
  * - التسليم عبر UnifiedCallDeliveryService (WebSocket + Push + mailbox).
- * - الأنواع الخزنية هي CallType الستة؛ الأسماء القديمة (CONFERENCE/PSTN/LAN/…)
+ * - الأنواع الخزنية هي CallType الستة؛ الأسماء القديمة (CONFERENCE/LEGACY/LAN/…)
  *   تُطبع على أقرب نظير دائم (موثق أدناه) بدل كيانين متوازيين.
  *
  * 1. فردية صوت/فيديو: P2P WebRTC مباشر، ترن وتتعرف، E2EE
@@ -21,13 +21,13 @@ import org.springframework.web.bind.annotation.*
  * 3. مؤتمر/Zoom: حتى 100 مشارك عبر SFU، غرف جانبية، رفع يد (يُخزَّن GROUP_VIDEO)
  * 4. بث مباشر: 1-to-N مع دردشة وهدايا، عام/خاص بكلمة سر (LIVE_STREAM)
  * 5. مساحات صوتية: صوت فقط، مضيف ومتحدثون ومستمعون (SPACE)
- * 6. هاتف يمني: عبر DINSTAR وشرائح يمنية (يُخزَّن AUDIO_1V1 + route RED)
+ * 6. هاتف يمني: عبر LEGACY-GW وشرائح يمنية (يُخزَّن AUDIO_1V1 + route RED)
  * 7. محلي P2P: بلا إنترنت ولا خادم، نفس الواي فاي (يُخزَّن AUDIO_1V1 + route RED)
  */
 
 data class StartCallRequest(
     val targetId: String? = null,
-    val type: String, // AUDIO_1V1, VIDEO_1V1, GROUP_AUDIO, GROUP_VIDEO, CONFERENCE, LIVE, SPACE, PSTN, LAN
+    val type: String, // AUDIO_1V1, VIDEO_1V1, GROUP_AUDIO, GROUP_VIDEO, CONFERENCE, LIVE, SPACE, LAN
     val isVideo: Boolean = false,
     val groupId: String? = null,
     val participantIds: List<String> = emptyList(),
@@ -56,9 +56,9 @@ class ModernCallsController(
     private val users: com.red.server.auth.repository.UserAccountRepository? = null
 ) {
 
-    /** طباعة النوع المطلوب على نظيره الدائم (CallType لا يملك CONFERENCE/PSTN/LAN). */
+    /** طباعة النوع المطلوب على نظيره الدائم (CallType لا يملك CONFERENCE/LEGACY/LAN). */
     private fun persistentType(requested: String): CallType = when (requested.uppercase()) {
-        "AUDIO_1V1", "PSTN", "LAN" -> CallType.AUDIO_1V1
+        "AUDIO_1V1", "LAN" -> CallType.AUDIO_1V1
         "VIDEO_1V1" -> CallType.VIDEO_1V1
         "GROUP_AUDIO" -> CallType.GROUP_AUDIO
         "GROUP_VIDEO", "CONFERENCE" -> CallType.GROUP_VIDEO
@@ -83,11 +83,11 @@ class ModernCallsController(
             "CONFERENCE" -> {
                 require(request.participantIds.size <= 100) { "Conference limit is 100" }
             }
-            "AUDIO_1V1", "VIDEO_1V1", "PSTN", "LAN" -> {
+            "AUDIO_1V1", "VIDEO_1V1", "LAN" -> {
                 require(!request.targetId.isNullOrBlank()) { "Target required for 1-1 call" }
                 require(request.targetId != callerId) { "Cannot call yourself" }
                 // فحص الجمهور الموحّد: حظر ثنائي + خصوصية المكالمات للطرف المستدعى.
-                // الأهداف غير الحسابية (أرقام PSTN) تُتجاوز — لا كيان مستخدم لفحصه.
+                // الأهداف غير الحسابية (أرقام LEGACY) تُتجاوز — لا كيان مستخدم لفحصه.
                 checkCallAudience(callerId, request.targetId)?.let { return it }
             }
         }
@@ -267,7 +267,7 @@ class ModernCallsController(
     /**
      * فحص جمهور المكالمة الفردية: يعيد 403 عند الحظر الثنائي أو مخالفة
      * خصوصية `calls` للمستدعى (NOBODY / CONTACTS بلا صداقة متبادلة)،
-     * وnull عند السماح أو تعذّر الحسم (هدف غير حسابي كأرقام PSTN،
+     * وnull عند السماح أو تعذّر الحسم (هدف غير حسابي كأرقام LEGACY،
      * أو غياب حقن الاختيارية في الاختبارات).
      */
     private fun checkCallAudience(callerId: String, targetId: String): ResponseEntity<CallResponse>? {
@@ -300,7 +300,8 @@ class ModernCallsController(
     }
 
     @GetMapping("/types")
-    fun getCallTypes(): ResponseEntity<List<Map<String, String>>> {
+    fun getCallTypes(authentication: Authentication): ResponseEntity<List<Map<String, String>>> {
+        authentication.name // مصادقة فقط — الكتالوج ثابت ولا يكشف بيانات مستخدمين.
         val types = listOf(
             mapOf(
                 "id" to "ONE_TO_ONE_AUDIO",
@@ -309,7 +310,7 @@ class ModernCallsController(
                 "route" to "RED WebRTC P2P → TURN → RED ID",
                 "maxParticipants" to "2",
                 "icon" to "📞",
-                "tech" to "WebRTC + DTLS-SRTP + TURN + FCM Push"
+                "tech" to "WebRTC + DTLS-SRTP + TURN + Sovereign Push"
             ),
             mapOf(
                 "id" to "ONE_TO_ONE_VIDEO",
@@ -366,15 +367,6 @@ class ModernCallsController(
                 "tech" to "SFU Audio-Only + Roles (Host/Speaker/Listener)"
             ),
             mapOf(
-                "id" to "PSTN_YEMENI",
-                "name" to "هاتف يمني",
-                "description" to "هاتف يمني عبر بوابة DINSTAR وشرائح يمن موبايل وسبأفون وYOU والهاتف الثابت - حصري",
-                "route" to "Android → Backend Auth → Asterisk AMI → DINSTAR → SIM → Yemen Network",
-                "maxParticipants" to "2",
-                "icon" to "☎️🇾🇪",
-                "tech" to "Asterisk + DINSTAR UC2000-VE + Yemen Operators"
-            ),
-            mapOf(
                 "id" to "LAN_P2P",
                 "name" to "محلي P2P",
                 "description" to "مكالمة محلية P2P بلا إنترنت ولا خادم - نفس الواي فاي، مشفرة DTLS-SRTP، اكتشاف NSD",
@@ -393,7 +385,7 @@ class ModernCallsController(
         authentication.name // مصادقة فقط — الإحصاء تشغيلي لا يكشف أطرافاً.
         return ResponseEntity.ok(mapOf(
             "pendingDeliveries" to deliveryService.getPendingCount(),
-            "supportedTypes" to 9,
+            "supportedTypes" to 8,
             "maxGroupSize" to 32,
             "maxConferenceSize" to 100,
             "features" to listOf(
@@ -402,10 +394,9 @@ class ModernCallsController(
                 "SFU for conferences",
                 "1-to-N for live",
                 "Audio-only spaces",
-                "PSTN via DINSTAR",
                 "LAN P2P without internet",
                 "Multi-path delivery",
-                "FCM Push ringing",
+                "Sovereign Push ringing",
                 "Works on all local networks"
             )
         ))

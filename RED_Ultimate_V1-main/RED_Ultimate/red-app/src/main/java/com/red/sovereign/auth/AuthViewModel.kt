@@ -17,8 +17,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * AuthViewModel - نظيف بدون PSTN/DINSTAR
- * تم إلغاء كل ما يتعلق بالهاتف اليمني حسب طلب المستخدم
+ * AuthViewModel - RED-only نظيف
+ * تم إلغاء كل ما يتعلق بالبوابات الخارجية حسب طلب المستخدم
  * التركيز على E2EE + مكالمات يونس + مجموعات + بث + مؤتمرات
  */
 class AuthViewModel(application: Application) : AndroidViewModel(application) {

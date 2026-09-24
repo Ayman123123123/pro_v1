@@ -235,7 +235,7 @@ object LegendaryFixes {
                 // Outbox pattern already exists for messages
                 // Media upload queue for media
                 // WorkManager for background sync
-                // WebSocket for real-time + FCM for push
+                // WebSocket for real-time + push service
                 
                 // Trigger fast sync
                 // RedConnectionService.start(context) already does this

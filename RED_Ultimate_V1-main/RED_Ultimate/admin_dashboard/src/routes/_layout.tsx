@@ -159,6 +159,9 @@ export const Route = createFileRoute('/_layout')({
                           <Link
                             key={item.path}
                             to={item.path}
+                            // ✅ 2026-09-24: تمييز الرابط النشط لقارئ الشاشة (axe) — الصفحة الحالية معلنة
+                            activeOptions={{ exact: false }}
+                            activeProps={{ 'aria-current': 'page' } as Record<string, unknown>}
                             className={cn(
                               'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                               'hover:bg-accent hover:text-accent-foreground',

@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -92,7 +94,6 @@ fun ModernRedDashboard(
     var showCallDialer by remember { mutableStateOf(false) }
     var showCreateGroup by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var showDinstar by remember { mutableStateOf(false) }
     // ربط حقيقي (من RedDashboard): بحث شامل + جهات اتصال + هدف دردشة معلّق + صفحة إعدادات مستهدفة.
     var showSearch by remember { mutableStateOf(false) }
     var showContacts by remember { mutableStateOf(false) }
@@ -221,7 +222,6 @@ fun ModernRedDashboard(
                 currentSection = currentSection,
                 onSectionSelected = { section ->
                     currentSection = section
-                    showDinstar = false
                     if (section == ModernSection.CALLS) {
                         callHistory.load()
                         directory.refreshPresence()
@@ -270,59 +270,51 @@ fun ModernRedDashboard(
                 )
                 
                 // محتوى التبويب الحالي
-                when {
-                    showDinstar -> ModernDinstarScreen(
+                when (currentSection) {
+                    ModernSection.CHATS -> ModernChatsScreen(
                         account = account,
-                        viewModel = authViewModel,
-                        onBack = { showDinstar = false }
+                        groups = groups,
+                        directory = directory,
+                        attachments = attachments,
+                        voiceMessages = voiceMessages,
+                        // RedDashboard 610: الهدف المعلق أولاً ثم deep link الإشعار.
+                        deepLinkSender = pendingChatTarget ?: deepLinkSender,
+                        deepLinkConversation = deepLinkConversation
                     )
-                    else -> when (currentSection) {
-                        ModernSection.CHATS -> ModernChatsScreen(
-                            account = account,
-                            groups = groups,
-                            directory = directory,
-                            attachments = attachments,
-                            voiceMessages = voiceMessages,
-                            // RedDashboard 610: الهدف المعلق أولاً ثم deep link الإشعار.
-                            deepLinkSender = pendingChatTarget ?: deepLinkSender,
-                            deepLinkConversation = deepLinkConversation
-                        )
-                        ModernSection.GROUPS -> ModernGroupsScreen(
-                            account = account,
-                            groups = groups,
-                            directory = directory,
-                            onCreateGroup = { showCreateGroup = true }
-                        )
-                        ModernSection.CALLS -> ModernCallsScreen(
-                            ownUserId = account.redId,
-                            history = callHistory,
-                            contacts = directory.contacts,
-                            onlineIds = directory.onlineIds.toSet(),
-                            myDisplayName = account.username,
-                            onPstn = { number -> showDinstar = true }
-                        )
-                        ModernSection.EXPLORE -> ModernExploreScreen(
-                            account = account,
-                            onBack = { currentSection = ModernSection.CHATS },
-                            onStartLive = {
-                                liveTitle = ""
-                                liveIsPrivate = false
-                                livePassword = ""
-                                showLiveCreate = true
-                            },
-                            onCreateConference = {
-                                conferencePermissions.launch(
-                                    arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
-                                )
-                            }
-                        )
-                        ModernSection.MORE -> ModernMoreScreen(
-                            account = account,
-                            onDinstar = { showDinstar = true },
-                            onSettings = { settingsInitialPage = SettingsPage.ROOT; showSettings = true },
-                            onOpenSettingsPage = openSettingsAt
-                        )
-                    }
+                    ModernSection.GROUPS -> ModernGroupsScreen(
+                        account = account,
+                        groups = groups,
+                        directory = directory,
+                        onCreateGroup = { showCreateGroup = true }
+                    )
+                    ModernSection.CALLS -> ModernCallsScreen(
+                        ownUserId = account.redId,
+                        history = callHistory,
+                        contacts = directory.contacts,
+                        onlineIds = directory.onlineIds.toSet(),
+                        myDisplayName = account.username,
+                        onExplore = { currentSection = ModernSection.EXPLORE }
+                    )
+                    ModernSection.EXPLORE -> ModernExploreScreen(
+                        account = account,
+                        onBack = { currentSection = ModernSection.CHATS },
+                        onStartLive = {
+                            liveTitle = ""
+                            liveIsPrivate = false
+                            livePassword = ""
+                            showLiveCreate = true
+                        },
+                        onCreateConference = {
+                            conferencePermissions.launch(
+                                arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
+                            )
+                        }
+                    )
+                    ModernSection.MORE -> ModernMoreScreen(
+                        account = account,
+                        onSettings = { settingsInitialPage = SettingsPage.ROOT; showSettings = true },
+                        onOpenSettingsPage = openSettingsAt
+                    )
                 }
             }
         }
@@ -932,20 +924,278 @@ fun ModernCallsScreen(
     contacts: List<com.red.sovereign.contacts.PublicRedProfile>,
     onlineIds: Set<String>,
     myDisplayName: String,
-    onPstn: (String?) -> Unit
+    onExplore: () -> Unit
 ) {
-    // إصلاح أسطوري: المكالمات ترن وتتصل - بدون تعارضات
-    // UnifiedCallsScreen موجودة ومحسنة مع 9 أنواع + 6 مسارات رنين + P2P+SFU
-    // YounesCallService موجود ويضمن الرنين عبر FCM+Telecom+LAN
-    com.red.sovereign.ui.UnifiedCallsScreen(
-        ownUserId = ownUserId,
-        history = history,
-        contacts = contacts,
-        onlineIds = onlineIds,
-        myDisplayName = myDisplayName,
-        onExplore = {},
-        onPstn = onPstn
+    // مركز المكالمات الحي — منقول سلوكه من RedDashboard.UnifiedCallsScreen (قراءة فقط):
+    // بوابات إذن قبل كل إطلاق + GroupCallPicker + ConferenceHub + LiveStreamHub + مساحة + سجل بحث/فلترة + إعادة اتصال.
+    // (لا يستدعي UnifiedCallsScreen الميتة ذات الـ4 معاملات — كانت تكسر البناء بمعاملات contacts/onlineIds الزائدة).
+    val context = LocalContext.current
+    var showNewCallDialog by remember { mutableStateOf(false) }
+    var showJoinDialog by remember { mutableStateOf(false) }
+    var showLiveDialog by remember { mutableStateOf(false) }
+    var showSpaceDialog by remember { mutableStateOf(false) }
+    var showGroupCallPicker by remember { mutableStateOf(false) }
+    var newCallTargetInput by remember { mutableStateOf("") }
+    var roomInput by remember { mutableStateOf("") }
+    var isSpaceHost by remember { mutableStateOf(false) }
+
+    val privateCallLauncher = rememberCallPermissionLauncher(
+        needCamera = true,
+        onGranted = { showNewCallDialog = true },
+        onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا لإجراء المكالمة", android.widget.Toast.LENGTH_SHORT).show() }
     )
+    val groupCallLauncher = rememberCallPermissionLauncher(
+        needCamera = true,
+        onGranted = { showGroupCallPicker = true },
+        onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا للمكالمة الجماعية", android.widget.Toast.LENGTH_SHORT).show() }
+    )
+    val conferenceLauncher = rememberCallPermissionLauncher(
+        needCamera = true,
+        onGranted = { showJoinDialog = true },
+        onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا للمؤتمر", android.widget.Toast.LENGTH_SHORT).show() }
+    )
+    val liveLauncher = rememberCallPermissionLauncher(
+        needCamera = true,
+        onGranted = { showLiveDialog = true },
+        onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا للبث", android.widget.Toast.LENGTH_SHORT).show() }
+    )
+    val spaceLauncher = rememberCallPermissionLauncher(
+        needCamera = false,
+        onGranted = { showSpaceDialog = true },
+        onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون لدخول المساحة الصوتية", android.widget.Toast.LENGTH_SHORT).show() }
+    )
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
+        Text("مركز المكالمات السيادي", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("المكالمات الفردية، المؤتمرات، والبث المباشر", color = YounesMuted, fontSize = 12.sp)
+        Spacer(Modifier.height(12.dp))
+        CallsHubLaunchers(
+            onNewCall = { privateCallLauncher() },
+            onGroupCallPicker = { groupCallLauncher() },
+            onConference = { conferenceLauncher() },
+            onSpace = { spaceLauncher() },
+            onLive = { liveLauncher() },
+            onExplore = onExplore,
+            onScheduledCalls = {
+                android.widget.Toast.makeText(context, "المكالمات المجدولة من لوحة RedDashboard الكاملة", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        )
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = history.searchQuery,
+            onValueChange = { history.searchQuery = it },
+            placeholder = { Text("بحث في سجل المكالمات (اسم أو معرف)...", fontSize = 12.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp)) },
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)),
+            singleLine = true
+        )
+        Spacer(Modifier.height(8.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            items(CallFilterType.values()) { fType ->
+                FilterChip(
+                    selected = history.selectedFilter == fType,
+                    onClick = { history.selectedFilter = fType },
+                    label = { Text(fType.label, fontSize = 11.sp) }
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        val visible = history.filteredCalls
+        when {
+            history.loading -> Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            history.error != null -> Text(history.error.orEmpty(), color = YounesMuted, fontSize = 12.sp)
+            visible.isEmpty() -> Text("لا توجد مكالمات تطابق البحث — ستظهر هنا المكالمات المفلترة.", color = YounesMuted, fontSize = 12.sp)
+            else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(visible, key = { it.id }) { call ->
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = YounesSurface1)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(call.peerLabel.ifBlank { call.peerId }, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
+                                Text("${call.type} · ${call.status}", color = YounesMuted, fontSize = 11.sp)
+                            }
+                            IconButton(onClick = { YounesCallService.start(context, call.peerId, video = false) }) {
+                                Icon(Icons.Default.Call, "إعادة صوتية", tint = YounesPrimary)
+                            }
+                            IconButton(onClick = { YounesCallService.start(context, call.peerId, video = true) }) {
+                                Icon(Icons.Default.Videocam, "إعادة فيديو", tint = YounesPrimary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showGroupCallPicker) {
+        GroupCallPickerDialog(
+            contacts = contacts,
+            onlineIds = onlineIds,
+            onDismiss = { showGroupCallPicker = false },
+            onStartCall = { selectedIds, isVideo ->
+                showGroupCallPicker = false
+                val selectedNames = selectedIds.map { id -> contacts.find { it.redId == id }?.displayName ?: id }
+                GroupCallService.startGroupCall(
+                    context = context,
+                    myUserId = ownUserId,
+                    inviteeIds = selectedIds,
+                    inviteeNames = selectedNames,
+                    isVideo = isVideo,
+                    hostName = myDisplayName
+                )
+            }
+        )
+    }
+    if (showJoinDialog) {
+        ConferenceHubDialog(
+            onDismiss = { showJoinDialog = false },
+            onCreateNew = {
+                showJoinDialog = false
+                ConferenceService.join(context, "conf-${ownUserId}-${System.currentTimeMillis()}", ownUserId, true, asHost = true, title = "مؤتمر $myDisplayName")
+            },
+            onJoinExisting = { roomId, password ->
+                showJoinDialog = false
+                ConferenceService.join(context, roomId, ownUserId, true, asHost = false, joinPassword = password)
+            }
+        )
+    }
+    if (showLiveDialog) {
+        LiveStreamHubDialog(
+            onDismiss = { showLiveDialog = false },
+            onStartBroadcasting = { title, audience, pass, friendIds, category ->
+                val hasCam = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                val hasMic = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!hasCam || !hasMic) {
+                    android.widget.Toast.makeText(context, "امنح الكاميرا والميكروفون أولاً", android.widget.Toast.LENGTH_LONG).show()
+                    return@LiveStreamHubDialog
+                }
+                val isPriv = audience != "PUBLIC"
+                val password = if (isPriv) pass.trim().takeIf { it.isNotBlank() } else null
+                showLiveDialog = false
+                val streamId = RoomSeparationPolicy.normalizeStreamId("stream_${java.util.UUID.randomUUID().toString().take(8)}")
+                LiveStreamService.start(
+                    context = context,
+                    streamId = streamId,
+                    userId = ownUserId,
+                    isBroadcaster = true,
+                    title = title.ifBlank { "بث $myDisplayName" },
+                    isPrivate = isPriv,
+                    password = password,
+                    category = category
+                )
+            },
+            onWatchStream = { streamId, password ->
+                showLiveDialog = false
+                LiveStreamService.watch(context, streamId, ownUserId, password)
+            },
+            friends = contacts
+        )
+    }
+    if (showSpaceDialog) {
+        AlertDialog(
+            onDismissRequest = { showSpaceDialog = false; roomInput = ""; isSpaceHost = false },
+            title = { Text("مساحة صوتية يونس") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("مساحة صوتية مشفرة عبر SFU — صوت فقط بلا كاميرا.", fontSize = 14.sp)
+                    OutlinedTextField(
+                        value = roomInput,
+                        onValueChange = { roomInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("معرف المساحة (اختياري)") },
+                        singleLine = true
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Checkbox(checked = isSpaceHost, onCheckedChange = { isSpaceHost = it })
+                        Text("الانضمام كمضيف", fontSize = 14.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showSpaceDialog = false
+                    val spaceId = roomInput.trim().ifBlank { "space-${ownUserId.lowercase()}-${System.currentTimeMillis() % 100000}" }
+                    ConferenceService.join(context, spaceId, ownUserId, false, asHost = isSpaceHost || roomInput.isBlank())
+                    roomInput = ""
+                    isSpaceHost = false
+                }) { Text(if (roomInput.isBlank()) "إنشاء مساحة جديدة" else "دخول المساحة") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSpaceDialog = false; roomInput = ""; isSpaceHost = false }) { Text("إلغاء") }
+            }
+        )
+    }
+    if (showNewCallDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewCallDialog = false; newCallTargetInput = "" },
+            title = { Text("مكالمة جديدة مشفرة E2EE") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = newCallTargetInput,
+                        onValueChange = { newCallTargetInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("معرف يونس (مثال: 10001)") },
+                        singleLine = true
+                    )
+                    if (contacts.isNotEmpty()) {
+                        Text("جهات الاتصال السريعة:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        LazyColumn(modifier = Modifier.fillMaxWidth().height(160.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val filtered = contacts.filter {
+                                newCallTargetInput.isBlank() || it.displayName.contains(newCallTargetInput, true) || it.redId.contains(newCallTargetInput)
+                            }
+                            items(filtered, key = { it.redId }) { contact ->
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(contact.displayName, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                        Text(contact.redId, color = YounesMuted, fontSize = 11.sp)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        IconButton(onClick = { showNewCallDialog = false; YounesCallService.start(context, contact.redId, video = false) }) {
+                                            Icon(Icons.Default.Call, "صوت")
+                                        }
+                                        IconButton(onClick = { showNewCallDialog = false; YounesCallService.start(context, contact.redId, video = true) }) {
+                                            Icon(Icons.Default.Videocam, "فيديو")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            val clean = YounesId.normalizeInput(newCallTargetInput).ifBlank { newCallTargetInput.trim() }
+                            showNewCallDialog = false
+                            YounesCallService.start(context, clean, video = false)
+                            newCallTargetInput = ""
+                        },
+                        enabled = newCallTargetInput.trim().isNotBlank()
+                    ) { Text("صوتية") }
+                    Button(
+                        onClick = {
+                            val clean = YounesId.normalizeInput(newCallTargetInput).ifBlank { newCallTargetInput.trim() }
+                            showNewCallDialog = false
+                            YounesCallService.start(context, clean, video = true)
+                            newCallTargetInput = ""
+                        },
+                        enabled = newCallTargetInput.trim().isNotBlank()
+                    ) { Text("فيديو") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewCallDialog = false; newCallTargetInput = "" }) { Text("إلغاء") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -965,7 +1215,12 @@ fun ModernExploreScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("استكشاف سيادي", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, "رجوع", tint = Color.White)
+            }
+            Text("استكشاف سيادي", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        }
         
         // بث مباشر - بدون شاشة سوداء
         Card(
@@ -1029,10 +1284,10 @@ fun ModernExploreScreen(
             }
         }
         
-        // قنوات ومجتمعات
+        // قنوات ومجتمعات — كل بطاقة تفتح وجهتها بدل البطاقة الميتة.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Card(
-                Modifier.weight(1f),
+                Modifier.weight(1f).clickable { onStartLive() },
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = YounesSurface1)
             ) {
@@ -1040,11 +1295,11 @@ fun ModernExploreScreen(
                     Icon(Icons.Default.Campaign, null, tint = YounesPrimary, modifier = Modifier.size(28.dp))
                     Spacer(Modifier.height(8.dp))
                     Text("القنوات", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-                    Text("عامة وخاصة", fontSize = 11.sp, color = YounesMuted)
+                    Text("بثوث عامة — اضغط للاستكشاف", fontSize = 11.sp, color = YounesMuted)
                 }
             }
             Card(
-                Modifier.weight(1f),
+                Modifier.weight(1f).clickable { onCreateConference() },
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = YounesSurface1)
             ) {
@@ -1052,7 +1307,7 @@ fun ModernExploreScreen(
                     Icon(Icons.Default.Diversity3, null, tint = YounesCobalt, modifier = Modifier.size(28.dp))
                     Spacer(Modifier.height(8.dp))
                     Text("المجتمعات", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-                    Text("كبيرة", fontSize = 11.sp, color = YounesMuted)
+                    Text("غرف جماعية — اضغط للإنشاء", fontSize = 11.sp, color = YounesMuted)
                 }
             }
         }
@@ -1062,7 +1317,6 @@ fun ModernExploreScreen(
 @Composable
 fun ModernMoreScreen(
     account: AuthState.Authenticated,
-    onDinstar: () -> Unit,
     onSettings: () -> Unit,
     onOpenSettingsPage: (SettingsPage) -> Unit
 ) {
@@ -1082,7 +1336,6 @@ fun ModernMoreScreen(
             // بطاقات الخدمات - كل بند يفتح وجهته الحية (RedDashboard/MoreScreen + DeviceSettingsScreen):
             // الأجهزة←صفحة DEVICES (الجلسات الحية)، التخزين←DATA، المساعدة←ABOUT — بلا شارات ميتة.
             val services = listOf(
-                Triple("الهاتف اليمني 🇾🇪", "اتصال بأرقام يمنية عبر DINSTAR", Icons.Default.SimCard) to onDinstar,
                 Triple("الإعدادات", "الخصوصية والأمان والمظهر", Icons.Default.Settings) to onSettings,
                 Triple("الأجهزة المرتبطة", "إدارة الجلسات النشطة", Icons.Default.Devices) to { onOpenSettingsPage(SettingsPage.DEVICES) },
                 Triple("التخزين", "الكاش والبيانات والتنزيلات", Icons.Default.Folder) to { onOpenSettingsPage(SettingsPage.DATA) },
@@ -1144,30 +1397,6 @@ fun ModernMoreScreen(
                     Text("✓ كل قواعد البيانات مطورة + مزامنة سريعة <2s", fontSize = 11.sp, color = YounesMuted)
                     Text("✓ واجهات أحدث + AAA مقروءة + كل الهواتف + أحدث تقنيات", fontSize = 11.sp, color = YounesMuted)
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun ModernDinstarScreen(
-    account: AuthState.Authenticated,
-    viewModel: AuthViewModel,
-    onBack: () -> Unit
-) {
-    // الهاتف اليمني - حصري
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(YounesMidnight),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Default.SimCard, null, tint = YounesAccent, modifier = Modifier.size(48.dp))
-            Text("الهاتف اليمني - DINSTAR", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("اتصال بأرقام يمنية: يمن موبايل، سبأفون، YOU، واي", color = YounesMuted, fontSize = 12.sp)
-            Button(onClick = onBack, shape = RoundedCornerShape(10.dp)) {
-                Text("رجوع")
             }
         }
     }

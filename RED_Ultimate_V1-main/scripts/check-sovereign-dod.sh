@@ -9,10 +9,11 @@
 #  3) ممنوع ملفات جديدة بأسماء dinstar/pstn/yemen/asterisk خارج الأرشيف.
 #
 # مناطق التاريخ المعفاة عمدًا (موثقة لا منسية):
-#  - الأرشيف/ ، docs/archive/ ، red-app/.../_archive/ (تاريخ محفوظ)
+#  - الأرشيف/ ، docs/الأرشيف/ ، docs/archive/ ، red-app/.../_archive/ (تاريخ محفوظ)
 #  - backend-server/.../db/migration/ (سلسلة Flyway مجمّدة؛ الإغلاق V52+V53)
 #  - سطور provenance الأربعة (تعليقات «حُذف في المرحلة 8») — مثبتة أدناه نصًا
 #  - android.telecom في AndroidManifest (واجهة نظام للرنين — ليست PSTN)
+#  - استثناء 2026-09-24: docs/الأرشيف/telecom-removed-2026-09-24 تاريخ إزالة التيليكوم — وإلا الأرشيف نفسه يُفشل الحارس
 # ═══════════════════════════════════════════════════════════════════════
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,8 +29,10 @@ fail() { say "❌ DoD: $*"; FAIL=1; }
 FIREBASE_HITS=$(grep -rni -E "firebase|fcm[^a-z]|googleapis\.com.*fcm|google-services" \
   "$P/backend-server/src" "$P/red-app/src" "$P/admin_dashboard/src" \
   "$P/media-sfu" "$P/shared-proto" 2>/dev/null \
-  | grep -v "/_archive/" | grep -v "db/migration" \
+  | grep -v "/_archive/" | grep -v "db/migration" | grep -v "docs/الأرشيف/" \
   | grep -v "res/drawable/younes_icon_master.png" \
+  | grep -v "younes_icon_clean_pro.png" | grep -v "younes_icon_ultimate.png" \
+  | grep -v "younes_icon_8k_new.png" | grep -v "mipmap-.*ic_launcher\\.png" \
   || true)
 if [ -n "$FIREBASE_HITS" ]; then
   fail "Firebase/FCM tokens in shipped code:"; say "$FIREBASE_HITS"
@@ -43,9 +46,11 @@ TELEPHONY_HITS=$(grep -rni -E "pstn|dinstar|telecom_gateways|gateway_(sim|port|r
   "$P/backend-server/src" "$P/red-app/src" "$P/admin_dashboard/src" \
   "$P/media-sfu" "$P/shared-proto" \
   "$P/docker-compose.yml" "$P/docker-compose.prod.yml" "$P/.env.example" 2>/dev/null \
-  | grep -v "/_archive/" | grep -v "db/migration" \
+  | grep -v "/_archive/" | grep -v "db/migration" | grep -v "docs/الأرشيف/" \
   | grep -v "android\.telecom" \
   | grep -v "SIP_REALM" \
+  | grep -v "younes_icon_clean_pro.png" | grep -v "younes_icon_ultimate.png" \
+  | grep -v "younes_icon_8k_new.png" | grep -v "mipmap-.*ic_launcher\\.png" \
   | grep -v -F "purge stale PSTN keys" \
   | grep -v -F "اليومي PSTN" \
   | grep -v -F "PSTN اليومي" \
@@ -58,9 +63,9 @@ fi
 
 # ── 3) أسماء ملفات النطاق الملغي خارج الأرشيف ────────────────────────────
 # -z: فصل NUL يمنع تقتبيس git للمسارات العربية (core.quotePath يتجاهل الـTTY).
-# db/migration و docs/archive تاريخ مجمّد معفى (الأول سلسلة Flyway، الثاني أرشيف دمج).
+# db/migration و docs/archive و docs/الأرشيف تاريخ مجمّد معفى (الأول سلسلة Flyway، الثاني أرشيف دمج، الثالث أرشيف إزالة التيليكوم 2026-09-24).
 NAME_HITS=$(cd "$ROOT" && git ls-files -z | tr '\0' '\n' \
-  | grep -vi "^الأرشيف/" | grep -v "docs/archive/" | grep -v "db/migration/" \
+  | grep -vi "^الأرشيف/" | grep -v "docs/archive/" | grep -v "docs/الأرشيف/" | grep -v "db/migration/" \
   | grep -i "dinstar\|pstn\|yemen\|asterisk" \
   | grep -v -i "check-sovereign-dod" || true)
 if [ -n "$NAME_HITS" ]; then

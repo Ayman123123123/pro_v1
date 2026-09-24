@@ -201,7 +201,7 @@ object SovereignStoriesAndNotes {
     /**
      * هدايا سيادية - أفضل من تيليجرام blockchain gifts Fragment
      * - تيليجرام: blockchain-based gifts via Fragment verified ownership + gifting simplified + prices drop over time + remove signatures via Stars + showcase on profile
-     * - RED: sovereign gifts + verified + prices drop + remove signatures + showcase + E2EE + P2P + Yemen
+     * - RED: sovereign gifts + verified + prices drop + remove signatures + showcase + E2EE + P2P
      */
     data class SovereignGift(
         val id: String,

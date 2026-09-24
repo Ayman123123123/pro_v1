@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
  * ════════════════════════════════════════════════════════════════════════
  *  DraftsStore — تخزين مسودات آمن ومشفر
  *  - يستخدم EncryptedMediaCache (AES-GCM 256 + Android Keystore)
- *  - كل scope له draft مستقل (LOCAL_YEMEN, USER, GROUP, ...)
+ *  - كل scope له draft مستقل (LOCAL, USER, GROUP, ...)
  *  - يدعم حتى 5 مسودات لكل user
  *  - يحفظ تلقائياً كل 1.5 ثانية بعد التوقف عن الكتابة
  * ════════════════════════════════════════════════════════════════════════
@@ -38,7 +38,7 @@ class DraftsStore(context: Context) {
     /**
      * حفظ مسودة في الخلفية (آمن للنداء من الـ main thread)
      * @param text نص المسودة
-     * @param draftScope النطاق (مثل "LOCAL_YEMEN" أو "USER:abc")
+     * @param draftScope النطاق (مثل "LOCAL" أو "USER:abc")
      */
     fun save(text: String, draftScope: String? = null) {
         if (text.isBlank()) {

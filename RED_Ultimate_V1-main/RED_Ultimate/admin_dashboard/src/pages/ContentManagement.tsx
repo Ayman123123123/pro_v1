@@ -71,11 +71,13 @@ export default function ContentManagement() {
         <Text type="secondary">استطلاعات، أحداث، هاشتاجات، وملصقات</Text>
       </div>
 
+      <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}
         type="card"
         size="large"
+        tabBarStyle={{ marginBottom: 16, overflowX: 'auto', maxWidth: '100%' }}
         items={[
           {
             key: 'polls',
@@ -99,6 +101,7 @@ export default function ContentManagement() {
           },
         ]}
       />
+      </div>
     </Space>
     </RequireAuth>
   );

@@ -377,7 +377,7 @@ class SfuMediaClient(
                 }
             }
         )
-        // Yemen-hardened: مهلة 8s بدل 4s — مصافحة WS على 4G عالي RTT كانت تفشل كذباً.
+        // Network-hardened: مهلة 8s بدل 4s — مصافحة WS على 4G عالي RTT كانت تفشل كذباً.
         return withTimeoutOrNull(8_000) { opened.await() } == true
     }
 

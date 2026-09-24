@@ -283,23 +283,33 @@ class BackupManager(private val context: Context) {
     /** يفتح tempRestore عبر SQLCipher بالمفتاح الحقيقي ويتحقق من PRAGMA integrity_check = ok. */
     private fun verifySqliteIntegrity(dbFile: File): Boolean {
         // مفتاح SQLCipher الحقيقي — نفس مخزن RedDatabase (red_database_security/passphrase).
-        // الفتح بلا مفتاح عبر android.database.sqlite يعطي "ملف مشفر" أو ok كاذب.
+        // الفتح بلا مفتاح عبر android.database.sqlite يعطي "ملف مشفر" أو ok كاذب — ممنوع.
         val passphrase = try {
             com.red.sovereign.core.SecureStore(
                 context.applicationContext, "red_database_security"
             ).get("passphrase")
         } catch (_: Exception) { null }
-        if (passphrase.isNullOrBlank()) return false
+        if (passphrase.isNullOrBlank()) {
+            Log.w(TAG, "verifySqliteIntegrity: no passphrase — refuse restore (never open w/o key)")
+            return false
+        }
         var db: net.zetetic.database.sqlcipher.SQLiteDatabase? = null
         return try {
             db = net.zetetic.database.sqlcipher.SQLiteDatabase.openDatabase(
                 dbFile.absolutePath, passphrase, null,
                 net.zetetic.database.sqlcipher.SQLiteDatabase.OPEN_READONLY
             )
-            db.rawQuery("PRAGMA integrity_check", null).use { c ->
+            val ok = db.rawQuery("PRAGMA integrity_check", null).use { c ->
                 c.moveToFirst() && c.getString(0).equals("ok", ignoreCase = true)
             }
-        } catch (_: Exception) {
+            if (!ok) return false
+            // integrity_check وحدها تمر لملف فارغ/خاطئ — تحقق أن جداول Room موجودة.
+            db.rawQuery(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('local_history','messages','conversations')",
+                null
+            ).use { c -> c.moveToFirst() && c.getInt(0) >= 3 }
+        } catch (e: Exception) {
+            Log.w(TAG, "verifySqliteIntegrity failed", e)
             false
         } finally {
             runCatching { db?.close() }

@@ -15,7 +15,7 @@ import okhttp3.*
 /**
  * 🔔 RED Sovereign Notification Router - RED-only
  * محرك التوجيه السيادي — يربط WebSocket بالإشعارات المحلية
- * بدون PSTN/DINSTAR - مكالمات RED فقط عبر WebRTC
+ * مكالمات RED فقط عبر WebRTC
  */
 class SovereignNotificationRouter : Service() {
 

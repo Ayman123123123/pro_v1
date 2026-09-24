@@ -63,7 +63,7 @@ private data class RuleUi(val key: String, val titleAr: String, val descAr: Stri
  * - القواعد: always (دائم) / busy (مشغول) / noAnswer (لا رد) / unreachable (خارج التغطية).
  * - القراءة عبر GET /api/calls/forward/status، والحفظ عبر PUT /api/calls/forward،
  *   والتعطيل عبر DELETE /api/calls/forward (disableAll) — كلها شبكة حقيقية.
- * - التحقق محلي: الرقم الهدف 7–15 رقماً (يمني +967 أو دولي +) قبل أي PUT.
+ * - التحقق محلي: الرقم الهدف 7–15 رقماً (دولي أو محلي +) قبل أي PUT.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -291,7 +291,7 @@ private fun ForwardRuleCard(
             OutlinedTextField(
                 value = rule.target,
                 onValueChange = { onChange(rule.copy(target = it.filter { c -> c.isDigit() || c == '+' }.take(16))) },
-                label = { Text("الرقم الهدف (+967…)") },
+                label = { Text("الرقم الهدف") },
                 singleLine = true,
                 enabled = !saving,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),

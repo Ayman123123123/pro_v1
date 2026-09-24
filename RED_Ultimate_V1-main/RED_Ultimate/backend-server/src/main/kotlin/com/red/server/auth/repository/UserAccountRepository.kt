@@ -16,8 +16,6 @@ interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecifica
     fun findByUsernameIgnoreCase(username: String): UserAccount?
     fun findByRedId(redId: String): UserAccount?
 
-    /** بحث عكسي لدليل المتصليناتٌ والبحث العام بالاسم. */
-    fun findByPstnNumber(pstnNumber: String): UserAccount?
     fun findAllByUsernameContainingIgnoreCaseOrDisplayNameContainingIgnoreCase(
         username: String,
         displayName: String

@@ -24,10 +24,6 @@ class UserAccount(
     @Column(name = "password_hash", nullable = false)
     var passwordHash: String = "",
 
-    /** رقم الشريحة بنمطق الهاجري V34 (users.pstn_number)ٌ يغيب عندما لم ترتبط الشريحة. */
-    @Column(name = "pstn_number", length = 20)
-    var pstnNumber: String? = null,
-
     @Column(name = "full_name", nullable = false, length = 100)
     var displayName: String = "",
 

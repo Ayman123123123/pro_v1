@@ -38,17 +38,17 @@ export function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{t('settings.title')}</h1>
-        <p className="text-muted-foreground">{t('settings.subtitle')}</p>
+        <p className="text-foreground/70">{t('settings.subtitle')}</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className={TABS_WRAP_CLASS}>
         <TabsList className={TABS_LIST_CLASS}>
-          <TabsTrigger value="appearance" className={TABS_TRIGGER_CLASS}><Palette className="h-4 w-4 mr-2" aria-hidden="true" /> Appearance</TabsTrigger>
-          <TabsTrigger value="notifications" className={TABS_TRIGGER_CLASS}><Bell className="h-4 w-4 mr-2" aria-hidden="true" /> Notifications</TabsTrigger>
-          <TabsTrigger value="security" className={TABS_TRIGGER_CLASS}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> Security</TabsTrigger>
-          <TabsTrigger value="data" className={TABS_TRIGGER_CLASS}><Database className="h-4 w-4 mr-2" aria-hidden="true" /> Data</TabsTrigger>
-          <TabsTrigger value="advanced" className={TABS_TRIGGER_CLASS}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> Advanced</TabsTrigger>
+          <TabsTrigger value="appearance" className={TABS_TRIGGER_CLASS}><Palette className="h-4 w-4 mr-2" aria-hidden="true" /> {t('settings.tabAppearance')}</TabsTrigger>
+          <TabsTrigger value="notifications" className={TABS_TRIGGER_CLASS}><Bell className="h-4 w-4 mr-2" aria-hidden="true" /> {t('settings.tabNotifications')}</TabsTrigger>
+          <TabsTrigger value="security" className={TABS_TRIGGER_CLASS}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> {t('settings.tabSecurity')}</TabsTrigger>
+          <TabsTrigger value="data" className={TABS_TRIGGER_CLASS}><Database className="h-4 w-4 mr-2" aria-hidden="true" /> {t('settings.tabData')}</TabsTrigger>
+          <TabsTrigger value="advanced" className={TABS_TRIGGER_CLASS}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> {t('settings.tabAdvanced')}</TabsTrigger>
         </TabsList>
         </div>
 
@@ -56,8 +56,8 @@ export function SettingsPage() {
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5" /> Theme</CardTitle>
-                <CardDescription>Choose your preferred color scheme</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5" aria-hidden="true" /> {t('settings.themeTitle')}</CardTitle>
+                <CardDescription>{t('settings.themeDesc')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-3 gap-4">
@@ -94,8 +94,8 @@ export function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Globe className="h-5 w-5" /> Language & Region</CardTitle>
-                <CardDescription>Set your preferred language and locale</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Globe className="h-5 w-5" aria-hidden="true" /> {t('settings.langTitle')}</CardTitle>
+                <CardDescription>{t('settings.langDesc')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -143,40 +143,40 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
-                <h4 className="font-medium">Email Notifications</h4>
+                <h4 className="font-medium text-foreground">Email Notifications</h4>
                 <div className="space-y-3 pl-4 border-l-2">
                   <label className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">All notifications</p>
-                      <p className="text-sm text-muted-foreground">Receive email for every notification</p>
+                      <p className="font-medium text-foreground">All notifications</p>
+                      <p className="text-sm text-foreground/70">Receive email for every notification</p>
                     </div>
-                    <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} />
+                    <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} aria-label="Toggle all email notifications" />
                   </label>
                   <label className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">Weekly digest</p>
-                      <p className="text-sm text-muted-foreground">Summary of weekly activity</p>
+                      <p className="font-medium text-foreground">Weekly digest</p>
+                      <p className="text-sm text-foreground/70">Summary of weekly activity</p>
                     </div>
-                    <Switch checked={weeklyDigest} onCheckedChange={setWeeklyDigest} />
+                    <Switch checked={weeklyDigest} onCheckedChange={setWeeklyDigest} aria-label="Toggle weekly digest emails" />
                   </label>
                   <label className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">Security alerts</p>
-                      <p className="text-sm text-muted-foreground">Critical security events</p>
+                      <p className="font-medium text-foreground">Security alerts</p>
+                      <p className="text-sm text-foreground/70">Critical security events</p>
                     </div>
                     <Switch checked={securityAlerts} onCheckedChange={setSecurityAlerts} aria-label="Toggle security alert emails" />
                   </label>
                 </div>
               </div>
               <div className="space-y-4">
-                <h4 className="font-medium">Push Notifications</h4>
+                <h4 className="font-medium text-foreground">Push Notifications</h4>
                 <div className="space-y-3 pl-4 border-l-2">
                   <label className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">Enable push notifications</p>
-                      <p className="text-sm text-muted-foreground">Receive real-time alerts in browser</p>
+                      <p className="font-medium text-foreground">Enable push notifications</p>
+                      <p className="text-sm text-foreground/70">Receive real-time alerts in browser</p>
                     </div>
-                    <Switch checked={pushNotifications} onCheckedChange={setPushNotifications} />
+                    <Switch checked={pushNotifications} onCheckedChange={setPushNotifications} aria-label="Toggle push notifications" />
                   </label>
                 </div>
               </div>

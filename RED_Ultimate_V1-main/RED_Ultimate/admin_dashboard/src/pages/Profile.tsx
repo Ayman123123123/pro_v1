@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useTranslation } from 'react-i18next';
 import { User, Settings, Activity, Smartphone, Monitor, LogOut, Edit, Key, Shield } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -24,8 +26,8 @@ export function ProfilePage() {
     <RequireAuth>
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t('settings.profile')}</h1>
-        <p className="text-muted-foreground">Manage your account and security</p>
+        <h1 className="text-3xl font-bold tracking-tight">{t('profile.title')}</h1>
+        <p className="text-foreground/70">{t('profile.subtitle')}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-4">
@@ -38,13 +40,13 @@ export function ProfilePage() {
                 {(user?.displayName || user?.username || 'U').charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <h2 className="text-xl font-bold">{user?.displayName || user?.username}</h2>
-            <p className="text-muted-foreground">@{user?.username}</p>
+            <h2 className="text-xl font-bold text-foreground">{user?.displayName || user?.username || '—'}</h2>
+            <p className="text-foreground/70">@{user?.username || '—'}</p>
             <Badge variant="outline" className="mt-2">{user?.role || 'USER'}</Badge>
             <div className="mt-4 pt-4 border-t space-y-2">
-              <Button variant="outline" className="w-full" onClick={() => setActiveTab('profile')}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> Edit Profile</Button>
-              <Button variant="outline" className="w-full" disabled title={t('common.comingSoon')} aria-label="Change password (coming soon)"><Key className="h-4 w-4 mr-2" aria-hidden="true" /> Change Password</Button>
-              <Button variant="outline" className="w-full" onClick={() => navigate({ to: '/settings' })}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> Security Settings</Button>
+              <Button variant="outline" className="w-full" onClick={() => setActiveTab('profile')}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> {t('profile.editProfile')}</Button>
+              <Button variant="outline" className="w-full" disabled title={t('common.comingSoon')} aria-label={`${t('profile.changePassword')} (${t('common.comingSoon')})`}><Key className="h-4 w-4 mr-2" aria-hidden="true" /> {t('profile.changePassword')}</Button>
+              <Button variant="outline" className="w-full" onClick={() => navigate({ to: '/settings' })}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> {t('profile.securitySettings')}</Button>
             </div>
           </CardContent>
         </Card>
@@ -54,38 +56,38 @@ export function ProfilePage() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <div className={TABS_WRAP_CLASS}>
             <TabsList className={TABS_LIST_CLASS}>
-              <TabsTrigger value="profile" className={TABS_TRIGGER_CLASS}><User className="h-4 w-4 mr-2" aria-hidden="true" /> Profile</TabsTrigger>
-              <TabsTrigger value="devices" className={TABS_TRIGGER_CLASS}><Smartphone className="h-4 w-4 mr-2" aria-hidden="true" /> Devices</TabsTrigger>
-              <TabsTrigger value="sessions" className={TABS_TRIGGER_CLASS}><Monitor className="h-4 w-4 mr-2" aria-hidden="true" /> Sessions</TabsTrigger>
-              <TabsTrigger value="activity" className={TABS_TRIGGER_CLASS}><Activity className="h-4 w-4 mr-2" aria-hidden="true" /> Activity Log</TabsTrigger>
+              <TabsTrigger value="profile" className={TABS_TRIGGER_CLASS}><User className="h-4 w-4 mr-2" aria-hidden="true" /> {t('profile.tabProfile')}</TabsTrigger>
+              <TabsTrigger value="devices" className={TABS_TRIGGER_CLASS}><Smartphone className="h-4 w-4 mr-2" aria-hidden="true" /> {t('profile.tabDevices')}</TabsTrigger>
+              <TabsTrigger value="sessions" className={TABS_TRIGGER_CLASS}><Monitor className="h-4 w-4 mr-2" aria-hidden="true" /> {t('profile.tabSessions')}</TabsTrigger>
+              <TabsTrigger value="activity" className={TABS_TRIGGER_CLASS}><Activity className="h-4 w-4 mr-2" aria-hidden="true" /> {t('profile.tabActivity')}</TabsTrigger>
             </TabsList>
             </div>
 
             <TabsContent value="profile">
               <Card>
                 <CardHeader>
-                  <CardTitle>Profile Information</CardTitle>
+                  <CardTitle>{t('profile.info')}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 max-w-md">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>Display Name</Label>
-                      <Input defaultValue={user?.displayName} />
+                      <Label>{t('profile.displayName')}</Label>
+                      <Input defaultValue={user?.displayName ?? ''} aria-label={t('profile.displayName')} />
                     </div>
                     <div className="space-y-2">
-                      <Label>Username</Label>
-                      <Input defaultValue={user?.username} disabled />
+                      <Label>{t('profile.username')}</Label>
+                      <Input defaultValue={user?.username ?? ''} disabled aria-label={t('profile.username')} />
                     </div>
                     <div className="space-y-2">
-                      <Label>Email</Label>
-                      <Input type="email" defaultValue={user?.email} />
+                      <Label>{t('profile.email')}</Label>
+                      <Input type="email" defaultValue={user?.email ?? ''} aria-label={t('profile.email')} />
                     </div>
                     <div className="space-y-2">
-                      <Label>Phone</Label>
-                      <Input defaultValue={user?.phone} />
+                      <Label>{t('profile.phone')}</Label>
+                      <Input defaultValue={user?.phone ?? ''} aria-label={t('profile.phone')} />
                     </div>
                   </div>
-                  <Button onClick={() => setSavedAt(new Date().toLocaleTimeString())}><Edit className="h-4 w-4 mr-2" aria-hidden="true" /> Save Changes</Button>
+                  <Button onClick={() => setSavedAt(new Date().toLocaleTimeString())}><Edit className="h-4 w-4 mr-2" aria-hidden="true" /> {t('profile.save')}</Button>
                   {savedAt && (
                     <p role="status" className="text-sm font-medium text-foreground">{t('common.success')} • {savedAt}</p>
                   )}
@@ -96,7 +98,7 @@ export function ProfilePage() {
             <TabsContent value="devices">
               <Card>
                 <CardHeader>
-                  <CardTitle>Trusted Devices</CardTitle>
+                  <CardTitle>{t('profile.trustedDevices')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -108,19 +110,20 @@ export function ProfilePage() {
                       <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex items-center gap-4">
                           <div className="p-3 bg-primary/10 rounded-lg">
-                            <Monitor className="h-6 w-6 text-primary" />
+                            <Monitor className="h-6 w-6 text-primary" aria-hidden="true" />
                           </div>
                           <div>
-                            <p className="font-medium">{d.name} {d.current && <Badge variant="secondary" className="ml-2">Current</Badge>}</p>
-                            <p className="text-sm text-muted-foreground">{d.browser} on {d.os}</p>
+                            <p className="font-medium text-foreground">{d.name} {d.current && <Badge variant="secondary" className="ml-2">Current</Badge>}</p>
+                            <p className="text-sm text-foreground/70">{d.browser} on {d.os}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
-                          <span className="text-sm text-muted-foreground">Last active: {d.lastActive}</span>
+                          <span className="text-sm text-foreground/70">Last active: {d.lastActive}</span>
                           <Badge variant={d.trusted ? 'success' : 'outline'}>
                             {d.trusted ? 'Trusted' : 'Untrusted'}
                           </Badge>
-                          <Button variant="ghost" size="icon" className="text-red-500" aria-label={`Sign out device ${d.name}`}><LogOut className="h-4 w-4" aria-hidden="true" /></Button>
+                          {/* ✅ 2026-09-24: زر وهمي بلا onClick → تعطيل معلن بدل إيهام بتسجيل خروج */}
+                          <Button variant="ghost" size="icon" className="text-red-500" aria-label={`Sign out device ${d.name} (${t('common.comingSoon')})`} disabled title={t('common.comingSoon')}><LogOut className="h-4 w-4" aria-hidden="true" /></Button>
                         </div>
                       </div>
                     ))}
@@ -132,7 +135,7 @@ export function ProfilePage() {
             <TabsContent value="sessions">
               <Card>
                 <CardHeader>
-                  <CardTitle>Active Sessions</CardTitle>
+                  <CardTitle>{t('profile.activeSessions')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -143,15 +146,15 @@ export function ProfilePage() {
                     ].map((s, i) => (
                       <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex items-center gap-4">
-                          <Monitor className="h-6 w-6 text-muted-foreground" />
+                          <Monitor className="h-6 w-6 text-foreground/70" aria-hidden="true" />
                           <div>
-                            <p className="font-medium">{s.device} {s.current && <Badge variant="secondary" className="ml-2">Current</Badge>}</p>
-                            <p className="text-sm text-muted-foreground">{s.ip} • {s.location}</p>
+                            <p className="font-medium text-foreground">{s.device} {s.current && <Badge variant="secondary" className="ml-2">Current</Badge>}</p>
+                            <p className="text-sm text-foreground/70">{s.ip} • {s.location}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">{s.time}</span>
-                          {!s.current && <Button variant="ghost" size="icon" className="text-red-500" aria-label={`End session ${s.device}`}><LogOut className="h-4 w-4" aria-hidden="true" /></Button>}
+                          <span className="text-sm text-foreground/70">{s.time}</span>
+                          {!s.current && <Button variant="ghost" size="icon" className="text-red-500" aria-label={`End session ${s.device} (${t('common.comingSoon')})`} disabled title={t('common.comingSoon')}><LogOut className="h-4 w-4" aria-hidden="true" /></Button>}
                         </div>
                       </div>
                     ))}
@@ -163,7 +166,7 @@ export function ProfilePage() {
             <TabsContent value="activity">
               <Card>
                 <CardHeader>
-                  <CardTitle>Activity Log</CardTitle>
+                  <CardTitle>{t('profile.tabActivity')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -175,15 +178,15 @@ export function ProfilePage() {
                     ].map((a, i) => (
                       <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex items-center gap-4">
-                          <Activity className="h-6 w-6 text-primary" />
+                          <Activity className="h-6 w-6 text-primary" aria-hidden="true" />
                           <div>
-                            <p className="font-medium">{a.action}</p>
-                            <p className="text-sm text-muted-foreground">{a.detail}</p>
+                            <p className="font-medium text-foreground">{a.action}</p>
+                            <p className="text-sm text-foreground/70">{a.detail}</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm text-muted-foreground">{a.time}</p>
-                          <p className="text-xs text-muted-foreground">{a.ip}</p>
+                          <p className="text-sm text-foreground/70">{a.time}</p>
+                          <p className="text-xs text-foreground/70">{a.ip}</p>
                         </div>
                       </div>
                     ))}
@@ -198,6 +201,3 @@ export function ProfilePage() {
     </RequireAuth>
   );
 }
-
-import { useState } from 'react';
-import { Label } from '@/components/ui/label';

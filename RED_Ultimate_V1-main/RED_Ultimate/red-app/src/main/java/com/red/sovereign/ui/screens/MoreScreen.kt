@@ -23,8 +23,6 @@ import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SimCard
-import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -48,7 +46,7 @@ import com.red.sovereign.ui.theme.YounesGold
 /**
  * 🏛️ YOUNES Sovereign — More Screen (مساحة يونس)
  * الهوية والخدمات السيادية في مكان واحد:
- * - الإدارة السيادية، الهاتف اليمني DINSTAR، الخصوصية والأمان
+ * - الإدارة السيادية، الخصوصية والأمان
  * - النسخ الاحتياطي، الأجهزة المتصلة، الإعدادات العامة
  * - جهات الاتصال، المجتمعات والقنوات، الفعاليات، الاستطلاعات
  * مستخرج من RedDashboard.kt إلى ملف مخصص.
@@ -56,7 +54,6 @@ import com.red.sovereign.ui.theme.YounesGold
 @Composable
 fun MoreScreen(
     account: AuthState.Authenticated,
-    onDinstar: () -> Unit,
     onAdmin: () -> Unit,
     onSettings: () -> Unit,
     onContacts: () -> Unit,
@@ -66,10 +63,9 @@ fun MoreScreen(
     onCommunities: () -> Unit = {},
     onProfile: () -> Unit = {},
     onEvents: () -> Unit = {},
-    onPolls: () -> Unit = {},
-    onSms: () -> Unit = {}
+    onPolls: () -> Unit = {}
 ) {
-    // قابلة للتمرير — 11 بطاقة تفيض حتماً على الهواتف الصغيرة.
+    // قابلة للتمرير — 9 بطاقات تفيض حتماً على الهواتف الصغيرة.
     Column(
         Modifier.fillMaxSize()
             .verticalScroll(rememberScrollState())
@@ -87,9 +83,7 @@ fun MoreScreen(
                 }
             }
         }
-        MoreOption(Icons.Default.AdminPanelSettings, "الإدارة السيادية", "مراقبة أسطول DINSTAR وعمليات يونس ماستر", AqyalGold, click = onAdmin)
-        MoreOption(Icons.Default.SimCard, "الهاتف اليمني", "اتصال صوتي مصرح عبر DINSTAR وشرائح الشبكات اليمنية", AqyalGold, click = onDinstar)
-        MoreOption(Icons.Default.Sms, "رسائل الهاتف اليمني (SMS)", "إرسال واستقبال الرسائل عبر شرائح DINSTAR مع حالة التسليم", AqyalGold, click = onSms)
+        MoreOption(Icons.Default.AdminPanelSettings, "الإدارة السيادية", "عمليات يونس ماستر", AqyalGold, click = onAdmin)
         MoreOption(Icons.Default.Security, "الخصوصية والأمان", "من يرى بياناتك، التشفير، وقفل البصمة", YounesEmerald, click = onPrivacy)
         MoreOption(Icons.Default.CloudSync, "النسخ الاحتياطي", "تأمين محادثاتك وسجلاتك محلياً", YounesGold, click = onBackup)
         MoreOption(Icons.Default.Devices, "الأجهزة المتصلة", "إدارة جلسات يونس على كافة أجهزتك", AqyalCyanGlow, click = onDevices)

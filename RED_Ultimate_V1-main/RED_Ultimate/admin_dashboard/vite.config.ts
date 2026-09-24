@@ -119,12 +119,14 @@ export default defineConfig({
           'vendor-table': ['@tanstack/react-table'],
           'vendor-virtual': ['@tanstack/react-virtual'],
           'vendor-charts': ['recharts'],
-          'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select', '@radix-ui/react-tabs', '@radix-ui/react-tooltip', '@radix-ui/react-toast', '@radix-ui/react-popover', '@radix-ui/react-avatar', '@radix-ui/react-label', '@radix-ui/react-switch', '@radix-ui/react-slider', '@radix-ui/react-progress', '@radix-ui/react-checkbox', '@radix-ui/react-radio-group', '@radix-ui/react-separator', '@radix-ui/react-scroll-area', '@radix-ui/react-collapsible', '@radix-ui/react-accordion', '@radix-ui/react-aspect-ratio', '@radix-ui/react-hover-card', '@radix-ui/react-context-menu', '@radix-ui/react-menubar', '@radix-ui/react-navigation-menu', '@radix-ui/react-toggle', '@radix-ui/react-toggle-group', '@radix-ui/react-alert-dialog', '@radix-ui/react-avatar'],
+          'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select', '@radix-ui/react-tabs', '@radix-ui/react-tooltip', '@radix-ui/react-toast', '@radix-ui/react-popover', '@radix-ui/react-avatar', '@radix-ui/react-label', '@radix-ui/react-switch', '@radix-ui/react-slider', '@radix-ui/react-progress', '@radix-ui/react-checkbox', '@radix-ui/react-radio-group', '@radix-ui/react-separator', '@radix-ui/react-scroll-area', '@radix-ui/react-collapsible', '@radix-ui/react-accordion', '@radix-ui/react-aspect-ratio', '@radix-ui/react-hover-card', '@radix-ui/react-context-menu', '@radix-ui/react-menubar', '@radix-ui/react-navigation-menu', '@radix-ui/react-toggle', '@radix-ui/react-toggle-group', '@radix-ui/react-alert-dialog'],
           'vendor-ui-antd': ['antd', '@ant-design/icons'],
-          'vendor-forms': ['zod'],
           'vendor-i18n': ['i18next', 'react-i18next'],
           'vendor-socket': ['socket.io-client'],
-          'vendor-utils': ['date-fns', 'clsx', 'tailwind-merge', 'class-variance-authority', 'lucide-react', 'cmdk', 'vaul', 'embla-carousel-react', 'react-day-picker', 'react-resizable-panels'],
+          // zod/vaul/embla-carousel-react/react-day-picker/react-resizable-panels
+          // are NOT in package.json/package-lock.json and src/ imports none of
+          // them — listing them here is dead weight, so they stay out.
+          'vendor-utils': ['date-fns', 'clsx', 'tailwind-merge', 'class-variance-authority', 'lucide-react', 'cmdk'],
         },
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',

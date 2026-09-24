@@ -246,6 +246,29 @@ class StorageOrphanTest {
         assertEquals(setOf("users/u/g1.jpg", "users/u/g2.jpg"), svc.listActiveGrantedKeys())
     }
 
+    // ── 8) المهلة: انتهاؤها يوقف كل شيء بلا حذف ─────────────────────────
+    @Test
+    fun `expired deadline stops deletion without removing anything`() {
+        val minio = minioWith("users/u/orphan.jpg")
+        val svc = oldSpy(minio)
+        val past = Instant.now().minusSeconds(60)
+        val result = svc.deleteOrphans(emptySet(), dryRun = false, gracePeriod = Duration.ZERO, deadline = past)
+        assertTrue(result.isEmpty(), "expired deadline must yield nothing")
+        verify(minio, never()).removeObject(any<RemoveObjectArgs>())
+    }
+
+    @Test
+    fun `inventory with expired deadline is incomplete and blocks scan`() {
+        val (mongo, jdbc, grants) = fullMocks()
+        val scheduler = OrphanCleanupScheduler(
+            mock<StorageMonitorService>(), mock<MediaService>(), mongo, jdbc, grants,
+            dryRunDefault = false, graceDays = 7
+        )
+        val inventory = scheduler.collectReferencedMediaKeys(Instant.now().minusSeconds(60))
+        assertFalse(inventory.complete, "expired inventory must be incomplete")
+        assertTrue(inventory.failures.any { it.contains("timeout") }, "failures: ${inventory.failures}")
+    }
+
     private data class Quad(
         val mongo: MongoTemplate,
         val jdbc: JdbcTemplate,

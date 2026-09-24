@@ -15,7 +15,7 @@ object SecureOkHttpClient {
      * Timeouts are **seconds**. Passing 800 here is 13 minutes, not 800ms.
      * LAN probes must build their own client with `TimeUnit.MILLISECONDS`.
      *
-     * Yemen-hardened defaults: connect short for fast failover (10s),
+     * Network-hardened defaults: connect short for fast failover (10s),
      * read/write tolerant for slow 4G TTFB (30s), plus an overall
      * callTimeout deadline so hung chains can't pin the dispatcher.
      */

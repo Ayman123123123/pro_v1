@@ -122,6 +122,7 @@ services:
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
+      - '--web.listen-address=127.0.0.1:9100'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
     # LEGENDARY FIX: network_mode:host يتعارض مع networks (compose يرفض المشروع كله)
     # node-exporter بهوست الشبكة يرى red-net عبر المضيف — نحذف networks ونبقي host.

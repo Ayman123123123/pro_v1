@@ -16,6 +16,7 @@ import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.Duration
+import java.time.Instant
 
 /**
  * 🧹 تنظيف يومي للملفات اليتيمة — يحذف كائنات MinIO بدون مرجع حي.
@@ -28,6 +29,8 @@ import java.time.Duration
  * 3. فترة سماح (red.media.cleanup.grace-days، افتراضي 7): الكائنات الجديدة
  *    (رفوعات جارية، شظايا ‎.partN، وسائط لم تُربط بعد) محمية دائمًا.
  * 4. العمر المجهول (فشل stat) = حماية، لا حذف.
+ * 5. مهلة إجمالية (red.media.cleanup.timeout-seconds، افتراضي 300): انتهاؤها
+ *    يُوقف الدورة فورًا بلا حذف لاحق، والجردة المتجاوِزة تُعدّ ناقصة.
  *
  * مصادر المراجع (أسماء الحقول/الجداول الصحيحة):
  * 1. posts (Mongo): media[].objectKey + poll.options[].imageUrl — غير المحذوفة
@@ -52,16 +55,18 @@ class OrphanCleanupScheduler(
     private val grants: MediaGrantService,
     /** معاينة فقط افتراضيًا — اقلبها false صراحةً لتفعيل الحذف بعد المراجعة. */
     @Value("\${red.media.cleanup.dry-run:true}") private val dryRunDefault: Boolean,
-    @Value("\${red.media.cleanup.grace-days:7}") private val graceDays: Long
+    @Value("\${red.media.cleanup.grace-days:7}") private val graceDays: Long,
+    @Value("\${red.media.cleanup.timeout-seconds:300}") private val timeoutSeconds: Long = 300
 ) {
     private val log = LoggerFactory.getLogger(OrphanCleanupScheduler::class.java)
 
     @Scheduled(cron = "0 0 3 * * *", zone = "Asia/Aden")
     fun dailyOrphanScan() {
         try {
+            val deadline = Instant.now().plusSeconds(timeoutSeconds.coerceAtLeast(30))
             val stats = storage.getLocalUsageStats()
             log.info("Orphan scan — media_files: {} bytes, db_records: {}", stats["media_files"], stats["database_records"])
-            val inventory = collectReferencedMediaKeys()
+            val inventory = collectReferencedMediaKeys(deadline)
             log.info("Collected {} referenced media keys (complete={})", inventory.keys.size, inventory.complete)
             if (!inventory.complete) {
                 log.error(
@@ -70,8 +75,13 @@ class OrphanCleanupScheduler(
                 )
                 return
             }
+            if (Instant.now().isAfter(deadline)) {
+                log.error("Orphan scan TIMEOUT before deletion — skipping deletion entirely (fail-closed)")
+                return
+            }
             val grace = Duration.ofDays(graceDays.coerceAtLeast(0))
-            val candidates = media.deleteOrphans(inventory.keys, dryRun = dryRunDefault, gracePeriod = grace)
+            val timeout = Duration.between(Instant.now(), deadline).let { if (it.isNegative) Duration.ZERO else it }
+            val candidates = media.deleteOrphans(inventory.keys, dryRun = dryRunDefault, gracePeriod = grace, timeout = timeout)
             if (dryRunDefault) {
                 if (candidates.isNotEmpty()) {
                     log.warn("DRY-RUN preview: {} orphan candidates NOT deleted. First 10: {}", candidates.size, candidates.take(10))
@@ -91,9 +101,13 @@ class OrphanCleanupScheduler(
     /**
      * يجمع كل الـ object keys المُشار إليها حيًّا. فشل أي مصدر يُسجَّل في
      * [ReferenceInventory.failures] ويجعل الجردة ناقصة — والمجدول عندها
-     * لا يحذف شيئًا إطلاقًا.
+     * لا يحذف شيئًا إطلاقًا. تجاوز [deadline] يُسجَّل كفشل مهلة (fail-closed).
      */
-    fun collectReferencedMediaKeys(): ReferenceInventory {
+    fun collectReferencedMediaKeys(): ReferenceInventory =
+        collectReferencedMediaKeys(Instant.now().plusSeconds(timeoutSeconds.coerceAtLeast(30)))
+
+    fun collectReferencedMediaKeys(deadline: Instant): ReferenceInventory {
+        fun expired(): Boolean = Instant.now().isAfter(deadline)
         val keys = mutableSetOf<String>()
         val failures = mutableListOf<String>()
 
@@ -150,6 +164,11 @@ class OrphanCleanupScheduler(
             "group_messages" to "group_messages",
             "channel_messages" to "channel_messages"
         ).forEach { (source, collection) ->
+            if (expired()) {
+                failures.add("$source:timeout")
+                log.warn("Orphan inventory timeout before {}", collection)
+                return@forEach
+            }
             try {
                 mongo.getCollection(collection)
                     .distinct("attachments.mediaKey", String::class.java)
@@ -158,6 +177,12 @@ class OrphanCleanupScheduler(
                 failures.add("$source:${e.message}")
                 log.warn("Failed to scan {}: {}", collection, e.message)
             }
+        }
+
+        if (expired()) {
+            failures.add("timeout:inventory-deadline-exceeded")
+            log.warn("Orphan inventory timeout — marking incomplete (fail-closed)")
+            return ReferenceInventory(keys = keys, complete = false, failures = failures)
         }
 
         // 6) صور البروفايل — users.avatar_url في Postgres

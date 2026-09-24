@@ -1174,7 +1174,7 @@ private fun OfflineQueueDialog(onDismiss: () -> Unit, snackbar: SnackbarHostStat
     }
 }
 
-// Phase 8: حوار حد مدة المكالمة فقط (الحد اليومي PSTN وحصة الخادم محذوفة).
+// Phase 8: حوار حد مدة المكالمة فقط (الحد اليومي وحصة الخادم محذوفة).
 @Composable
 private fun CallLimitsDialog(
     onDismiss: () -> Unit,

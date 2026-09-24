@@ -4,8 +4,8 @@ import android.content.Context
 import com.red.sovereign.core.SecureStore
 
 /**
- * TokenStore - نظيف بدون PSTN
- * تم إلغاء كل ما يتعلق بالهاتف اليمني
+ * TokenStore - RED-only نظيف
+ * تم إلغاء كل ما يتعلق بالبوابات الخارجية
  */
 class TokenStore(val context: Context) {
     private val store = SecureStore(context, "red_session")
@@ -57,7 +57,6 @@ class TokenStore(val context: Context) {
     fun clearSession() {
         pendingPasswordMemory = null
         store.remove("access", "refresh", "red_id", "username", "role",
-            "pstn_enabled", "pstn_number", "pstn_port_index", "pstn_gateway_id", // Phase 8: purge stale PSTN keys from older installs
             "pending_username", "pending_password", "push_endpoint")
     }
 }

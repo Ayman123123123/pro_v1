@@ -46,7 +46,6 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -62,7 +61,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
@@ -85,30 +83,24 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.red.sovereign.auth.AuthState
-import com.red.sovereign.auth.AuthViewModel
-import com.red.sovereign.auth.PstnState
 import com.red.sovereign.calls.CallHistoryItem
 import com.red.sovereign.calls.CallHistoryViewModel
 import com.red.sovereign.calls.computedDurationSeconds
 import com.red.sovereign.calls.formatCallDuration
 import com.red.sovereign.calls.ConferenceService
 import com.red.sovereign.calls.LiveStreamService
-import com.red.sovereign.calls.YemeniOperatorDetector
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
 import java.util.UUID
 
 @Composable
-internal fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit, onPstn: () -> Unit = {}) {
+internal fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit) {
     var filter by remember { mutableStateOf("الكل") }
     var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var showLiveDialog by remember { mutableStateOf(false) }
     var showSpaceDialog by remember { mutableStateOf(false) }
-    var showDinstarDialog by remember { mutableStateOf(false) }
-    var dinstarNumberInput by remember { mutableStateOf("") }
     var newCallTargetInput by remember { mutableStateOf("") }
     var isSpaceHost by remember { mutableStateOf(false) }
     var isBroadcaster by remember { mutableStateOf(false) }
@@ -117,7 +109,7 @@ internal fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel
     val visible = history.calls.filter { call -> when (filter) {
         "فائتة" -> call.status == "MISSED"; "صوت" -> call.type == "VOICE"; "فيديو" -> call.type == "VIDEO"
         "جماعية" -> call.type == "GROUP"; "بث" -> call.type == "LIVE"; "مساحات" -> call.type == "SPACE"
-        "DINSTAR" -> call.route == "DINSTAR"; else -> true
+        else -> true
     } }
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
         Text("مركز المكالمات", fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -130,18 +122,17 @@ internal fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel
             onSpace = { showSpaceDialog = true },
             onLive = { showLiveDialog = true },
             onScheduledCalls = { },
-            onExplore = onExplore,
-            onPstn = onPstn
+            onExplore = onExplore
         )
         Spacer(Modifier.height(16.dp))
         Text("السجل", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات", "DINSTAR")) { title -> FilterChip(filter == title, { filter = title }, { Text(title) }) }
+            items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات")) { title -> FilterChip(filter == title, { filter = title }, { Text(title) }) }
         }
         when {
             history.loading -> Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) }
             history.error != null -> EmptyState(Icons.Default.History, "تعذر تحميل السجل", history.error.orEmpty())
-            visible.isEmpty() -> EmptyState(Icons.Default.History, "لا توجد مكالمات", "ستظهر هنا كل المكالمات مع شارة توضح مسار يونس أو DINSTAR.")
+            visible.isEmpty() -> EmptyState(Icons.Default.History, "لا توجد مكالمات", "ستظهر هنا كل مكالمات يونس المشفرة.")
             else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(visible, key = { it.id }) { CallHistoryRow(it) } }
         }
     }
@@ -313,57 +304,6 @@ internal fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel
         )
     }
 
-    if (showDinstarDialog) {
-        val operator = YemeniOperatorDetector.getOperatorInfo(dinstarNumberInput)
-        AlertDialog(
-            onDismissRequest = { showDinstarDialog = false; dinstarNumberInput = "" },
-            title = { Text("لوحة اتصال الهاتف اليمني (DINSTAR GSM)") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("اتصال آمن ومباشر بأي رقم هاتف يمني ثابت أو محمول عبر بوابات Dinstar GSM:", color = Color.Gray, fontSize = 13.sp)
-
-                    OutlinedTextField(
-                        value = dinstarNumberInput,
-                        onValueChange = { dinstarNumberInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("أدخل الرقم (مثال: 777123456)") },
-                        singleLine = true
-                    )
-
-                    if (operator != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(operator.brandColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                Text("الشبكة المكتشفة: ${operator.name}", color = operator.brandColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text(operator.technology, color = Color.White, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDinstarDialog = false
-                        dinstarNumberInput = ""
-                        onPstn()
-                    }
-                ) {
-                    Text("فتح الهاتف اليمني")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDinstarDialog = false; dinstarNumberInput = "" }) {
-                    Text("إلغاء")
-                }
-            }
-        )
-    }
-
     if (showNewCallDialog) {
         AlertDialog(
             onDismissRequest = { showNewCallDialog = false; newCallTargetInput = "" },
@@ -423,7 +363,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
             "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
             "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
             "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
-            else -> if (call.peerId.matches(Regex(com.red.sovereign.core.YounesId.PATTERN)) && call.route != "DINSTAR") {
+            else -> if (call.peerId.matches(Regex(com.red.sovereign.core.YounesId.PATTERN))) {
                 YounesCallService.start(context, call.peerId, call.type == "VIDEO")
             }
         }
@@ -451,7 +391,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
             )
         }
         // شارة عرض فقط (كانت AssistChip معطلة بـ onClick فارغ) — نص ثابت بلا تفاعل وهمي.
-        Text(if (call.route == "DINSTAR") "DINSTAR صوت" else "يونس ${call.type}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("يونس ${call.type}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -461,44 +401,4 @@ private fun CallHistoryRow(call: CallHistoryItem) {
 private fun RoundCallAction(icon: ImageVector, title: String, color: Color, enabled: Boolean, onClick: () -> Unit = {}) = Column(horizontalAlignment = Alignment.CenterHorizontally) {
     FilledIconButton(onClick, Modifier.size(62.dp), enabled = enabled) { Icon(icon, title, tint = if (enabled) color else Color.Gray, modifier = Modifier.size(30.dp)) }
     Text(title, fontSize = 11.sp); if (!enabled) Text("قيد الربط", color = Color.Gray, fontSize = 9.sp)
-}
-
-@Composable
-
-private fun DialPad(enabled: Boolean, viewModel: AuthViewModel) {
-    var number by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(number.ifEmpty { "أدخل الرقم" }, fontSize = 27.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-            IconButton({ if (number.isNotEmpty()) number = number.dropLast(1) }) { Icon(Icons.AutoMirrored.Filled.Backspace, "حذف") }
-        }
-        com.red.sovereign.calls.YemeniOperatorDetector.getOperatorInfo(number)?.let { op ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
-                Box(Modifier.size(8.dp).background(op.brandColor, CircleShape))
-                Text("  ${op.name} (${op.technology})", color = op.brandColor, style = MaterialTheme.typography.labelSmall)
-            }
-        }
-        listOf(listOf("1","2","3"), listOf("4","5","6"), listOf("7","8","9"), listOf("*","0","#")).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) { row.forEach { digit -> FilledIconButton({ number += digit }, Modifier.size(64.dp)) { Text(digit, fontSize = 23.sp) } } }
-        }
-        Button({ viewModel.clearPstnState(); viewModel.dialPstn(number) }, enabled = enabled && number.filter(Char::isDigit).length >= 6, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Call, null); Text(" اتصال صوتي عبر DINSTAR") }
-        when (val state = viewModel.pstnState) {
-            PstnState.Dialing -> CircularProgressIndicator(color = AqyalGold)
-            PstnState.Bridging, PstnState.Registering, PstnState.Ringing -> Text("جارٍ الاتصال…", color = AqyalGold)
-            // المزوّد يتكلّم قبل الرد — شاشة المكالمة النشطة تتولّى العرض
-            // (PstnActiveCallHost) وفيها لوحة الأرقام وزرّ الإنهاء.
-            PstnState.EarlyMedia -> Text("صوت الشبكة… (ردّ المزوّد)", color = AqyalGold)
-            is PstnState.Incoming -> Text("مكالمة واردة من ${state.fromNumber}", color = AqyalGold)
-            is PstnState.Started -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("بدأ الاتصال · ${state.usedToday}/${state.dailyLimit} اليوم", color = AqyalGold)
-                // 📴 زر إنهاء فعلي — يستدعي POST /api/pstn/calls/{callId}/hangup ويحرّر منفذ GSM
-                OutlinedButton(
-                    onClick = { viewModel.hangupPstn() },
-                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Icon(Icons.Default.Call, null, tint = MaterialTheme.colorScheme.error); Text(" إنهاء المكالمة") }
-            }
-            is PstnState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
-            PstnState.Idle -> Unit
-        }
-    }
 }

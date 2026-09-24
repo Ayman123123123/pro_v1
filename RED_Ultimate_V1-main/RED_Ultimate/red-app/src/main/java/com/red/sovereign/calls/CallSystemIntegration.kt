@@ -1,12 +1,10 @@
 package com.red.sovereign.calls
 
 import android.content.Context
-import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.sync.CallLogSyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +19,7 @@ import kotlinx.coroutines.launch
  * يوحّد جميع مكونات نظام المكالمات (WebRTC, RED, Push Notifications, Telecom)
  * في واجهة واحدة مركزية. يتعامل مع:
  * - تهيئة محرك WebRTC
- * - تسجيل إشعارات FCM للمكالمات
+ * - تسجيل إشعارات push للمكالمات
  * - ربط خدماتTelecom (Android ConnectionService)
  * - مزامنة سجل المكالمات مع الخادم
  * - إدارة حالة التطبيق أثناء المكالمات (foreground service)
@@ -58,16 +56,8 @@ object CallSystemIntegration {
             }
         )
 
-        // 4. بدء خدمةForeground للمكالمات RED
-        // تصحيح: PstnCallService غير موجود؛ الخدمة الحقيقية هي
-        // PstnCallForegroundService، ومصدر "هل RED متاح" هو صلاحية الحساب
-        // المحفوظة في TokenStore.pstnEnabled (تُحدّث من /api/auth/me).
-        // الخدمة تُشغَّل عبر مصنعها الحقيقي start(context, number) لأن
-        // ACTION_START يتوقع extra باسم "number" لبناء الإشعار.
-        val tokens = TokenStore(context)
-        if (tokens.pstnEnabled) {
-            PstnCallForegroundService.start(context, tokens.pstnNumber.orEmpty())
-        }
+        // 4. RED-only: لا توجد خدمة بوابة خارجية — مكالمات WebRTC فقط.
+        // (أُزيلت بوابة الهاتف الخارجي في 2026-09-24: بلا بدء مشروط وبلا مناداة).
 
         // 5. تهيئة مدير الإشعارات
         // تصحيح: لا يوجد NotificationHelper في المشروع — إنشاء القناة (الخطوة 2)
@@ -97,11 +87,7 @@ object CallSystemIntegration {
      * إنهاء نظام المكالمات (عند الخروج)
      */
     fun shutdown(context: Context) {
-        // إيقاف خدماتForeground
-        val intent = Intent(context, PstnCallForegroundService::class.java).apply {
-            action = PstnCallForegroundService.ACTION_STOP
-        }
-        context.startService(intent)
+        // RED-only: لا توجد خدمة بوابة لإيقافها.
     }
 
     /**

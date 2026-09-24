@@ -258,8 +258,10 @@ export default function Backups() {
         <Text type="secondary">سجل النسخ السابقة ودليل النسخ والاستعادة التشغيلي المشفر</Text>
       </div>
 
+      <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
       <Tabs
         type="card"
+        tabBarStyle={{ marginBottom: 16, overflowX: 'auto', maxWidth: '100%' }}
         items={[
           {
             key: 'api',
@@ -433,6 +435,7 @@ export default function Backups() {
           },
         ]}
       />
+      </div>
     </Space>
     </RequireAuth>
   );

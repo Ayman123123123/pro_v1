@@ -465,7 +465,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 )
             }
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
-            // Phase 8: مدخل الإدارة السيادية — كان DINSTAR (محذوف)؛ الآن لوحة الإدارة الحقيقية.
+            // مدخل الإدارة السيادية — لوحة الإدارة الحقيقية.
             SovereignScreen.ADMIN -> {
                 if (!account.isAdmin) { currentScreen = SovereignScreen.DASHBOARD; return }
                 val adminVm: com.red.sovereign.features.admin.AdminViewModel =

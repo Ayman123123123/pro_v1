@@ -148,6 +148,13 @@ class OutboxRetryWorker(
                 Log.d(TAG, "Skipping DEAD_LETTER message: ${msg.id}")
                 continue
             }
+            // المجموعات/التفاعلات لها مسار مخصص (red_group_outbox + redrive بذات clientId) —
+            // لا تحرق retries هنا ولا DLQ زائف؛ فوّض لعامل الاستعادة.
+            if (isGroupOrReactionType(msg.type)) {
+                Log.d(TAG, "Skipping group/reaction outbox row (dedicated redrive): ${msg.id} type=${msg.type}")
+                runCatching { com.red.sovereign.core.workers.MessageRecoveryWorker.enqueue(applicationContext) }
+                continue
+            }
 
             val sending = try { dao.markSending(msg.id) } catch (e: Exception) { Log.w(TAG, "markSending failed for ${msg.id}", e); 0 }
             if (sending == 0) continue // سبق أن أخذها عامل آخر — تخطي
@@ -233,6 +240,13 @@ class OutboxRetryWorker(
             Log.w(TAG, "Send failed for ${msg.id}", e)
             false
         }
+    }
+
+    /** صفوف المجموعات/التفاعلات لا تُرسل عبر ACTION_SEND_PAYLOAD الفردي — لها redrive مخصص. */
+    private fun isGroupOrReactionType(type: String): Boolean {
+        val t = type.uppercase()
+        return t == "GROUP" || t == "GROUP_MESSAGE" || t == "GROUP_KEY_DISTRIBUTION" ||
+            t == "REACTION" || t == "REACTION_REMOVE" || t.startsWith("GROUP_")
     }
 
     /**

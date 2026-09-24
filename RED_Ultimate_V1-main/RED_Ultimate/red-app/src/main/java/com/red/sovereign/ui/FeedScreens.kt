@@ -565,7 +565,7 @@ private fun PostCard(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             // شارات عرض فقط (كانت AssistChip معطلة بـ onClick فارغ) — نصوص ثابتة بلا تفاعل وهمي.
-            Text(if (post.visibility == "LOCAL_YEMEN") "نبض محلي" else "عام", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (post.visibility == "LOCAL") "نبض محلي" else "عام", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(if (post.poll != null) "استطلاع" else if (post.parentId != null) "رد" else "منشور", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (post.kind != "POST") Text(post.kind, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

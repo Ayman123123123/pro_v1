@@ -92,7 +92,7 @@ private object Keys {
     // سجل المكالمات: مدة الاحتفاظ بالأيام + المزامنة التلقائية مع الخادم.
     const val CALL_HISTORY_RETENTION = "call_history_retention"
     const val CALL_HISTORY_SYNC = "call_history_sync"
-    // حد المدة الأقصى للمكالمة بالثواني (حد PSTN اليومي حُذف في المرحلة 8).
+    // حد المدة الأقصى للمكالمة بالثواني (حد البوابة اليومي حُذف في المرحلة 8).
     const val MAX_CALL_DURATION = "max_call_duration"
     // التسجيل التلقائي للمكالمات — دائم (يُقرأ عند بدء التسجيل مع موافقة الطرفين).
     const val CALL_AUTO_RECORD = "call_auto_record"

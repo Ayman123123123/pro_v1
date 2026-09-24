@@ -45,7 +45,7 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 
 /**
- * CallsScreen - مركز المكالمات المطور بدون PSTN/DINSTAR
+ * CallsScreen - مركز المكالمات السيادي
  * 
  * - مكالمات خاصة صوت منفصل وفيديو منفصل (أفضل من واتس وتيليجرام وزنجي)
  * - مكالمات مجموعات الدردشة صوت/فيديو كل على حدة

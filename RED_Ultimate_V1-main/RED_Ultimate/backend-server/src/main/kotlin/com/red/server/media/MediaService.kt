@@ -180,17 +180,34 @@ class MediaService(
         return allKeys.filter { it !in referencedKeys }
     }
 
-    fun listAllKeys(limit: Int = 10000): List<String> {
+    fun listAllKeys(limit: Int = 500000): List<String> =
+        listAllKeys(limit, Duration.ofSeconds(120))
+
+    /**
+     * سرد كامل مُرقَّم (بلا maxKeys مبتور): الـ Iterable يقلّب كل الصفحات
+     * تلقائيًا حتى النفاد. [limit] سقف أمان فقط، و[timeout] يوقف السرد
+     * المبكر بلا حذف (fail-closed عند المتصل).
+     */
+    fun listAllKeys(limit: Int, timeout: Duration): List<String> {
         ensureBucket()
+        val deadline = Instant.now().plus(timeout.let { if (it.isNegative) Duration.ZERO else it })
         val keys = mutableListOf<String>()
-        var result = minio.listObjects(
-            io.minio.ListObjectsArgs.builder().bucket(bucket).maxKeys(limit).build()
+        val cap = limit.coerceAtLeast(1)
+        val result = minio.listObjects(
+            io.minio.ListObjectsArgs.builder().bucket(bucket).recursive(true).build()
         )
         for (item in result) {
+            if (Instant.now().isAfter(deadline)) {
+                log.warn("Object listing TIMEOUT after {} keys — stopping scan early", keys.size)
+                break
+            }
             // minio Result<T> exposes only get() (throws ErrorResponseException) — no getOrNull.
             val obj = runCatching { item.get() }.getOrNull() ?: continue
             keys += obj.objectName()
-            if (keys.size >= limit) break
+            if (keys.size >= cap) {
+                log.warn("Object listing capped at safety limit {} keys", cap)
+                break
+            }
         }
         return keys
     }
@@ -199,6 +216,14 @@ class MediaService(
         return deleteOrphans(referencedKeys, dryRun, Duration.ofDays(DEFAULT_ORPHAN_GRACE_DAYS))
     }
 
+    fun deleteOrphans(
+        referencedKeys: Set<String>,
+        dryRun: Boolean = true,
+        gracePeriod: Duration
+    ): List<String> = deleteOrphans(
+        referencedKeys, dryRun, gracePeriod, Duration.ofSeconds(DEFAULT_ORPHAN_TIMEOUT_SECONDS)
+    )
+
     /**
      * 🧹 حذف المرشّحين الأيتام مع حماية fail-closed:
      * - dryRun=true (الافتراضي الآمن): معاينة فقط — يُسجَّل المرشّحون ولا يُحذف شيء،
@@ -206,27 +231,53 @@ class MediaService(
      * - فترة سماح: أي كائن أحدث من [gracePeriod] (رفع جارٍ أو شظايا .partN أو
      *   وسائط لم تُربط مراجعها بعد) يُحمى ولا يُحذف.
      * - عمر مجهول (فشل stat): يُحمى ولا يُحذف أبدًا — الشكّ لصالح البقاء.
+     * - مهلة [timeout]: انتهاؤها يوقف stat/الحذف فورًا؛ ما جُمع قبلها يُعاد
+     *   كمعاينة (dryRun) أو كمحذوف فعلي جزئي — ولا حذف بعد المهلة أبدًا.
      * - dryRun=false: يُحذف فقط المرشّحون القدامى ذوو العمر المؤكد، وتُعاد
      *   قائمة المحذوف فعلًا.
      */
     fun deleteOrphans(
         referencedKeys: Set<String>,
         dryRun: Boolean = true,
-        gracePeriod: Duration
+        gracePeriod: Duration,
+        timeout: Duration
     ): List<String> {
-        val all = listAllKeys()
+        val deadline = Instant.now().plus(timeout.let { if (it.isNegative) Duration.ZERO else it })
+        return deleteOrphans(referencedKeys, dryRun, gracePeriod, deadline)
+    }
+
+    fun deleteOrphans(
+        referencedKeys: Set<String>,
+        dryRun: Boolean = true,
+        gracePeriod: Duration,
+        deadline: Instant
+    ): List<String> {
+        val all = listAllKeys(deadline = deadline)
         val orphans = findOrphanKeys(all, referencedKeys)
         val now = Instant.now()
         val deletable = mutableListOf<String>()
         var freshKept = 0
         var unknownKept = 0
+        var timedOut = false
         orphans.forEach { key ->
+            if (Instant.now().isAfter(deadline)) {
+                timedOut = true
+                return@forEach
+            }
             val modified = objectLastModified(key)
             when {
                 modified == null -> unknownKept++ // fail-closed: العمر المجهول = حماية
                 Duration.between(modified, now) < gracePeriod -> freshKept++
                 else -> deletable += key
             }
+        }
+        if (timedOut) {
+            log.warn(
+                "Orphan cleanup TIMEOUT — stopping early ({} orphans scanned, {} deletable so far held for review)",
+                orphans.size, deletable.size
+            )
+            // قبل أي حذف: المعاينة تُعاد للمراجعة، والوضع الحقيقي يعيد فارغًا (لا شيء حُذف).
+            return if (dryRun) deletable else emptyList()
         }
         log.warn(
             "Orphan preview: {} deletable candidates ({} orphans total, {} fresh<{}d kept, {} unknown-age kept). First 10: {}",
@@ -238,6 +289,10 @@ class MediaService(
         }
         val deleted = mutableListOf<String>()
         deletable.forEach { key ->
+            if (Instant.now().isAfter(deadline)) {
+                log.warn("Orphan cleanup TIMEOUT during deletion — stopping ({} deleted so far)", deleted.size)
+                return deleted
+            }
             try {
                 minio.removeObject(io.minio.RemoveObjectArgs.builder().bucket(bucket).`object`(key).build())
                 deleted += key
@@ -246,6 +301,11 @@ class MediaService(
             }
         }
         return deleted
+    }
+
+    private fun listAllKeys(deadline: Instant, limit: Int = 500000): List<String> {
+        val remaining = Duration.between(Instant.now(), deadline).let { if (it.isNegative) Duration.ZERO else it }
+        return listAllKeys(limit, remaining)
     }
 
     /**
@@ -288,6 +348,8 @@ class MediaService(
         const val MAX_SIZE = 100L * 1024 * 1024
         /** فترة السماح الافتراضية قبل اعتبار كائن يتيم قابلًا للحذف (أيام). */
         const val DEFAULT_ORPHAN_GRACE_DAYS = 7L
+        /** المهلة الافتراضية لدورة التنظيف (ثوانٍ) — توقف مبكر بلا حذف لاحق. */
+        const val DEFAULT_ORPHAN_TIMEOUT_SECONDS = 300L
         val ALLOWED = setOf("image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "application/pdf", "application/octet-stream")
         val EXTENSIONS = mapOf("image/jpeg" to "jpg", "image/png" to "png", "image/webp" to "webp", "image/gif" to "gif", "video/mp4" to "mp4", "video/webm" to "webm", "audio/ogg" to "ogg", "audio/mp4" to "m4a", "audio/mpeg" to "mp3", "application/pdf" to "pdf", "application/octet-stream" to "bin")
     }

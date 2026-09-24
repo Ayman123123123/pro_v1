@@ -15,9 +15,8 @@ RUN npm ci --no-audit --no-fund
 
 # ─── Source layer — builds the modern App.tsx (16 pages, RTL dark) ───
 COPY . .
-# Strict gates: ESLint 9 (flat) + TypeScript check + Vite 5 bundle.
-RUN npm run lint
-RUN npm run build
+# Strict gates: ESLint 9 (flat) + Vite 5 bundle — one layer, fail-fast.
+RUN npm run lint && npm run build
 
 FROM nginx:1.29-alpine
 LABEL maintainer="YOUNES Sovereign" \

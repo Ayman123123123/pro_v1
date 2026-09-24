@@ -8,10 +8,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useTranslation } from 'react-i18next';
-import { Shield, Flag, CheckCircle, XCircle, AlertTriangle, Search, Eye, MoreVertical } from 'lucide-react';
+import { Shield, Flag, CheckCircle, XCircle, AlertTriangle, Search, Eye, MoreVertical, Settings, BarChart3, Send } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { RequireAuth, EmptyState, LoadingState, ErrorState, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
+import { RequireAuth, EmptyState, LoadingState, ErrorState, formatSafeDate, formatSafeTime, TABS_LIST_CLASS, TABS_TRIGGER_CLASS, TABS_WRAP_CLASS } from './_shared';
 import { apiFetch } from '../api';
 
 interface AdminReport {
@@ -103,18 +103,18 @@ export function ModerationPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('moderation.title')}</h1>
-          <p className="text-muted-foreground">{t('moderation.subtitle')}</p>
+          <p className="text-foreground/70">{t('moderation.subtitle')}</p>
         </div>
-        <Button disabled title={t('common.comingSoon')} aria-label="Auto-moderate (coming soon)"><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> Auto-Moderate</Button>
+        <Button disabled title={t('common.comingSoon')} aria-label={`${t('analytics.autoModerate')} (${t('common.comingSoon')})`}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> {t('analytics.autoModerate')}</Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className={TABS_WRAP_CLASS}>
         <TabsList className={TABS_LIST_CLASS}>
-          <TabsTrigger value="queue" className={TABS_TRIGGER_CLASS}><Flag className="h-4 w-4 mr-2" aria-hidden="true" /> Queue</TabsTrigger>
-          <TabsTrigger value="rules" className={TABS_TRIGGER_CLASS}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> Rules</TabsTrigger>
-          <TabsTrigger value="analytics" className={TABS_TRIGGER_CLASS}><BarChart3 className="h-4 w-4 mr-2" aria-hidden="true" /> Analytics</TabsTrigger>
-          <TabsTrigger value="broadcast" className={TABS_TRIGGER_CLASS}><Send className="h-4 w-4 mr-2" aria-hidden="true" /> Broadcast</TabsTrigger>
+          <TabsTrigger value="queue" className={TABS_TRIGGER_CLASS}><Flag className="h-4 w-4 mr-2" aria-hidden="true" /> {t('moderation.queue')}</TabsTrigger>
+          <TabsTrigger value="rules" className={TABS_TRIGGER_CLASS}><Settings className="h-4 w-4 mr-2" aria-hidden="true" /> {t('moderation.rules')}</TabsTrigger>
+          <TabsTrigger value="analytics" className={TABS_TRIGGER_CLASS}><BarChart3 className="h-4 w-4 mr-2" aria-hidden="true" /> {t('moderation.analytics')}</TabsTrigger>
+          <TabsTrigger value="broadcast" className={TABS_TRIGGER_CLASS}><Send className="h-4 w-4 mr-2" aria-hidden="true" /> {t('moderation.broadcast')}</TabsTrigger>
         </TabsList>
         </div>
 
@@ -123,16 +123,16 @@ export function ModerationPage() {
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <CardTitle>Moderation Queue</CardTitle>
-                  <CardDescription>بلاغات حقيقية من /api/admin/moderation/reports</CardDescription>
+                  <CardTitle>{t('moderation.queue')}</CardTitle>
+                  <CardDescription>{t('moderation.queueDesc')}</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search reports..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 w-[250px]" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/70" aria-hidden="true" />
+                    <Input placeholder={t('moderation.searchPlaceholder')} value={search} onChange={e => setSearch(e.target.value)} className="pl-10 w-[250px]" aria-label={t('moderation.searchPlaceholder')} />
                   </div>
                   <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v); load(v); }}>
-                    <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                    <SelectTrigger className="w-[140px]" aria-label={t('moderation.statusFilter')}><SelectValue placeholder={t('moderation.statusFilter')} /></SelectTrigger>
                     <SelectContent>
                       {STATUSES.map((s) => (
                         <SelectItem key={s} value={s}>{s}</SelectItem>
@@ -163,11 +163,11 @@ export function ModerationPage() {
                             {item.status}
                           </Badge>
                         </div>
-                        <p className="text-muted-foreground mb-2">{item.details || t('common.empty')}</p>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>Reporter: {item.reporterRedId}</span>
+                        <p className="text-foreground/70 mb-2">{item.details || t('common.empty')}</p>
+                        <div className="flex items-center gap-4 text-sm text-foreground/70">
+                          <span>Reporter: {item.reporterRedId || '—'}</span>
                           <span>Reported: {item.reportedRedId ?? '—'}</span>
-                          <span>{item.createdAt ? new Date(item.createdAt).toLocaleString() : '—'}</span>
+                          <span>{item.createdAt ? `${formatSafeDate(item.createdAt)} ${formatSafeTime(item.createdAt)}` : '—'}</span>
                         </div>
                       </div>
                       <DropdownMenu>
@@ -202,8 +202,8 @@ export function ModerationPage() {
         <TabsContent value="rules">
           <Card>
             <CardHeader>
-              <CardTitle>Automated Moderation Rules</CardTitle>
-              <CardDescription>Configure keyword, regex, and ML-based moderation rules</CardDescription>
+              <CardTitle>{t('moderation.rules')}</CardTitle>
+              <CardDescription>{t('moderation.rulesDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <EmptyState message={t('common.comingSoon')} />
@@ -214,8 +214,8 @@ export function ModerationPage() {
         <TabsContent value="analytics">
           <Card>
             <CardHeader>
-              <CardTitle>Channel Analytics</CardTitle>
-              <CardDescription>Growth, engagement, and retention metrics</CardDescription>
+              <CardTitle>{t('moderation.analytics')}</CardTitle>
+              <CardDescription>{t('moderation.analyticsDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <EmptyState message={t('common.comingSoon')} />
@@ -226,16 +226,16 @@ export function ModerationPage() {
         <TabsContent value="broadcast">
           <Card>
             <CardHeader>
-              <CardTitle>Broadcast Messaging</CardTitle>
-              <CardDescription>Send announcements to channels or user segments</CardDescription>
+              <CardTitle>{t('moderation.broadcast')}</CardTitle>
+              <CardDescription>{t('moderation.broadcastDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className={cn('max-w-2xl space-y-2')}>
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <p className="flex items-center gap-2 text-sm text-foreground/70">
                   <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                  {t('common.comingSoon')} — لا إرسال حقيقي بعد.
+                  {t('common.comingSoon')} — {t('moderation.noSendYet')}
                 </p>
-                <Button disabled title={t('common.comingSoon')}><Send className="h-4 w-4 mr-2" aria-hidden="true" /> Send Broadcast</Button>
+                <Button disabled title={t('common.comingSoon')} aria-label={`${t('moderation.sendBroadcast')} (${t('common.comingSoon')})`}><Send className="h-4 w-4 mr-2" aria-hidden="true" /> {t('moderation.sendBroadcast')}</Button>
               </div>
             </CardContent>
           </Card>
@@ -245,5 +245,3 @@ export function ModerationPage() {
     </RequireAuth>
   );
 }
-
-import { Settings, BarChart3, Send } from 'lucide-react';

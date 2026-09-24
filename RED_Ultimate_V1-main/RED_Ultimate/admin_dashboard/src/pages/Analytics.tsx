@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,23 +37,23 @@ export function AnalyticsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('analytics.title')}</h1>
-          <p className="text-muted-foreground">{t('analytics.subtitle')}</p>
+          <p className="text-foreground/70">{t('analytics.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select range" />
+              <SelectValue placeholder={t('analytics.selectRange')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1h">Last Hour</SelectItem>
-              <SelectItem value="24h">Last 24 Hours</SelectItem>
-              <SelectItem value="7d">Last 7 Days</SelectItem>
-              <SelectItem value="30d">Last 30 Days</SelectItem>
-              <SelectItem value="90d">Last 90 Days</SelectItem>
+              <SelectItem value="1h">{t('common.lastHour')}</SelectItem>
+              <SelectItem value="24h">{t('common.last24Hours')}</SelectItem>
+              <SelectItem value="7d">{t('common.last7Days')}</SelectItem>
+              <SelectItem value="30d">{t('common.last30Days')}</SelectItem>
+              <SelectItem value="90d">{t('common.last30Days')}</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" disabled title={t('common.comingSoon')} aria-label="Export report (coming soon)"><Download className="h-4 w-4 mr-2" aria-hidden="true" /> Export</Button>
-          <Button disabled title={t('common.comingSoon')} aria-label="New report (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> New Report</Button>
+          <Button variant="outline" disabled title={t('common.comingSoon')} aria-label={`${t('analytics.exportReport')} (${t('common.comingSoon')})`}><Download className="h-4 w-4 mr-2" aria-hidden="true" /> {t('common.export')}</Button>
+          <Button disabled title={t('common.comingSoon')} aria-label={`${t('analytics.newReport')} (${t('common.comingSoon')})`}><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> {t('analytics.newReport')}</Button>
         </div>
       </div>
 
@@ -60,21 +61,21 @@ export function AnalyticsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Custom Report Builder
+            <Settings className="h-5 w-5" aria-hidden="true" />
+            {t('analytics.reportBuilder')}
           </CardTitle>
-          <CardDescription>Drag and drop dimensions and metrics to build custom reports</CardDescription>
+          <CardDescription>{t('analytics.reportBuilderDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="md:col-span-1 space-y-4 p-4 bg-muted/50 rounded-lg">
-              <h4 className="font-medium text-foreground">Dimensions</h4>
+              <h4 className="font-medium text-foreground">{t('analytics.dimensions')}</h4>
               <div className="space-y-2">
                 {['Date', 'User', 'Channel', 'Region', 'Device', 'Source'].map(d => (
                   <div key={d} className="p-2 border rounded text-foreground">{d}</div>
                 ))}
               </div>
-              <h4 className="font-medium mt-4 text-foreground">Metrics</h4>
+              <h4 className="font-medium mt-4 text-foreground">{t('analytics.metricsLabel')}</h4>
               <div className="space-y-2">
                 {['Users', 'Messages', 'Calls', 'Revenue', 'Retention', 'Engagement'].map(m => (
                   <div key={m} className="p-2 border rounded text-foreground">{m}</div>
@@ -94,12 +95,12 @@ export function AnalyticsPage() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Scheduled Reports
+              <Clock className="h-5 w-5" aria-hidden="true" />
+              {t('analytics.scheduledReports')}
             </CardTitle>
-            <CardDescription>Automated reports delivered via email, webhook, or Slack</CardDescription>
+            <CardDescription>{t('analytics.scheduledDesc')}</CardDescription>
           </div>
-          <Button disabled title={t('common.comingSoon')} aria-label="Schedule report (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> Schedule Report</Button>
+          <Button disabled title={t('common.comingSoon')} aria-label={`${t('analytics.scheduleReport')} (${t('common.comingSoon')})`}><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> {t('analytics.scheduleReport')}</Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -110,14 +111,14 @@ export function AnalyticsPage() {
             ].map((report) => (
               <div key={report.name} className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
-                  <p className="font-medium">{report.name}</p>
-                  <p className="text-sm text-muted-foreground">{report.schedule} • {report.format} • {report.destination}</p>
+                  <p className="font-medium text-foreground">{report.name}</p>
+                  <p className="text-sm text-foreground/70">{report.schedule} • {report.format} • {report.destination}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={report.status === 'Active' ? 'success' : 'secondary'}>{report.status}</Badge>
-                  <Button variant="ghost" size="icon" aria-label={`Configure ${report.name}`}><Settings className="h-4 w-4" aria-hidden="true" /></Button>
-                  <Button variant="ghost" size="icon" aria-label={`Run ${report.name} now`}><Play className="h-4 w-4" aria-hidden="true" /></Button>
-                  <Button variant="ghost" size="icon" aria-label={`Pause ${report.name}`}><Pause className="h-4 w-4" aria-hidden="true" /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`${t('common.edit')} ${report.name}`} disabled title={t('common.comingSoon')}><Settings className="h-4 w-4" aria-hidden="true" /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`${t('common.apply')} ${report.name}`} disabled title={t('common.comingSoon')}><Play className="h-4 w-4" aria-hidden="true" /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`${t('common.pending')} ${report.name}`} disabled title={t('common.comingSoon')}><Pause className="h-4 w-4" aria-hidden="true" /></Button>
                 </div>
               </div>
             ))}
@@ -129,9 +130,9 @@ export function AnalyticsPage() {
       <Tabs defaultValue="cohort" className="space-y-4">
         <div className={TABS_WRAP_CLASS}>
         <TabsList className={TABS_LIST_CLASS}>
-          <TabsTrigger value="cohort" className={TABS_TRIGGER_CLASS}><Users className="h-4 w-4 mr-2" aria-hidden="true" /> Cohort Analysis</TabsTrigger>
-          <TabsTrigger value="funnel" className={TABS_TRIGGER_CLASS}><LineChart className="h-4 w-4 mr-2" aria-hidden="true" /> Funnel Analysis</TabsTrigger>
-          <TabsTrigger value="retention" className={TABS_TRIGGER_CLASS}><TrendingUp className="h-4 w-4 mr-2" aria-hidden="true" /> Retention Curves</TabsTrigger>
+          <TabsTrigger value="cohort" className={TABS_TRIGGER_CLASS}><Users className="h-4 w-4 mr-2" aria-hidden="true" /> {t('analytics.cohortAnalysis')}</TabsTrigger>
+          <TabsTrigger value="funnel" className={TABS_TRIGGER_CLASS}><LineChart className="h-4 w-4 mr-2" aria-hidden="true" /> {t('analytics.funnelAnalysis')}</TabsTrigger>
+          <TabsTrigger value="retention" className={TABS_TRIGGER_CLASS}><TrendingUp className="h-4 w-4 mr-2" aria-hidden="true" /> {t('analytics.retentionCurves')}</TabsTrigger>
         </TabsList>
         </div>
 
@@ -163,5 +164,3 @@ export function AnalyticsPage() {
     </RequireAuth>
   );
 }
-
-import { useState } from 'react';

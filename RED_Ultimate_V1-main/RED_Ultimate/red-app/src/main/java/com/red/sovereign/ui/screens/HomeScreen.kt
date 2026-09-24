@@ -110,10 +110,10 @@ fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: S
         }
         item {
             Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("لك", "أتابعهم", "اليمن").forEachIndexed { i, title ->
+                listOf("لك", "أتابعهم", "محلي").forEachIndexed { i, title ->
                     FilterChip(filter == i, {
                         filter = i
-                        feed.load(when (i) { 1 -> "FOLLOWING"; 2 -> "YEMEN"; else -> null })
+                        feed.load(when (i) { 1 -> "FOLLOWING"; 2 -> "LOCAL"; else -> null })
                     }, { Text(title) })
                 }
             }
@@ -291,7 +291,7 @@ fun PostCard(
             if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("متابعة") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "نبض محلي" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
+            AssistChip({}, { Text(if (post.visibility == "LOCAL") "نبض محلي" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
             AssistChip({}, { Text(if (post.poll != null) "استطلاع" else if (post.parentId != null) "رد" else "منشور") }, enabled = false)
             if (post.kind != "POST") AssistChip({}, { Text(post.kind) }, enabled = false)
         }

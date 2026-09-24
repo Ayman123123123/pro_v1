@@ -89,7 +89,7 @@ class AuthorizedApiClient(
      * آخر التوكن أثناء انتظارنا للقفل، نُعيد المحاولة بالتوكن الجديد دون تجديد.
      */
     private suspend fun executeResponseWithRefresh(originalToken: String, initial: Request, rebuild: (String) -> Request): ApiResult<okhttp3.Response> {
-        // Yemen-hardened: محاولة ثانية واحدة لطلبات القراءة عند فشل الشبكة
+        // Network-hardened: محاولة ثانية واحدة لطلبات القراءة عند فشل الشبكة
         // (4G متذبذب) بتراجع 600ms+jitter — الكتابة تبقى محاولة واحدة (idempotency).
         val first = runCatching { client.newCall(initial).execute() }.getOrElse {
             if (isSafeReadMethod(initial.method)) {

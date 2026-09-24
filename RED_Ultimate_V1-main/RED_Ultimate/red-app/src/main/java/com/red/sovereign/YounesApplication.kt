@@ -55,29 +55,31 @@ class YounesApplication : Application() {
         try {
             val workManager = androidx.work.WorkManager.getInstance(this)
             val constraints = androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).setRequiresBatteryNotLow(true).build()
+            // هوية العمال: auth_refresh=AuthRefreshWorker / sync_poll=SyncPollWorker — UPDATE (لا KEEP)
+            // ليشفي ترقية من نسخة كانت تجدول AuthRefreshWorker باسم sync_poll (KEEP كان يُبقي العامل الخطأ للأبد).
             try {
                 val refreshWork = androidx.work.PeriodicWorkRequestBuilder<com.red.sovereign.workers.AuthRefreshWorker>(7, java.util.concurrent.TimeUnit.DAYS)
                     .setConstraints(constraints)
                     .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, java.util.concurrent.TimeUnit.MINUTES)
                     .build()
-                workManager.enqueueUniquePeriodicWork("auth_refresh", androidx.work.ExistingPeriodicWorkPolicy.KEEP, refreshWork)
+                workManager.enqueueUniquePeriodicWork("auth_refresh", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, refreshWork)
             } catch (_: Exception) {
                 val refreshWork2 = androidx.work.PeriodicWorkRequestBuilder<com.red.sovereign.workers.AuthRefreshWorker>(java.time.Duration.ofDays(7))
                     .setConstraints(constraints)
                     .build()
-                workManager.enqueueUniquePeriodicWork("auth_refresh", androidx.work.ExistingPeriodicWorkPolicy.KEEP, refreshWork2)
+                workManager.enqueueUniquePeriodicWork("auth_refresh", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, refreshWork2)
             }
             val syncConstraints = androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build()
             try {
                 val syncWork = androidx.work.PeriodicWorkRequestBuilder<com.red.sovereign.workers.SyncPollWorker>(15, java.util.concurrent.TimeUnit.MINUTES)
                     .setConstraints(syncConstraints)
                     .build()
-                workManager.enqueueUniquePeriodicWork("sync_poll", androidx.work.ExistingPeriodicWorkPolicy.KEEP, syncWork)
+                workManager.enqueueUniquePeriodicWork("sync_poll", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, syncWork)
             } catch (_: Exception) {
                 val syncWork2 = androidx.work.PeriodicWorkRequestBuilder<com.red.sovereign.workers.SyncPollWorker>(java.time.Duration.ofMinutes(15))
                     .setConstraints(syncConstraints)
                     .build()
-                workManager.enqueueUniquePeriodicWork("sync_poll", androidx.work.ExistingPeriodicWorkPolicy.KEEP, syncWork2)
+                workManager.enqueueUniquePeriodicWork("sync_poll", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, syncWork2)
             }
         } catch (_: Exception) {}
         // قنوات الإشعارات — مطلوبة لـ RedConnectionService و YounesCallService

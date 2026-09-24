@@ -1,13 +1,10 @@
-name: Build RED Android
+# DISABLED 2026-09-24: dead-path zombie (project/** + workflow-ready/** no longer
+# exist; APK attach targets release v1.0.0). Push trigger removed to stop silent
+# no-op/skipped runs shadowing the canonical red-ultimate-ci.yml android job.
+# Manual dispatch kept for archaeology.
+name: Build RED Android (disabled — dead paths)
 
 on:
-  push:
-    branches:
-      - 'fix/**'
-      - 'extracted/**'
-    paths:
-      - 'project/**'
-      - 'workflow-ready/**'
   workflow_dispatch:
     inputs:
       server_url:

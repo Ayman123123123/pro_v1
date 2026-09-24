@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  * خدمة تسليم المكالمات الموحدة - تضمن وصول المكالمة ورنينها
  * 
  * أفضل من واتساب وتيليجرام:
- * - مسارات متعددة للتسليم: WebSocket مباشر + FCM Push + صندوق بريد مؤقت + webhook
+ * - مسارات متعددة للتسليم: WebSocket مباشر + Sovereign push + صندوق بريد مؤقت + webhook
  * - رنين موثوق حتى لو التطبيق في الخلفية أو مغلق
  * - حضور فوري وتحديث حالة الرنين
  * - يعمل على كل الشبكات المحلية
@@ -69,7 +69,7 @@ class UnifiedCallDeliveryService(
         // 1. تسليم فوري عبر WebSocket إن كان متصلاً
         val wsDelivered = deliverViaWebSocket(callId, sourceId, targetId, type, mode, payload)
         
-        // 2. تسليم عبر FCM Push (حتى لو التطبيق مغلق)
+        // 2. تسليم عبر Sovereign push (حتى لو التطبيق مغلق)
         deliverViaPush(callId, sourceId, targetId, mode, isGroup)
         
         // 3. حفظ في صندوق البريد المؤقت (60 ثانية)

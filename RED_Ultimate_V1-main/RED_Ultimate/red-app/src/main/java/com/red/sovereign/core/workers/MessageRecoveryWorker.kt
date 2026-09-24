@@ -146,6 +146,7 @@ class MessageRecoveryWorker(
     companion object {
         private const val TAG = "MessageRecoveryWorker"
         private const val UNIQUE_NAME = "message-recovery"
+        private const val ONCE_NAME = "message-recovery-once"
         private const val INTERVAL_MINUTES = 30L
 
         fun enqueue(context: Context) {
@@ -157,9 +158,21 @@ class MessageRecoveryWorker(
             ).setConstraints(constraints).build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 UNIQUE_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
+            // تشغيل فوري بعد الإقلاع/الموت (الدوري وحده يتأخر حتى 30د) — idempotent.
+            runCatching {
+                val once = androidx.work.OneTimeWorkRequestBuilder<MessageRecoveryWorker>()
+                    .setConstraints(constraints)
+                    .setInitialDelay(30, TimeUnit.SECONDS)
+                    .build()
+                WorkManager.getInstance(context).enqueueUniqueWork(
+                    ONCE_NAME,
+                    androidx.work.ExistingWorkPolicy.KEEP,
+                    once
+                )
+            }
         }
     }
 }

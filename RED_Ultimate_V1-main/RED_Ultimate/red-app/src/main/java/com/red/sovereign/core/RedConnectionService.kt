@@ -354,6 +354,12 @@ class RedConnectionService : Service() {
                     is ApiResult.Error -> {
                         notifyConnection(getString(com.red.sovereign.R.string.status_group_encryption_failed, prepared.message))
                         reportSendFailure(pending.clientId, group.id, null, prepared.message)
+                        // تغطية المجموعات: FAILED نهائي يخرجها من getUnsentOutgoing (SENDING فقط) فتضيع بعد الموت.
+                        // أعدها SENDING (الملف المحفوظ باقٍ) + جدولة الاستعادة — idempotent بذات clientId.
+                        if (pending.clientId != null) {
+                            runCatching { repository.updateMessageStatus(pending.clientId, "SENDING") }
+                            runCatching { com.red.sovereign.core.workers.MessageRecoveryWorker.enqueue(applicationContext) }
+                        }
                     }
                     is ApiResult.Success -> {
                         prepared.value.distributions.forEach { distribution ->
@@ -406,6 +412,11 @@ class RedConnectionService : Service() {
                     is ApiResult.Error -> {
                         notifyConnection(getString(com.red.sovereign.R.string.status_group_encryption_failed, prepared.message))
                         reportSendFailure(pending.clientId, group.id, null, prepared.message)
+                        // نفس تغطية المجموعات للـ payload: إبقاء SENDING + استعادة مجدولة.
+                        if (pending.clientId != null) {
+                            runCatching { repository.updateMessageStatus(pending.clientId, "SENDING") }
+                            runCatching { com.red.sovereign.core.workers.MessageRecoveryWorker.enqueue(applicationContext) }
+                        }
                     }
                     is ApiResult.Success -> {
                         prepared.value.distributions.forEach { distribution ->

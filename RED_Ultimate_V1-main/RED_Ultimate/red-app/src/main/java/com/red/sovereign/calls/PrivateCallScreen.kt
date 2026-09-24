@@ -25,7 +25,7 @@ import com.red.sovereign.ui.theme.*
  * PrivateCallScreen - مكالمات خاصة محسنة 2026
  * 
  * صوت منفصل وفيديو منفصل:
- * - رنين فوري مع FCM high-priority + full-screen intent
+ * - رنين فوري مع high-priority push + full-screen intent
  * - جودة عالية: Opus 48kHz + AV1 SVC + simulcast
  * - صوت نقي: RNNoise AI + echo cancellation + auto gain
  * - وصول: mDNS LAN + TURN TLS 1.3 + WebRTC unified-plan

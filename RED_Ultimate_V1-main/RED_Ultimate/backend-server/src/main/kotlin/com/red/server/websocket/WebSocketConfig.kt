@@ -12,7 +12,7 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
  *
  * أفضل من واتساب وتيليجرام:
  * - دعم كل الشبكات المحلية: 192.168.x.x, 10.x.x.x, 172.16-31.x.x
- * - رنين موثوق حتى في الخلفية عبر FCM + WebSocket + Mailbox
+ * - رنين موثوق حتى في الخلفية عبر push + WebSocket + Mailbox
  * - مسارات متعددة للتسليم لضمان الوصول
  * - دعم P2P LAN بدون إنترنت
  * - CORS مفتوح للشبكات المحلية
@@ -45,9 +45,7 @@ class WebSocketConfig(
             "/ws/livestream",
             "/ws/typing",
             "/ws/admin/logs",
-            "/ws/lan",
-            "/ws/pstn",
-            "/ws/dinstar"
+            "/ws/lan"
         )
     }
 

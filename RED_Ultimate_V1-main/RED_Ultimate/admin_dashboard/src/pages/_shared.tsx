@@ -9,10 +9,11 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
 
 /**
- * ✅ 2026-09-24 — حارس صفحات مشترك.
- * صفحات routeTree الحالية أشقاء لـ `_layout` (الأب root) فلا يحميها حارس الـ layout.
- * لحين إعادة هيكلة الشجرة إلى `_layout.*`، كل صفحة خاصة تُغلَّف بهذا الحارس
- * فيعيد التوجيه إلى `/login` قبل عرض أي بيانات — نفس سلوك beforeLoad في `_layout`.
+ * ✅ 2026-09-24 — حارس صفحات مشترك (هو الحماية الفعلية).
+ * صفحات routeTree الحالية أشقاء لـ `_layout` (الأب root) فلا يحميها حارس الـ layout
+ * ولا يغلّفها بشريطه الجانبي؛ لحين إعادة هيكلة الشجرة إلى `_layout.*`، كل صفحة خاصة
+ * تُغلَّف بهذا الحارس فيعيد التوجيه إلى `/login` قبل عرض أي بيانات — نفس سلوك
+ * beforeLoad في `_layout`. الحالة: كل الصفحات الخاصة (22 مساراً) تستخدمه — مكتمل.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -93,6 +94,18 @@ export function ErrorState({ message, onRetry }: { message?: string; onRetry?: (
       )}
     </div>
   );
+}
+
+/** نص آمن — يرجع '—' بدل undefined/null/فارغ عند الحقول الناقصة. */
+export function formatSafeText(value: unknown): string {
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '—';
+  const s = String(value ?? '').trim();
+  return s || '—';
+}
+
+/** رقم آمن — يرجع '—' بدل 0 المضلل أو NaN عند الحقول الناقصة. */
+export function formatSafeNumber(value: unknown): string {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString() : '—';
 }
 
 /** تنسيق تاريخ آمن — يرجع '—' بدل Invalid Date عند الحقول الناقصة/التالفة. */

@@ -28,18 +28,18 @@ export function SecurityPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('security.title')}</h1>
-          <p className="text-muted-foreground">{t('security.subtitle')}</p>
+          <p className="text-foreground/70">{t('security.subtitle')}</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className={TABS_WRAP_CLASS}>
         <TabsList className={TABS_LIST_CLASS}>
-          <TabsTrigger value="roles" className={TABS_TRIGGER_CLASS}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> Roles & RBAC</TabsTrigger>
-          <TabsTrigger value="sso" className={TABS_TRIGGER_CLASS}><Wifi className="h-4 w-4 mr-2" aria-hidden="true" /> SSO (OIDC/SAML)</TabsTrigger>
-          <TabsTrigger value="mfa" className={TABS_TRIGGER_CLASS}><Fingerprint className="h-4 w-4 mr-2" aria-hidden="true" /> MFA (TOTP/WebAuthn)</TabsTrigger>
-          <TabsTrigger value="sessions" className={TABS_TRIGGER_CLASS}><Database className="h-4 w-4 mr-2" aria-hidden="true" /> Sessions</TabsTrigger>
-          <TabsTrigger value="api-keys" className={TABS_TRIGGER_CLASS}><Key className="h-4 w-4 mr-2" aria-hidden="true" /> API Keys</TabsTrigger>
+          <TabsTrigger value="roles" className={TABS_TRIGGER_CLASS}><Shield className="h-4 w-4 mr-2" aria-hidden="true" /> {t('security.roles')}</TabsTrigger>
+          <TabsTrigger value="sso" className={TABS_TRIGGER_CLASS}><Wifi className="h-4 w-4 mr-2" aria-hidden="true" /> {t('security.sso')}</TabsTrigger>
+          <TabsTrigger value="mfa" className={TABS_TRIGGER_CLASS}><Fingerprint className="h-4 w-4 mr-2" aria-hidden="true" /> {t('security.mfa')}</TabsTrigger>
+          <TabsTrigger value="sessions" className={TABS_TRIGGER_CLASS}><Database className="h-4 w-4 mr-2" aria-hidden="true" /> {t('security.sessions')}</TabsTrigger>
+          <TabsTrigger value="api-keys" className={TABS_TRIGGER_CLASS}><Key className="h-4 w-4 mr-2" aria-hidden="true" /> {t('security.apiKeys')}</TabsTrigger>
         </TabsList>
         </div>
 
@@ -47,10 +47,10 @@ export function SecurityPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Roles & Permissions</CardTitle>
-                <CardDescription>Define roles and assign granular permissions</CardDescription>
+                <CardTitle>{t('security.roles')}</CardTitle>
+                <CardDescription>{t('security.rolesDesc')}</CardDescription>
               </div>
-              <Button disabled title={t('common.comingSoon')} aria-label="New role (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> New Role</Button>
+              <Button disabled title={t('common.comingSoon')} aria-label={`${t('common.create')} (${t('common.comingSoon')})`}><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> {t('common.create')}</Button>
             </CardHeader>
             <CardContent>
               <Table>
@@ -79,8 +79,9 @@ export function SecurityPage() {
                       <TableCell>{role.perms}</TableCell>
                       <TableCell><Badge variant="success">{role.status}</Badge></TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" aria-label={`View role ${role.name}`}><Eye className="h-4 w-4" aria-hidden="true" /></Button>
-                        <Button variant="ghost" size="icon" aria-label={`Edit role ${role.name}`}><Edit className="h-4 w-4" aria-hidden="true" /></Button>
+                        {/* ✅ 2026-09-24: أزرار وهمية بلا onClick → تعطيل معلن */}
+                        <Button variant="ghost" size="icon" aria-label={`${t('common.search')} ${role.name} (${t('common.comingSoon')})`} disabled title={t('common.comingSoon')}><Eye className="h-4 w-4" aria-hidden="true" /></Button>
+                        <Button variant="ghost" size="icon" aria-label={`${t('common.edit')} ${role.name} (${t('common.comingSoon')})`} disabled title={t('common.comingSoon')}><Edit className="h-4 w-4" aria-hidden="true" /></Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -93,16 +94,16 @@ export function SecurityPage() {
         <TabsContent value="sso">
           <Card>
             <CardHeader>
-              <CardTitle>Single Sign-On (SSO)</CardTitle>
-              <CardDescription>Configure OIDC and SAML identity providers</CardDescription>
+              <CardTitle>{t('security.sso')}</CardTitle>
+              <CardDescription>{t('security.ssoDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">OIDC Provider</p>
-                      <p className="text-sm text-muted-foreground">Google Workspace • Enabled</p>
+                      <p className="font-medium text-foreground">OIDC Provider</p>
+                      <p className="text-sm text-foreground/70">Google Workspace • {t('common.enabled')}</p>
                     </div>
                     <Switch checked={oidcEnabled} onCheckedChange={setOidcEnabled} aria-label="Toggle OIDC provider" />
                   </div>
@@ -110,13 +111,13 @@ export function SecurityPage() {
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">SAML Provider</p>
-                      <p className="text-sm text-muted-foreground">Okta • Disabled</p>
+                      <p className="font-medium text-foreground">SAML Provider</p>
+                      <p className="text-sm text-foreground/70">Okta • {t('common.disabled')}</p>
                     </div>
                     <Switch checked={samlEnabled} onCheckedChange={setSamlEnabled} aria-label="Toggle SAML provider" />
                   </div>
                 </div>
-                <Button variant="outline" disabled title={t('common.comingSoon')} aria-label="Add identity provider (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> Add Identity Provider</Button>
+                <Button variant="outline" disabled title={t('common.comingSoon')} aria-label={`${t('common.create')} (${t('common.comingSoon')})`}><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> {t('common.create')}</Button>
               </div>
             </CardContent>
           </Card>
@@ -125,24 +126,24 @@ export function SecurityPage() {
         <TabsContent value="mfa">
           <Card>
             <CardHeader>
-              <CardTitle>Multi-Factor Authentication</CardTitle>
-              <CardDescription>TOTP and WebAuthn configuration</CardDescription>
+              <CardTitle>{t('security.mfa')}</CardTitle>
+              <CardDescription>{t('security.mfaDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
                 <Card className="p-6">
-                  <Fingerprint className="h-8 w-8 text-primary mb-2" />
-                  <h4 className="font-medium mb-2">TOTP (Authenticator Apps)</h4>
-                  <p className="text-sm text-muted-foreground mb-4">Time-based one-time passwords via Google Authenticator, Authy, etc.</p>
+                  <Fingerprint className="h-8 w-8 text-primary mb-2" aria-hidden="true" />
+                  <h4 className="font-medium mb-2 text-foreground">TOTP (Authenticator Apps)</h4>
+                  <p className="text-sm text-foreground/70 mb-4">Time-based one-time passwords via Google Authenticator, Authy, etc.</p>
                   <div className="flex items-center gap-2">
                     <Switch checked={totpEnabled} onCheckedChange={setTotpEnabled} aria-label="Toggle TOTP authentication" />
                     <span className="text-sm font-medium text-foreground">{totpEnabled ? t('common.enabled') : t('common.disabled')}</span>
                   </div>
                 </Card>
                 <Card className="p-6">
-                  <Key className="h-8 w-8 text-primary mb-2" />
-                  <h4 className="font-medium mb-2">WebAuthn (Passkeys)</h4>
-                  <p className="text-sm text-muted-foreground mb-4">Hardware security keys and biometric authentication</p>
+                  <Key className="h-8 w-8 text-primary mb-2" aria-hidden="true" />
+                  <h4 className="font-medium mb-2 text-foreground">WebAuthn (Passkeys)</h4>
+                  <p className="text-sm text-foreground/70 mb-4">Hardware security keys and biometric authentication</p>
                   <div className="flex items-center gap-2">
                     <Switch checked={webauthnEnabled} onCheckedChange={setWebauthnEnabled} aria-label="Toggle WebAuthn passkeys" />
                     <span className="text-sm font-medium text-foreground">{webauthnEnabled ? t('common.enabled') : t('common.disabled')}</span>
@@ -150,9 +151,9 @@ export function SecurityPage() {
                 </Card>
               </div>
               <div className="mt-6 grid gap-4 md:grid-cols-3">
-                <Card className="p-4"><p className="text-sm text-muted-foreground">MFA Enrollment</p><p className="text-3xl font-bold">67%</p></Card>
-                <Card className="p-4"><p className="text-sm text-muted-foreground">WebAuthn Users</p><p className="text-3xl font-bold">1,234</p></Card>
-                <Card className="p-4"><p className="text-sm text-muted-foreground">Recovery Codes Used</p><p className="text-3xl font-bold">23</p></Card>
+                <Card className="p-4"><p className="text-sm text-foreground/70">MFA Enrollment</p><p className="text-3xl font-bold text-foreground">67%</p></Card>
+                <Card className="p-4"><p className="text-sm text-foreground/70">WebAuthn Users</p><p className="text-3xl font-bold text-foreground">1,234</p></Card>
+                <Card className="p-4"><p className="text-sm text-foreground/70">Recovery Codes Used</p><p className="text-3xl font-bold text-foreground">23</p></Card>
               </div>
             </CardContent>
           </Card>
@@ -161,8 +162,8 @@ export function SecurityPage() {
         <TabsContent value="sessions">
           <Card>
             <CardHeader>
-              <CardTitle>Session Management</CardTitle>
-              <CardDescription>Active sessions, device trust, and revocation</CardDescription>
+              <CardTitle>{t('security.sessions')}</CardTitle>
+              <CardDescription>{t('security.sessionsDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -189,7 +190,8 @@ export function SecurityPage() {
                       <TableCell>{s.location}</TableCell>
                       <TableCell>{s.active}</TableCell>
                       <TableCell><Badge variant={s.trusted ? 'success' : 'outline'}>{s.trusted ? 'Trusted' : 'Untrusted'}</Badge></TableCell>
-                      <TableCell><Button variant="ghost" size="icon" className="text-red-500" aria-label={`Revoke session of ${s.user}`}><RotateCcw className="h-4 w-4" aria-hidden="true" /></Button></TableCell>
+                      {/* ✅ 2026-09-24: زر وهمي بلا onClick → تعطيل معلن */}
+                      <TableCell><Button variant="ghost" size="icon" className="text-red-500" aria-label={`Revoke session of ${s.user} (${t('common.comingSoon')})`} disabled title={t('common.comingSoon')}><RotateCcw className="h-4 w-4" aria-hidden="true" /></Button></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -202,10 +204,10 @@ export function SecurityPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>API Keys</CardTitle>
-                <CardDescription>Scoped, rotatable API keys for integrations</CardDescription>
+                <CardTitle>{t('security.apiKeys')}</CardTitle>
+                <CardDescription>{t('security.apiKeysDesc')}</CardDescription>
               </div>
-              <Button disabled title={t('common.comingSoon')} aria-label="Generate API key (coming soon)"><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> Generate Key</Button>
+              <Button disabled title={t('common.comingSoon')} aria-label={`${t('common.create')} (${t('common.comingSoon')})`}><Plus className="h-4 w-4 mr-2" aria-hidden="true" /> {t('common.create')}</Button>
             </CardHeader>
             <CardContent>
               <Table>
@@ -234,9 +236,10 @@ export function SecurityPage() {
                       <TableCell>{k.used}</TableCell>
                       <TableCell><Badge variant={k.status === 'active' ? 'success' : 'destructive'}>{k.status}</Badge></TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" aria-label={`View key ${k.name}`}><Eye className="h-4 w-4" aria-hidden="true" /></Button>
-                        <Button variant="ghost" size="icon" aria-label={`Rotate key ${k.name}`}><RotateCcw className="h-4 w-4" aria-hidden="true" /></Button>
-                        <Button variant="ghost" size="icon" className="text-red-500" aria-label={`Revoke key ${k.name}`}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
+                        {/* ✅ 2026-09-24: أزرار وهمية بلا onClick → تعطيل معلن */}
+                        <Button variant="ghost" size="icon" aria-label={`View key ${k.name} (${t('common.comingSoon')})`} disabled title={t('common.comingSoon')}><Eye className="h-4 w-4" aria-hidden="true" /></Button>
+                        <Button variant="ghost" size="icon" aria-label={`Rotate key ${k.name} (${t('common.comingSoon')})`} disabled title={t('common.comingSoon')}><RotateCcw className="h-4 w-4" aria-hidden="true" /></Button>
+                        <Button variant="ghost" size="icon" className="text-red-500" aria-label={`Revoke key ${k.name} (${t('common.comingSoon')})`} disabled title={t('common.comingSoon')}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
                       </TableCell>
                     </TableRow>
                   ))}

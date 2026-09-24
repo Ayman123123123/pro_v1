@@ -1,14 +1,18 @@
-name: YOUNES quality gate
+# QUARANTINED 2026-09-24 — DIAGNOSIS:
+# This file duplicates red-ultimate-ci.yml job-for-job on the SAME path filter
+# (RED_Ultimate_V1-main/RED_Ultimate/**), so every push/PR paid for the whole
+# matrix TWICE with confusing double check-runs. Kept diff vs canonical:
+#  - admin-integration: runs `check` + `build` but NOT `lint` → a lint-red admin
+#    dashboard still passes here while red-ultimate-ci.yml (ci+lint+check+build)
+#    correctly fails. Stale gate, false green.
+#  - infra: single compose config vs canonical base+dev/staging/prod matrix;
+#    no failure-excerpt publishing; setup-java@v4 vs v5; android job lacks the
+#    strict-verification → lenient fallback.
+# Verdict: superseded by red-ultimate-ci.yml. Firing triggers removed
+# (manual dispatch only) — delete file once the team confirms single-pipeline history.
+name: YOUNES quality gate (quarantined — superseded by red-ultimate-ci.yml)
 
 on:
-  push:
-    paths:
-      - 'RED_Ultimate_V1-main/RED_Ultimate/**'
-      - '.github/workflows/quality-gate.yml'
-  pull_request:
-    paths:
-      - 'RED_Ultimate_V1-main/RED_Ultimate/**'
-      - '.github/workflows/quality-gate.yml'
   workflow_dispatch:
 
 permissions:

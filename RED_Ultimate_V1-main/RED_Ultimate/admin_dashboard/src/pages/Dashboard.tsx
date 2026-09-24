@@ -97,7 +97,7 @@ function MetricCard({ title, value, change, icon, iconColor, trend = 'neutral', 
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-sm font-medium text-foreground/70">{title}</p>
             <p className="text-3xl font-bold tracking-tight">{value}</p>
             {change !== undefined && (
               <div className={cn('flex items-center gap-1 text-sm', trendColor)}>
@@ -259,7 +259,7 @@ export function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('dashboard.title')}</h1>
-          <p className="text-muted-foreground">{t('dashboard.subtitle')}</p>
+          <p className="text-foreground/70">{t('dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
@@ -479,7 +479,7 @@ export function Dashboard() {
         {/* Retention / DAU/MAU Ratio */}
         <Card>
           <CardHeader>
-            <CardTitle>Retention & Engagement</CardTitle>
+            <CardTitle>{t('dashboard.retentionTitle')}</CardTitle>
             <CardDescription>{t('dashboard.retentionDesc')}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -508,10 +508,10 @@ export function Dashboard() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Server className="h-5 w-5" />
+              <Server className="h-5 w-5" aria-hidden="true" />
               {t('dashboard.systemHealth')}
             </CardTitle>
-            <CardDescription>Real-time system health monitoring</CardDescription>
+            <CardDescription>{t('dashboard.healthDesc')}</CardDescription>
           </CardHeader>
           <CardContent>
             {healthLoading ? (
@@ -599,10 +599,10 @@ export function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              <AlertTriangle className="h-5 w-5 text-orange-500" aria-hidden="true" />
               {t('dashboard.alerts')}
             </CardTitle>
-            <CardDescription>Recent critical alerts</CardDescription>
+            <CardDescription>{t('dashboard.alertsDesc')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
@@ -635,13 +635,13 @@ export function Dashboard() {
                           </Badge>
                           <span className="text-sm font-medium">{alert.component}</span>
                         </div>
-                        <p className="text-sm text-muted-foreground">{alert.message}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {format(new Date(alert.timestamp), 'MMM d, HH:mm:ss')}
+                        <p className="text-sm text-foreground/70">{alert.message || '—'}</p>
+                        <p className="text-xs text-foreground/70 mt-1">
+                          {(() => { try { const d = new Date(alert.timestamp); return Number.isFinite(d.getTime()) ? format(d, 'MMM d, HH:mm:ss') : '—'; } catch { return '—'; } })()}
                         </p>
                       </div>
                       {!alert.acknowledged && (
-                        <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={`Acknowledge alert from ${alert.component}`}>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={`Acknowledge alert from ${alert.component}`} onClick={() => queryClient.setQueryData(['dashboard', 'alerts'], (old: AlertData[] = []) => old.map((a) => (a.id === alert.id ? { ...a, acknowledged: true } : a)))}>
                           <CheckCircle className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       )}

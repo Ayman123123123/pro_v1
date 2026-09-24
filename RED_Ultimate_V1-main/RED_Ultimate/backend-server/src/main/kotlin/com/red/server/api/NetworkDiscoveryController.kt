@@ -109,7 +109,7 @@ class NetworkDiscoveryController(
             "features" to listOf(
                 "E2EE private chats with Signal Protocol PQXDH + Kyber",
                 "Group E2EE with Sender Keys",
-                "9 call types: 1-1 audio/video, group 32, conference 100, live, space, PSTN, LAN P2P",
+                "8 call types: 1-1 audio/video, group 32, conference 100, live, space, LAN P2P",
                 "Works on all local networks: WiFi, Ethernet, USB, VPN, Hotspot, Bluetooth",
                 "P2P LAN calls without internet",
                 "Multi-path call delivery with ringing",

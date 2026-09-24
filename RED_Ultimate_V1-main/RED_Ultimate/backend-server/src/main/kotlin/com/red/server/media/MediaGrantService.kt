@@ -42,7 +42,7 @@ class MediaGrantService(
         return jdbc.queryForList(
             "SELECT DISTINCT object_key FROM media_grants WHERE expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP",
             String::class.java
-        ).filter { it.isNotBlank() }.toSet()
+        ).mapNotNull { it?.takeIf { s -> s.isNotBlank() } }.toSet()
     }
 }
 

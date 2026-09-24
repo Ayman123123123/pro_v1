@@ -141,14 +141,14 @@ function buildColumns(a: UserActions): ColumnDef<User>[] {
         checked={table.getIsAllPageRowsSelected()}
         indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
         onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
+        aria-label={t('users.bulkActions')}
       />
     ),
     cell: ({ row }) => (
       <Checkbox
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
+        aria-label={`${t('users.viewUser')}: ${row.original.username}`}
       />
     ),
     enableSorting: false,
@@ -466,17 +466,18 @@ export function UsersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('users.title')}</h1>
-          <p className="text-muted-foreground">{data?.totalElements || 0} {t('users.totalUsers')}</p>
+          {/* ✅ 2026-09-24: بدل الصفر الصامت — '—' أثناء التحميل/الخطأ */}
+          <p className="text-foreground/70">{typeof data?.totalElements === 'number' ? `${data.totalElements} ${t('users.totalUsers')}` : `— ${t('users.totalUsers')}`}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => handleExport('csv')}>
-            <Download className="h-4 w-4 mr-2" /> CSV
+          <Button variant="outline" onClick={() => handleExport('csv')} aria-label={`${t('common.export')} CSV`}>
+            <Download className="h-4 w-4 mr-2" aria-hidden="true" /> CSV
           </Button>
-          <Button variant="outline" onClick={() => handleExport('excel')}>
-            <Download className="h-4 w-4 mr-2" /> Excel
+          <Button variant="outline" onClick={() => handleExport('excel')} aria-label={`${t('common.export')} Excel`}>
+            <Download className="h-4 w-4 mr-2" aria-hidden="true" /> Excel
           </Button>
-          <Button variant="outline" onClick={() => handleExport('pdf')}>
-            <Download className="h-4 w-4 mr-2" /> PDF
+          <Button variant="outline" onClick={() => handleExport('pdf')} aria-label={`${t('common.export')} PDF`}>
+            <Download className="h-4 w-4 mr-2" aria-hidden="true" /> PDF
           </Button>
         </div>
       </div>
@@ -610,7 +611,7 @@ export function UsersPage() {
                           <th
                             key={header.id}
                             className={cn(
-                              'h-12 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider',
+                              'h-12 px-4 text-left text-xs font-semibold text-foreground/70 uppercase tracking-wider',
                               header.column.getCanSort() && 'cursor-pointer select-none hover:bg-muted',
                               !header.column.getCanSort() && 'cursor-default'
                             )}
@@ -671,9 +672,9 @@ export function UsersPage() {
 
               {/* Pagination */}
               <div className="flex items-center justify-between p-4 border-t">
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm text-foreground/70">
                   Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-                  {' '}({data?.totalElements || 0} total)
+                  {' '}({typeof data?.totalElements === 'number' ? data.totalElements : '—'} total)
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -681,32 +682,36 @@ export function UsersPage() {
                     size="sm"
                     onClick={() => table.previousPage()}
                     disabled={!table.getCanPreviousPage()}
+                    aria-label="First page"
                   >
-                    <ChevronsLeft className="h-4 w-4" />
+                    <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => table.previousPage()}
                     disabled={!table.getCanPreviousPage()}
+                    aria-label="Previous page"
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => table.nextPage()}
                     disabled={!table.getCanNextPage()}
+                    aria-label="Next page"
                   >
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => table.nextPage()}
                     disabled={!table.getCanNextPage()}
+                    aria-label="Last page"
                   >
-                    <ChevronsRight className="h-4 w-4" />
+                    <ChevronsRight className="h-4 w-4" aria-hidden="true" />
                   </Button>
                   <Select
                     value={String(table.getState().pagination.pageSize)}

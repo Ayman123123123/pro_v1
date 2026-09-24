@@ -257,8 +257,7 @@ fun Material3ExpressivePstnCallScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // الرقم المطلوب ومشغّله — أهمّ معلومة في شاشة مكالمة
-                // هاتفية، وكانت غائبة تماماً قبل الوصل.
+                // الرقم المطلوب — أهمّ معلومة في شاشة المكالمة.
                 if (number.isNotBlank()) {
                     Text(
                         text = number,
@@ -267,13 +266,6 @@ fun Material3ExpressivePstnCallScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                         letterSpacing = 1.sp
                     )
-                    // RED-only: YemeniOperatorDetector removed
-                        Text(
-                            text = "${op.name} · ${op.technology}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = op.brandColor
-                        )
-                    }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
