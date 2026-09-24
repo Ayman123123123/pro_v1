@@ -16,7 +16,19 @@ from pathlib import Path
 def excerpt(text: str) -> str:
     files: dict[str, list[str]] = collections.defaultdict(list)
     other: list[str] = []
+    context: list[str] = []
+    in_cause = False
     for line in text.splitlines():
+        # Gradle's problem description often carries the useful reason (e.g.
+        # version-catalog alias collisions) on the line AFTER the exception.
+        if line.strip() == "* What went wrong:":
+            in_cause = True
+        elif line.startswith("* Try:") or line.startswith("* Exception is:"):
+            in_cause = False
+        elif in_cause and line.strip() and len(context) < 16:
+            detail = line.strip()[:350]
+            if detail not in context:
+                context.append(detail)
         # Gradle Kotlin 2/AGP errors: e: file:///.../source.kt:line:col ...
         match = re.search(r"\be: file:///([^\s]+?\.(?:kt|java|kts)):(\d+):(\d+) (.+)", line)
         if match:
@@ -34,7 +46,7 @@ def excerpt(text: str) -> str:
     for path, errors in files.items():
         lines.append(path)
         lines.extend("  " + error for error in errors)
-    lines.extend(["Other Gradle failures:", *other])
+    lines.extend(["Gradle failure context:", *context, "Other Gradle failures:", *other])
     return "\n".join(lines)[:19000]
 
 
