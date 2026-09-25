@@ -253,7 +253,9 @@ fun QrScannerSheet(
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = {
-                    val normalized = manualRedId.trim().uppercase()
+                    // تطبيع موحّد عبر YounesId (يقبل RED-/YNS-/لصق قديم) بدل uppercase فقط
+                    // الذي كان يرفض "red-12345 " الملصوقة ويكسر التكافؤ مع الماسح الحي.
+                    val normalized = normalizeRedIdInput(manualRedId)
                     if (isValidRedId(normalized)) {
                         onScanned(normalized)
                     } else {

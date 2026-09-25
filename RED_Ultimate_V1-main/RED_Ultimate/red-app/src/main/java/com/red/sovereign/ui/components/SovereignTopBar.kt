@@ -173,9 +173,9 @@ fun SovereignTopBar(
                     }
 
                     Text(
-                        text = redId,
+                        text = redId.ifBlank { "—" },
                         style = MaterialTheme.typography.bodySmall.copy(
-                            color = SovereignColors.Cyan.copy(alpha = 0.85f),
+                            color = Color.White.copy(alpha = 0.92f),
                             fontSize = dimens.subtitleFontSize,
                             fontWeight = FontWeight.SemiBold
                         ),
@@ -185,7 +185,7 @@ fun SovereignTopBar(
                 }
             }
 
-            // أزرار البحث والإعدادات السريعة
+            // أزرار البحث والإعدادات السريعة — هدف لمس 48dp (WCAG 2.5.8)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -193,7 +193,7 @@ fun SovereignTopBar(
                 IconButton(
                     onClick = onSearch,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                         .background(SovereignColors.SurfaceCard)
                         .border(1.dp, SovereignColors.GlassBorder, CircleShape)
@@ -209,7 +209,7 @@ fun SovereignTopBar(
                 IconButton(
                     onClick = onSettings,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                         .background(SovereignColors.SurfaceCard)
                         .border(1.dp, SovereignColors.GlassBorder, CircleShape)

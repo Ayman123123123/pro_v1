@@ -147,8 +147,8 @@ class SfuTicketController(
     }
 
     companion object {
-        /** معرف الغرفة موحّد مع SFU (4..128) ومع ConferenceWebSocketHandler — كان 8..128 فيسبب فشل الغرف القصيرة. */
-        private val ROOM_ID = Regex("^[A-Za-z0-9_-]{4,128}$")
+        /** إزالة التكرار: المرجع الوحيد RoomSeparationPolicy.ROOM_ID (كان نسخة محلية 4..128). */
+        private val ROOM_ID = RoomSeparationPolicy.ROOM_ID
         /** يطابق JwtService.issueSfuTicket (10 دقائق) — كان 120 فيسبب تجديداً مبكراً خاطئاً. */
         const val SFU_TICKET_EXPIRES_SECONDS = 600L
     }

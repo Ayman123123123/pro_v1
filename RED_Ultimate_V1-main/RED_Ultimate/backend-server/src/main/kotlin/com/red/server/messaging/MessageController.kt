@@ -34,7 +34,7 @@ class MessageController(
     @GetMapping("/catchup")
     fun catchup(
         @RequestParam("since", defaultValue = "0") since: Long,
-        @RequestParam("limit", defaultValue = "200") limit: Int,
+        @RequestParam("limit", defaultValue = "50") limit: Int,
         auth: Authentication
     ): List<Map<String, String?>> {
         val sinceInstant = if (since > 0) java.time.Instant.ofEpochMilli(since) else java.time.Instant.now().minusSeconds(48 * 3600)

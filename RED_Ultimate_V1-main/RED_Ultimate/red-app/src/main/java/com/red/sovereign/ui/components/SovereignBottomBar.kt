@@ -138,7 +138,8 @@ fun SovereignBottomBar(
                             )
                             .clickable(
                                 interactionSource = interactionSource,
-                                indication = null,
+                                indication = androidx.compose.foundation.LocalIndication.current,
+                                onClickLabel = item.label,
                                 onClick = { onSectionSelected(item) }
                             ),
                         contentAlignment = Alignment.Center

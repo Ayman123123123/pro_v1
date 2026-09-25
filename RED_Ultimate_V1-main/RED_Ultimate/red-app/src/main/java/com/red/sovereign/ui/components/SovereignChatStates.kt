@@ -44,7 +44,7 @@ fun SovereignEmptyConversationState() {
             ) {
                 Icon(
                     imageVector = Icons.Default.Lock,
-                    contentDescription = null,
+                    contentDescription = "تشفير تام بين الطرفين",
                     tint = YounesPrimary,
                     modifier = Modifier.padding(14.dp).size(28.dp)
                 )

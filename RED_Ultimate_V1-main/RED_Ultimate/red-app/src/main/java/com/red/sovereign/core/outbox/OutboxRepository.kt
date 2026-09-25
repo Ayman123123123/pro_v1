@@ -90,7 +90,7 @@ class OutboxRepository(private val dao: OutboxDao) {
             id = idempotencyKey,
             conversationId = conversationId,
             payload = payload,
-            type = "MEDIA",
+            type = type,
             priority = priority,
             mediaType = mediaType,
             localMediaPath = localMediaPath,
@@ -109,8 +109,11 @@ class OutboxRepository(private val dao: OutboxDao) {
         priority: Int = PRIORITY_NORMAL,
         idempotencyKey: String
     ): OutboxMessageEntity {
+        // الإرسال حتى الإقرار: id = idempotencyKey (لا UUID عشوائي) — إعادة المحاولة
+        // بذات المفتاح تُعيد الصف نفسه بدل صف مكرر يضيع/يتكرر سلكياً.
+        dao.getById(idempotencyKey)?.let { return it }
         val entity = OutboxMessageEntity.create(
-            id = UUID.randomUUID().toString(),
+            id = idempotencyKey,
             conversationId = conversationId,
             payload = text.toByteArray(),
             type = "CHAT",
@@ -233,37 +236,64 @@ class OutboxRepository(private val dao: OutboxDao) {
     // All check-then-act transitions are guarded by circuitBreakerLock so
     // concurrent workers cannot interleave read-modify-write on
     // consecutiveFailures / _circuitBreakerOpen / _lastFailureTime.
+    // NOTE: instances are recreated per WorkManager run, so the authoritative
+    // state lives in the companion global (shared in-process) + SharedPrefs
+    // (survives process death). Instance flows stay as observable mirrors.
     private val circuitBreakerLock = Any()
 
-    internal fun recordSuccess() = synchronized(circuitBreakerLock) {
-        consecutiveFailures.value = 0
-        if (_circuitBreakerOpen.value) {
-            _circuitBreakerOpen.value = false
-            _lastFailureTime.value = null
-        }
-    }
-
-    internal fun recordFailure() = synchronized(circuitBreakerLock) {
-        val count = consecutiveFailures.value + 1
-        consecutiveFailures.value = count
-        _lastFailureTime.value = System.currentTimeMillis()
-        if (count >= 5) {
-            _circuitBreakerOpen.value = true
-            _lastFailureTime.value = System.currentTimeMillis()
-        }
-    }
-
-    fun isCircuitBreakerOpen(): Boolean = synchronized(circuitBreakerLock) { _circuitBreakerOpen.value }
-
-    internal fun tryResetCircuitBreaker() = synchronized(circuitBreakerLock) {
-        if (_circuitBreakerOpen.value) {
-            val lastFailure = _lastFailureTime.value ?: return@synchronized
-            if (System.currentTimeMillis() - lastFailure > circuitBreakerResetTimeout) {
+    fun recordSuccess() {
+        globalRecordSuccess()
+        synchronized(circuitBreakerLock) {
+            consecutiveFailures.value = 0
+            if (_circuitBreakerOpen.value) {
                 _circuitBreakerOpen.value = false
                 _lastFailureTime.value = null
             }
         }
     }
+
+    fun recordFailure() {
+        globalRecordFailure()
+        synchronized(circuitBreakerLock) {
+            val count = consecutiveFailures.value + 1
+            consecutiveFailures.value = count
+            _lastFailureTime.value = System.currentTimeMillis()
+            if (count >= circuitBreakerThreshold) {
+                _circuitBreakerOpen.value = true
+                _lastFailureTime.value = System.currentTimeMillis()
+            }
+        }
+    }
+
+    fun isCircuitBreakerOpen(): Boolean {
+        // Global is authoritative (shared across worker instances); mirror it.
+        if (globalIsOpen()) {
+            synchronized(circuitBreakerLock) {
+                if (!_circuitBreakerOpen.value) {
+                    _circuitBreakerOpen.value = true
+                    _lastFailureTime.value = globalLastFailureMs()
+                }
+            }
+            return true
+        }
+        return synchronized(circuitBreakerLock) { _circuitBreakerOpen.value }
+    }
+
+    fun tryResetCircuitBreaker() {
+        globalTryReset()
+        synchronized(circuitBreakerLock) {
+            if (_circuitBreakerOpen.value) {
+                val lastFailure = _lastFailureTime.value ?: return@synchronized
+                if (System.currentTimeMillis() - lastFailure > circuitBreakerResetTimeout) {
+                    _circuitBreakerOpen.value = false
+                    _lastFailureTime.value = null
+                }
+            }
+        }
+    }
+
+    /** المهلة المتبقية للقاطع المشترك (ثوانٍ) — للمؤشر الحقيقي والجدولة. */
+    fun breakerRemainingSec(): Long = globalRemainingSec()
 
     // ─── Dead Letter Queue ───────────────────────────────────────────────────
     suspend fun getDeadLetterQueue(limit: Int = 50): List<OutboxMessageEntity> =
@@ -309,5 +339,82 @@ class OutboxRepository(private val dao: OutboxDao) {
         }
         val jitter = (base * 0.25 * (Math.random() * 2 - 1)).toLong()
         return (base + jitter).coerceAtLeast(5_000L)
+    }
+
+    companion object {
+        private val globalLock = Any()
+        @Volatile private var globalFailures = 0
+        @Volatile private var globalOpen = false
+        @Volatile private var globalLastFailureMs = 0L
+        const val GLOBAL_THRESHOLD = 5
+        const val GLOBAL_RESET_TIMEOUT_MS = 60_000L
+        private const val PREFS = "red_outbox_breaker"
+        private const val KEY_FAILURES = "failures"
+        private const val KEY_OPEN = "open"
+        private const val KEY_LAST = "lastFailure"
+
+        /** نصف مفتوح: يُسمح بمسبار واحد بعد المهلة بدل الانتظار السلبي. */
+        fun globalIsOpen(): Boolean = synchronized(globalLock) {
+            if (!globalOpen) return false
+            if (System.currentTimeMillis() - globalLastFailureMs > GLOBAL_RESET_TIMEOUT_MS) {
+                // half-open probe: close optimistically, one attempt decides
+                globalOpen = false
+                return false
+            }
+            true
+        }
+
+        fun globalRemainingSec(): Long = synchronized(globalLock) {
+            if (!globalOpen) return 0L
+            ((GLOBAL_RESET_TIMEOUT_MS - (System.currentTimeMillis() - globalLastFailureMs)) / 1000L).coerceAtLeast(0L)
+        }
+
+        fun globalLastFailureMs(): Long = synchronized(globalLock) { globalLastFailureMs }
+
+        fun globalRecordSuccess() = synchronized(globalLock) {
+            globalFailures = 0
+            globalOpen = false
+            globalLastFailureMs = 0L
+        }
+
+        /** @return true إن فُتح القاطع بهذا الفشل. */
+        fun globalRecordFailure(): Boolean = synchronized(globalLock) {
+            globalFailures++
+            globalLastFailureMs = System.currentTimeMillis()
+            if (globalFailures >= GLOBAL_THRESHOLD) globalOpen = true
+            globalOpen
+        }
+
+        fun globalTryReset() = synchronized(globalLock) {
+            if (globalOpen && System.currentTimeMillis() - globalLastFailureMs > GLOBAL_RESET_TIMEOUT_MS) {
+                globalOpen = false
+                globalLastFailureMs = 0L
+            }
+        }
+
+        /** تحميل الحالة المحفوظة (موت العملية) — يُستدعى أول doWork. */
+        fun loadPersisted(context: android.content.Context) = synchronized(globalLock) {
+            runCatching {
+                val p = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                globalFailures = p.getInt(KEY_FAILURES, 0)
+                globalOpen = p.getBoolean(KEY_OPEN, false)
+                globalLastFailureMs = p.getLong(KEY_LAST, 0L)
+                // إن انتهت المهلة أثناء الموت → half-open فوراً
+                if (globalOpen && System.currentTimeMillis() - globalLastFailureMs > GLOBAL_RESET_TIMEOUT_MS) {
+                    globalOpen = false
+                    globalLastFailureMs = 0L
+                }
+            }
+        }
+
+        /** حفظ الحالة (يُستدعى بعد كل record) — رخيص (3 ints). */
+        fun persist(context: android.content.Context) {
+            val f: Int; val o: Boolean; val l: Long
+            synchronized(globalLock) { f = globalFailures; o = globalOpen; l = globalLastFailureMs }
+            runCatching {
+                context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+                    .putInt(KEY_FAILURES, f).putBoolean(KEY_OPEN, o).putLong(KEY_LAST, l).apply()
+            }
+        }
     }
 }

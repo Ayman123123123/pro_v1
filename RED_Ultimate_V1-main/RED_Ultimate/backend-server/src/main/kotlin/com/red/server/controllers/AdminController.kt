@@ -59,13 +59,21 @@ class AdminController(
         @RequestParam userId: String,
         @RequestParam status: String,
         authentication: Authentication
-    ) = ResponseEntity.ok(
-        approvalService.processAction(
-            UUID.fromString(userId),
-            com.red.server.auth.model.AccountStatus.valueOf(status.uppercase()),
-            adminId = UUID.fromString(authentication.name)
+    ): ResponseEntity<Any> {
+        // Legacy query-param surface: invalid values are client errors (400),
+        // not server crashes (AccountStatus.valueOf used to throw 500).
+        val id = runCatching { UUID.fromString(userId) }.getOrNull()
+            ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "INVALID_USER_ID"))
+        val accountStatus = runCatching { com.red.server.auth.model.AccountStatus.valueOf(status.uppercase()) }.getOrNull()
+            ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "INVALID_STATUS"))
+        return ResponseEntity.ok(
+            approvalService.processAction(
+                id,
+                accountStatus,
+                adminId = UUID.fromString(authentication.name)
+            )
         )
-    )
+    }
 
     @GetMapping("/stories/monitor")
     fun monitorStories() = ResponseEntity.ok(coreService.getActiveStoriesCount())

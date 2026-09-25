@@ -22,7 +22,8 @@ class AuthRefreshWorker(appContext: Context, params: WorkerParameters) : Corouti
                 tokens.updateTokens(result.value)
                 Result.success()
             } else if (result is com.red.sovereign.auth.ApiResult.Error && (result.code==401 || result.code==403)) {
-                // انتهاء حقيقي — لا إعادة محاولة
+                // انتهاء حقيقي — مؤشر الحالة الحقيقية: OFFLINE بلا قاطع (جلسة منتهية لا شبكة)
+                runCatching { com.red.sovereign.core.ConnectionStatusRepository.publishOffline(0, false) }
                 Result.failure()
             } else {
                 Result.retry()

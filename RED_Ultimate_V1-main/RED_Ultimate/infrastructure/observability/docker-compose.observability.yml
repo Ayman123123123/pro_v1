@@ -1,11 +1,14 @@
+# NOTE: paths below are relative to THIS file's directory
+# (infrastructure/observability/). When rendered as an override from the
+# project root, prefer the root docker-compose.observability.yml instead.
 services:
   prometheus:
     image: prom/prometheus:v3.1.0
     profiles: [observability]
     command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=30d]
     volumes:
-      - ./infrastructure/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./infrastructure/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     expose: ["9090"]
     networks: [red-net]
@@ -13,7 +16,7 @@ services:
     image: prom/alertmanager:v0.28.0
     profiles: [observability]
     command: [--config.file=/etc/alertmanager/alertmanager.yml]
-    volumes: [./infrastructure/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
+    volumes: [./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
     expose: ["9093"]
     networks: [red-net]
   grafana:
@@ -25,15 +28,15 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     expose: ["3000"]
     networks: [red-net]
   blackbox-exporter:
     image: prom/blackbox-exporter:v0.25.0
     profiles: [observability]
     command: [--config.file=/etc/blackbox_exporter/config.yml]
-    volumes: [./infrastructure/observability/blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro]
+    volumes: [./blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro]
     networks: [red-net]
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
@@ -45,7 +48,7 @@ services:
     image: oliver006/redis_exporter:v1.66.0
     profiles: [observability]
     environment:
-      REDIS_ADDR: redis://cache-redis:6379
+      REDIS_ADDR: cache-redis:6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     networks: [red-net]
   mongodb-exporter:
@@ -56,3 +59,7 @@ services:
 volumes:
   prometheus-data:
   grafana-data:
+
+networks:
+  red-net:
+    driver: bridge

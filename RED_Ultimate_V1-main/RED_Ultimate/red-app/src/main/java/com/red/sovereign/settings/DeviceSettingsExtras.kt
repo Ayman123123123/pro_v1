@@ -197,9 +197,10 @@ object StorageStats {
     private fun java.io.File.lengthOrZero(): Long =
         if (exists() && isFile) length() else 0L
 
+    private val formatLocale: java.util.Locale = java.util.Locale("ar")
     fun formatAr(bytes: Long): String = when {
-        bytes >= 1024L * 1024 -> "%.1f م.ب".format(bytes / 1048576.0)
-        bytes >= 1024 -> "%.1f ك.ب".format(bytes / 1024.0)
-        else -> "$bytes بايت"
+        bytes >= 1024L * 1024 -> String.format(formatLocale, "%.1f م.ب", bytes / 1048576.0)
+        bytes >= 1024 -> String.format(formatLocale, "%.1f ك.ب", bytes / 1024.0)
+        else -> String.format(formatLocale, "%d بايت", bytes)
     }
 }

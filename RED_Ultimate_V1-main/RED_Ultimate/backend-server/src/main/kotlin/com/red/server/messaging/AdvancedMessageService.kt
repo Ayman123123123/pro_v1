@@ -1,6 +1,5 @@
 package com.red.server.messaging
 
-import com.red.server.database.ChannelMessageDocument
 import com.red.server.database.GroupMessageDocument
 import com.red.server.database.MessageDocument
 import org.slf4j.LoggerFactory
@@ -20,22 +19,34 @@ internal fun expiredDisappearingMessagesQuery(now: Instant): Query =
 @Service
 class AdvancedMessageService(
     private val mongoTemplate: MongoTemplate,
-    private val jdbc: JdbcTemplate? = null
+    private val jdbc: JdbcTemplate? = null,
+    private val deletes: DeleteService? = null
 ) {
     companion object { private val log = LoggerFactory.getLogger(AdvancedMessageService::class.java) }
 
     /**
-     * الحذف للجميع: يحذف الرسالة من الأرشيف ويرسل إشارة حذف لكافة الأجهزة
+     * الحذف للجميع: تومبستون ناعم (يوحّد مع DeleteService) — لا حذف صلب.
+     * الحذف الصلب كان يكسر المزامنة/التحقق من الرد (الهدف يختفي بلا أثر).
+     * إزالة ازدواج: المفوَّض الوحيد هو DeleteService.deleteForEveryone؛ هنا مجرد
+     * غلاف توافق يعيد المستلمين للبث دون تكرار منطق التحديث.
      */
     fun processDeleteRequest(messageId: String, senderId: String): List<String> {
-        val query = Query(Criteria.where("uuid").`is`(messageId).and("senderId").`is`(senderId))
-        val message = mongoTemplate.findOne(query, MessageDocument::class.java)
-        
-        return if (message != null) {
-            mongoTemplate.remove(query, "messages")
+        val delegate = deletes
+        if (delegate != null) {
+            val message = delegate.deleteForEveryone(messageId, senderId) ?: return emptyList()
             log.info("Message {} deleted for everyone by sender {}", messageId, senderId)
-            listOf(message.receiverId) 
-        } else emptyList()
+            return listOf(message.receiverId)
+        }
+        val query = Query(Criteria.where("uuid").`is`(messageId).and("senderId").`is`(senderId).and("deletedForEveryoneAt").`is`(null))
+        val message = mongoTemplate.findOne(query, MessageDocument::class.java)
+            ?: return emptyList()
+        mongoTemplate.updateFirst(
+            query,
+            Update().set("deletedForEveryoneAt", Instant.now()).set("payload", byteArrayOf()),
+            MessageDocument::class.java
+        )
+        log.info("Message {} deleted for everyone by sender {}", messageId, senderId)
+        return listOf(message.receiverId)
     }
 
     /**
@@ -96,9 +107,10 @@ class AdvancedMessageService(
 
     /**
      * تنظيف الرسائل ذاتية الاختفاء — يعمل كل 5 دقائق.
-     * يغطي المحادثات الخاصة + رسائل المجموعات + رسائل القنوات
-     * (إعدادات GroupService.updateDisappearing تُفرض عند الكتابة عبر
-     * MessageService.disappearingSecondsForConversation، وهنا تُحذف المنتهية).
+     * يغطي المحادثات الخاصة + رسائل المجموعات (لها disappearAt).
+     * رسائل القنوات بلا حقل disappearAt — لا تُستعلم هنا.
+     * تنظيف pinned_messages المنتهية مملوك لـ PinnedMessageService.cleanupExpired
+     * (مجدول هناك) — لا ازدواج هنا.
      */
     @Scheduled(fixedDelay = 300_000)
     fun cleanupDisappearing() {
@@ -107,16 +119,9 @@ class AdvancedMessageService(
         val q = expiredDisappearingMessagesQuery(now)
         val d1 = mongoTemplate.remove(q, MessageDocument::class.java).deletedCount
         val d2 = mongoTemplate.remove(q, GroupMessageDocument::class.java).deletedCount
-        val d3 = mongoTemplate.remove(q, ChannelMessageDocument::class.java).deletedCount
-        val total = d1 + d2 + d3
+        val total = d1 + d2
         if (total > 0) {
-            log.info("Cleaned {} disappearing messages (private={}, group={}, channel={})", total, d1, d2, d3)
-        }
-        // Postgres: نظف التثبيتات المنتهية
-        try {
-            jdbc?.update("DELETE FROM pinned_messages WHERE expires_at IS NOT NULL AND expires_at < NOW()")
-        } catch (e: Exception) {
-            log.warn("Failed to cleanup expired pinned messages: {}", e.message)
+            log.info("Cleaned {} disappearing messages (private={}, group={})", total, d1, d2)
         }
     }
 }

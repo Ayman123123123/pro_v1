@@ -65,7 +65,11 @@ class UserStatusService(
 
         // مجموعة المتصلين تُخزَّن بمعرّف يونس — نفس مفتاح red:presence:index
         when (type) {
-            "ONLINE" -> redis.opsForSet().add(ONLINE_SET, redId)
+            "ONLINE" -> {
+                redis.opsForSet().add(ONLINE_SET, redId)
+                // TTL التسليم: لا عضو خالد بعد تعطل/إعادة تشغيل بلا OFFLINE
+                redis.expire(ONLINE_SET, 48, TimeUnit.HOURS)
+            }
             "OFFLINE", "INVISIBLE" -> redis.opsForSet().remove(ONLINE_SET, redId)
         }
 

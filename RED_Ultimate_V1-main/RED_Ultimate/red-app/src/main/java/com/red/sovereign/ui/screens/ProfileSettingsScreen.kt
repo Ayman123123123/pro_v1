@@ -38,6 +38,8 @@ fun ProfileSettingsScreen(
     onSelfDestruct: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // ملاحظة معمارية: لا منادٍ حالي لهذه الشاشة (البحث لا يجد استخدامًا) —
+    // أُبقيت وحُسّنت (تباين + هدف لمس 48dp) بدل حذفها لحين ربطها بالتنقل.
     val context = LocalContext.current
     val initialName = runCatching { TokenStore(context).username?.takeIf { it.isNotBlank() } }.getOrNull()
     val initialRedId = runCatching { TokenStore(context).redId?.takeIf { it.isNotBlank() } }.getOrNull()
@@ -85,7 +87,7 @@ fun ProfileSettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = YounesSurface.copy(alpha = 0.85f)
+                    containerColor = YounesSurface
                 )
             )
         }
@@ -305,13 +307,14 @@ fun SettingsItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .heightIn(min = 48.dp)
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = title) { onClick() } else Modifier)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,
+            contentDescription = title,
             tint = YounesMuted,
             modifier = Modifier.size(24.dp)
         )
@@ -338,7 +341,7 @@ fun SettingsItem(
         } else if (onClick != null) {
             Icon(
                 imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = null,
+                contentDescription = "فتح $title",
                 tint = YounesMuted,
                 modifier = Modifier.size(20.dp)
             )

@@ -75,7 +75,7 @@ private fun ZoomMinimizedBar(state: ZoomUiState.Active){
                     Box(Modifier.size(8.dp).clip(CircleShape).background(ZoomBlue))
                     Text("اجتماع Zoom", color=Color.White, fontSize=12.sp, fontWeight=FontWeight.Bold)
                 }
-                Text("$joined مشارك · ${ZoomRuntime.meetingTitle}", color=Color.White.copy(0.7f), fontSize=10.sp, maxLines=1)
+                Text("$joined مشارك · ${ZoomRuntime.meetingTitle}", color=Color.White.copy(0.85f), fontSize=10.sp, maxLines=1)
                 if(state.isVideo){
                     ZoomRuntime.eglContext?.let { egl ->
                         ZoomRuntime.localVideo?.let { track ->
@@ -198,7 +198,7 @@ private fun ZoomActivePanel(state: ZoomUiState.Active){
 private fun ZoomHeader(state: ZoomUiState.Active){
     val joined=state.members.count{it.status==ZoomMemberStatus.JOINED}+1
     val quality=ZoomRuntime.networkStats.quality
-    val qualityColor=when(quality){ NetworkStats.Quality.EXCELLENT, NetworkStats.Quality.GOOD->ZoomBlue; NetworkStats.Quality.FAIR->Color(0xFFFFC107); NetworkStats.Quality.POOR->Color(0xFFE53935); else->Color.Gray }
+    val qualityColor=when(quality){ NetworkStats.Quality.EXCELLENT, NetworkStats.Quality.GOOD->ZoomBlue; NetworkStats.Quality.FAIR->Color(0xFFFFC107); NetworkStats.Quality.POOR->Color(0xFFE53935); else->Color(0xFF94A3B8) }
     Row(Modifier.fillMaxWidth().padding(horizontal=16.dp, vertical=10.dp), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=Alignment.CenterVertically){
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically){
             Box(Modifier.size(8.dp).clip(CircleShape).background(qualityColor))
@@ -209,7 +209,7 @@ private fun ZoomHeader(state: ZoomUiState.Active){
                     if(ZoomRuntime.isScreenSharing) Box(Modifier.clip(RoundedCornerShape(4.dp)).background(ZoomBlue).padding(horizontal=4.dp, vertical=1.dp)){ Text("شاشة", color=Color(0xFF002118), fontSize=9.sp)}
                 }
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp), verticalAlignment=Alignment.CenterVertically){
-                    Text("Zoom · $joined مشارك", color=Color.White.copy(0.7f), fontSize=11.sp)
+                    Text("Zoom · $joined مشارك", color=Color.White.copy(0.85f), fontSize=11.sp)
                     ZoomElapsedTimer(state.startedAt)
                 }
             }
@@ -248,7 +248,7 @@ private fun ZoomAvatarTile(label: String, initial: String, isMuted: Boolean, isS
             if(isMuted) Box(Modifier.align(Alignment.BottomEnd).size(26.dp).clip(CircleShape).background(Color(0xFFE53935)).border(2.dp, Color(0xFF02070E), CircleShape), contentAlignment=Alignment.Center){ Icon(Icons.Default.MicOff, null, tint=Color.White, modifier=Modifier.size(14.dp))}
         }
         Text(label.take(14), color=Color.White, fontSize=12.sp, maxLines=1, overflow=TextOverflow.Ellipsis, fontWeight=if(isSelf) FontWeight.Bold else FontWeight.Medium)
-        Text(if(isMuted) "مكتوم" else if(isSpeaking) "يتحدث..." else "متصل", color=if(isSpeaking) ZoomBlue else Color.White.copy(0.55f), fontSize=10.sp)
+        Text(if(isMuted) "مكتوم" else if(isSpeaking) "يتحدث..." else "متصل", color=if(isSpeaking) ZoomBlue else Color.White.copy(0.85f), fontSize=10.sp)
     }
 }
 
@@ -320,7 +320,7 @@ private fun ZoomControlIsland(state: ZoomUiState.Active, isSpeakerView: Boolean,
                 Box(Modifier.size(56.dp).clip(CircleShape).background(Color(0xFFE53935)).clickable{ ZoomGroupCallService.end(context)}, contentAlignment=Alignment.Center){ Icon(Icons.Default.CallEnd, null, tint=Color.White, modifier=Modifier.size(26.dp))}
             }
         }
-        Text("اجتماع Zoom · ${ZoomRuntime.meetingId} · مشفّر", color=Color.White.copy(0.45f), fontSize=10.sp)
+        Text("اجتماع Zoom · ${ZoomRuntime.meetingId} · مشفّر", color=Color.White.copy(0.85f), fontSize=10.sp)
     }
 }
 
@@ -339,7 +339,7 @@ private fun ZoomIncomingPanel(state: ZoomUiState.Incoming){
             Text(groupName, color=Color.White, fontSize=22.sp, fontWeight=FontWeight.Black, maxLines=1, overflow=TextOverflow.Ellipsis)
             Text("${state.hostName.ifBlank{state.hostId}} يدعوك", color=Color.White.copy(0.85f), fontSize=14.sp)
             Text("اجتماع: ${state.meetingId}", color=ZoomBlue, fontSize=12.sp, fontWeight=FontWeight.Bold)
-            if(state.otherIds.isNotEmpty()) Text("+ ${state.otherIds.size} آخرون", color=Color.White.copy(0.55f), fontSize=12.sp)
+            if(state.otherIds.isNotEmpty()) Text("+ ${state.otherIds.size} آخرون", color=Color.White.copy(0.85f), fontSize=12.sp)
         }
         Box(Modifier.size(100.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF1E3A5F), Color(0xFF0F172A)))).border(2.dp, ZoomBlue, CircleShape), contentAlignment=Alignment.Center){ Text(groupName.take(2).uppercase().ifBlank{"ZM"}, color=Color.White, fontSize=28.sp, fontWeight=FontWeight.Black)}
         Column(verticalArrangement=Arrangement.spacedBy(12.dp), modifier=Modifier.fillMaxWidth()){
@@ -359,7 +359,7 @@ private fun ZoomIncomingPanel(state: ZoomUiState.Incoming){
         Spacer(Modifier.height(12.dp))
         Text("في انتظار المضيف", color=Color.White, fontSize=18.sp, fontWeight=FontWeight.Bold)
         Text("اجتماع: ${state.meetingId}", color=ZoomBlue, fontSize=13.sp)
-        Text("سيتم إدخالك عند قبول المضيف", color=Color.White.copy(0.6f), fontSize=12.sp)
+        Text("سيتم إدخالك عند قبول المضيف", color=Color.White.copy(0.85f), fontSize=12.sp)
     }
 }
 
@@ -420,12 +420,12 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
             Surface(shape=RoundedCornerShape(topStart=20.dp, topEnd=20.dp), color=Color(0xFF0F172A), modifier=Modifier.fillMaxWidth().fillMaxHeight(0.72f).clickable(enabled=false){}){
                 Column(Modifier.fillMaxSize().padding(16.dp)){
                     Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=Alignment.CenterVertically){
-                        Column{ Text("المشاركون (${joined.size+1}/100)", color=Color.White, fontSize=16.sp, fontWeight=FontWeight.Bold); Text("اجتماع: ${state.meetingId}", color=ZoomBlue, fontSize=11.sp)}
+                        Column{ Text("المشاركون (${joined.size+1}/${CallLimits.ZOOM_SFU_MAX})", color=Color.White, fontSize=16.sp, fontWeight=FontWeight.Bold); Text("اجتماع: ${state.meetingId}", color=ZoomBlue, fontSize=11.sp)}
                         Box(Modifier.clip(CircleShape).background(Color.White.copy(0.1f)).clickable{onDismiss()}.padding(8.dp)){ Icon(Icons.Default.Close, null, tint=Color.White, modifier=Modifier.size(18.dp))}
                     }
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement=Arrangement.spacedBy(6.dp), verticalAlignment=Alignment.CenterVertically, modifier=Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color.White.copy(0.06f)).padding(10.dp)){
-                        val q=ZoomRuntime.networkStats.quality; val (col,lab)=when(q){ NetworkStats.Quality.EXCELLENT->Color(0xFF00C98C) to "ممتاز"; NetworkStats.Quality.GOOD->Color(0xFF00C98C) to "جيد"; NetworkStats.Quality.FAIR->Color(0xFFFFC107) to "متوسط"; NetworkStats.Quality.POOR->Color(0xFFE53935) to "ضعيف"; else->Color.Gray to "?"}
+                        val q=ZoomRuntime.networkStats.quality; val (col,lab)=when(q){ NetworkStats.Quality.EXCELLENT->Color(0xFF00C98C) to "ممتاز"; NetworkStats.Quality.GOOD->Color(0xFF00C98C) to "جيد"; NetworkStats.Quality.FAIR->Color(0xFFFFC107) to "متوسط"; NetworkStats.Quality.POOR->Color(0xFFE53935) to "ضعيف"; else->Color(0xFF94A3B8) to "?"}
                         Box(Modifier.size(8.dp).clip(CircleShape).background(col)); Text("الشبكة: $lab", color=Color.White.copy(0.8f), fontSize=11.sp)
                         if(ZoomRuntime.isScreenSharing) Box(Modifier.clip(RoundedCornerShape(6.dp)).background(ZoomBlue).padding(horizontal=6.dp, vertical=2.dp)){ Text("شاشة", color=Color(0xFF002118), fontSize=10.sp, fontWeight=FontWeight.Bold)}
                         if(ZoomRuntime.isLocked) Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFE53935)).padding(horizontal=6.dp, vertical=2.dp)){ Text("مقفل", color=Color.White, fontSize=10.sp)}
@@ -460,11 +460,11 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
                     // غرف فرعية
                     if(ZoomRuntime.breakoutRooms.isNotEmpty()){
                         Spacer(Modifier.height(8.dp))
-                        Text("غرف فرعية:", color=Color.White.copy(0.7f), fontSize=11.sp)
+                        Text("غرف فرعية:", color=Color.White.copy(0.85f), fontSize=11.sp)
                         Row(horizontalArrangement=Arrangement.spacedBy(6.dp), modifier=Modifier.fillMaxWidth()){
                             ZoomRuntime.breakoutRooms.forEach{ room ->
                                 Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(0.06f)).padding(8.dp), contentAlignment=Alignment.Center){
-                                    Column(horizontalAlignment=Alignment.CenterHorizontally){ Text(room.name, color=Color.White, fontSize=11.sp, fontWeight=FontWeight.Bold); Text("${room.participantIds.size} مشارك", color=Color.White.copy(0.6f), fontSize=10.sp)}
+                                    Column(horizontalAlignment=Alignment.CenterHorizontally){ Text(room.name, color=Color.White, fontSize=11.sp, fontWeight=FontWeight.Bold); Text("${room.participantIds.size} مشارك", color=Color.White.copy(0.85f), fontSize=10.sp)}
                                 }
                             }
                         }
@@ -487,12 +487,12 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
             Surface(shape=RoundedCornerShape(16.dp), color=Color(0xFF1E293B)){
                 Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(10.dp)){
                     Text("استطلاع جديد", color=Color.White, fontWeight=FontWeight.Bold)
-                    androidx.compose.material3.OutlinedTextField(value=q, onValueChange={q=it}, placeholder={Text("السؤال", color=Color.Gray)}, modifier=Modifier.fillMaxWidth(), singleLine=true, colors=OutlinedTextFieldDefaults.colors(focusedTextColor=Color.White, unfocusedTextColor=Color.White))
-                    androidx.compose.material3.OutlinedTextField(value=o1, onValueChange={o1=it}, placeholder={Text("خيار 1", color=Color.Gray)}, modifier=Modifier.fillMaxWidth(), singleLine=true, colors=OutlinedTextFieldDefaults.colors(focusedTextColor=Color.White, unfocusedTextColor=Color.White))
-                    androidx.compose.material3.OutlinedTextField(value=o2, onValueChange={o2=it}, placeholder={Text("خيار 2", color=Color.Gray)}, modifier=Modifier.fillMaxWidth(), singleLine=true, colors=OutlinedTextFieldDefaults.colors(focusedTextColor=Color.White, unfocusedTextColor=Color.White))
-                    androidx.compose.material3.OutlinedTextField(value=o3, onValueChange={o3=it}, placeholder={Text("خيار 3 (اختياري)", color=Color.Gray)}, modifier=Modifier.fillMaxWidth(), singleLine=true, colors=OutlinedTextFieldDefaults.colors(focusedTextColor=Color.White, unfocusedTextColor=Color.White))
+                    androidx.compose.material3.OutlinedTextField(value=q, onValueChange={q=it}, placeholder={Text("السؤال", color=Color(0xFFCBD5E1))}, modifier=Modifier.fillMaxWidth(), singleLine=true, colors=OutlinedTextFieldDefaults.colors(focusedTextColor=Color.White, unfocusedTextColor=Color.White))
+                    androidx.compose.material3.OutlinedTextField(value=o1, onValueChange={o1=it}, placeholder={Text("خيار 1", color=Color(0xFFCBD5E1))}, modifier=Modifier.fillMaxWidth(), singleLine=true, colors=OutlinedTextFieldDefaults.colors(focusedTextColor=Color.White, unfocusedTextColor=Color.White))
+                    androidx.compose.material3.OutlinedTextField(value=o2, onValueChange={o2=it}, placeholder={Text("خيار 2", color=Color(0xFFCBD5E1))}, modifier=Modifier.fillMaxWidth(), singleLine=true, colors=OutlinedTextFieldDefaults.colors(focusedTextColor=Color.White, unfocusedTextColor=Color.White))
+                    androidx.compose.material3.OutlinedTextField(value=o3, onValueChange={o3=it}, placeholder={Text("خيار 3 (اختياري)", color=Color(0xFFCBD5E1))}, modifier=Modifier.fillMaxWidth(), singleLine=true, colors=OutlinedTextFieldDefaults.colors(focusedTextColor=Color.White, unfocusedTextColor=Color.White))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                        TextButton(onClick={showPollCreate=false}){ Text("إلغاء", color=Color.White.copy(0.6f))}
+                        TextButton(onClick={showPollCreate=false}){ Text("إلغاء", color=Color.White.copy(0.85f))}
                         Button(onClick={
                             val opts=listOf(o1,o2,o3).filter{it.isNotBlank()}
                             if(q.isNotBlank() && opts.size>=2){ ZoomGroupCallService.createPoll(context, q, opts); showPollCreate=false}
@@ -512,9 +512,9 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(0.06f)).padding(12.dp), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=Alignment.CenterVertically){
         Row(horizontalArrangement=Arrangement.spacedBy(10.dp), verticalAlignment=Alignment.CenterVertically){
             Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF1E3A5F), Color(0xFF0F172A)))), contentAlignment=Alignment.Center){ Text(name.take(2).uppercase().ifBlank{"؟"}, color=Color.White, fontSize=14.sp, fontWeight=FontWeight.Bold)}
-            Column{ Row(horizontalArrangement=Arrangement.spacedBy(4.dp), verticalAlignment=Alignment.CenterVertically){ Text(name.take(14), color=Color.White, fontSize=13.sp, fontWeight=FontWeight.SemiBold); if(isHost) Box(Modifier.clip(RoundedCornerShape(4.dp)).background(ZoomBlue).padding(horizontal=4.dp, vertical=1.dp)){ Text("مضيف", color=Color(0xFF002118), fontSize=9.sp)}; if(isHand) Text("✋", fontSize=12.sp)}; Text(status, color=Color.White.copy(0.6f), fontSize=11.sp)}
+            Column{ Row(horizontalArrangement=Arrangement.spacedBy(4.dp), verticalAlignment=Alignment.CenterVertically){ Text(name.take(14), color=Color.White, fontSize=13.sp, fontWeight=FontWeight.SemiBold); if(isHost) Box(Modifier.clip(RoundedCornerShape(4.dp)).background(ZoomBlue).padding(horizontal=4.dp, vertical=1.dp)){ Text("مضيف", color=Color(0xFF002118), fontSize=9.sp)}; if(isHand) Text("✋", fontSize=12.sp)}; Text(status, color=Color.White.copy(0.85f), fontSize=11.sp)}
         }
-        Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){ if(isVideo) Icon(Icons.Default.Videocam, null, tint=ZoomBlue, modifier=Modifier.size(16.dp)) else Icon(Icons.Default.VideocamOff, null, tint=Color.Gray, modifier=Modifier.size(16.dp)); Icon(if(isMuted) Icons.Default.MicOff else Icons.Default.Mic, null, tint=if(isMuted) Color(0xFFE53935) else ZoomBlue, modifier=Modifier.size(16.dp))}
+        Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){ if(isVideo) Icon(Icons.Default.Videocam, null, tint=ZoomBlue, modifier=Modifier.size(16.dp)) else Icon(Icons.Default.VideocamOff, null, tint=Color(0xFF94A3B8), modifier=Modifier.size(16.dp)); Icon(if(isMuted) Icons.Default.MicOff else Icons.Default.Mic, null, tint=if(isMuted) Color(0xFFE53935) else ZoomBlue, modifier=Modifier.size(16.dp))}
     }
 }
 
@@ -536,7 +536,7 @@ private fun ZoomVideoTile(label:String, track: VideoTrack?, isMuted:Boolean, isM
                     Column(horizontalAlignment=Alignment.CenterHorizontally, verticalArrangement=Arrangement.spacedBy(10.dp)){
                         Box(Modifier.size(72.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF23406A), Color(0xFF0F1E36)))).border(2.dp, Color.White.copy(0.10f), CircleShape), contentAlignment=Alignment.Center){ Text(label.take(2).uppercase().ifBlank{"؟"}, color=Color.White, fontSize=24.sp, fontWeight=FontWeight.Black)}
                         Text(label.take(14), color=Color.White.copy(0.9f), fontSize=12.sp, fontWeight=FontWeight.SemiBold, maxLines=1, overflow=TextOverflow.Ellipsis)
-                        if(track!=null && !track.enabled()) Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color.White.copy(0.12f)).padding(horizontal=8.dp, vertical=3.dp)){ Text("الكاميرا متوقفة", color=Color.White.copy(0.7f), fontSize=9.sp)}
+                        if(track!=null && !track.enabled()) Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color.White.copy(0.12f)).padding(horizontal=8.dp, vertical=3.dp)){ Text("الكاميرا متوقفة", color=Color.White.copy(0.88f), fontSize=9.sp)}
                     }
                 }
             }

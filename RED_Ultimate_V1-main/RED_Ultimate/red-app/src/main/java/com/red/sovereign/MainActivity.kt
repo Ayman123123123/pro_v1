@@ -24,16 +24,13 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
-import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.security.AppLockScreen
 import com.red.sovereign.security.AppLockPolicy
 import com.red.sovereign.security.DebugSecurityManager
 import com.red.sovereign.security.CertificatePinner
 import com.red.sovereign.settings.SettingsRuntime
 import com.red.sovereign.core.AppStartupCoordinator
-import com.red.sovereign.core.RedConnectionService
 import com.red.sovereign.ui.AuthFlow
-import com.red.sovereign.ui.RedDashboard
 import com.red.sovereign.ui.theme.YounesTheme
 import com.red.sovereign.ui.theme.SovereignBackground
 
@@ -132,8 +129,12 @@ class MainActivity : FragmentActivity() {
     /** استخراج بيانات المحادثة من إشعار الرسالة. */
     private fun handleNotificationIntent(notificationIntent: Intent?) {
         if (notificationIntent == null) return
-        notificationIntent.getStringExtra("conversation_id")?.let { deepLinkConversation = it }
-        notificationIntent.getStringExtra("sender_red_id")?.let { deepLinkSender = it }
+        // توحيد onChat: تقليم الفراغات قبل تمرير الهدف للوحة (يمنع فتح محادثة بمعرف فاسد).
+        notificationIntent.getStringExtra("conversation_id")?.trim()?.takeIf { it.isNotBlank() }?.let { deepLinkConversation = it }
+        // توحيد onChat: تطبيع + تحقق قبل تمرير الهدف للوحة (يمنع فتح محادثة بمعرف فاسد).
+        val rawSender = notificationIntent.getStringExtra("sender_red_id")
+        val cleanSender = rawSender?.let { com.red.sovereign.core.YounesId.normalizeInput(it) }?.takeIf { it.isNotBlank() }
+        deepLinkSender = if (cleanSender != null && com.red.sovereign.core.YounesId.isValid(cleanSender)) cleanSender else null
         consumeDeepLink()
     }
 

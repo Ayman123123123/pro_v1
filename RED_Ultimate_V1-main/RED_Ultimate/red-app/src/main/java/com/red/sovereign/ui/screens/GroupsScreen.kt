@@ -36,6 +36,11 @@ import kotlinx.coroutines.launch
 
 /**
  * 🇾🇪 YOUNES Sovereign — شاشة المجموعات
+ *
+ * ملاحظة معمارية: المسار الحي في RedDashboard هو ChatHubScreen(showGroups=true).
+ * هذه الشاشة بديل مستقل (بحث/debounce + معاينة دعوة + إنشاء) أُبقيت وحُسّنت
+ * بدل حذفها — نفس العقد (onCreateGroup/onOpenGroupChat/onOpenInfo/onStartGroupCall).
+ *
  * مجموعات مشفرة بأنواع الخصوصية الثلاثة:
  * - تصفية حسب النوع + بحث فوري (debounce لمنع إعادة التركيب)
  * - معاينة قبل الانضمام الأعمى
@@ -82,8 +87,17 @@ fun GroupsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("المجموعات", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                title = {
+                    Column {
+                        Text("المجموعات", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("مشفرة Sender Keys", fontSize = 11.sp, color = Color.White.copy(alpha = 0.92f))
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SovereignColors.SurfaceNavy,
+                    scrolledContainerColor = SovereignColors.SurfaceNavy,
+                    titleContentColor = Color.White
+                )
             )
         },
         floatingActionButton = {
@@ -116,12 +130,13 @@ fun GroupsScreen(
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("ابحث في المجموعات…") },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    label = { Text("بحث المجموعات") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = AqyalGold,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                     )
                 )
             }
@@ -142,7 +157,7 @@ fun GroupsScreen(
                 }
             }
 
-            item { Text("مجموعاتي", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f)) }
+            item { Text("مجموعاتي", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.92f)) }
 
             when {
                 groups.state == GroupState.Loading && groups.groups.isEmpty() -> item {
@@ -191,6 +206,7 @@ fun GroupsScreen(
         }
         AlertDialog(
             onDismissRequest = { showJoinDialog = false; joinToken = ""; previewJson = null; previewError = null },
+            shape = RoundedCornerShape(20.dp),
             title = { Text("الانضمام لمجموعة") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -211,7 +227,7 @@ fun GroupsScreen(
                     )
                     Text(
                         "الصق الرابط (https://red.ly/g/… أو red://join?token=…) أو امسح QR الذي يبدأ بـ RED-GROUP: ثم اعرض المعاينة.",
-                        fontSize = 12.sp, color = YounesMuted
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (previewLoading) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -226,10 +242,10 @@ fun GroupsScreen(
                         val desc = Regex("\"description\"\\s*:\\s*\"([^\"]*)\"").find(raw)?.groupValues?.getOrNull(1).orEmpty()
                         val count = Regex("\"memberCount\"\\s*:\\s*(\\d+)").find(raw)?.groupValues?.getOrNull(1) ?: "؟"
                         val approval = raw.contains("\"requireApproval\"\\s*:\\s*true".toRegex())
-                        Surface(shape = RoundedCornerShape(14.dp), color = SovereignColors.SurfaceNavy) {
+                        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                if (desc.isNotBlank()) Text(desc, fontSize = 13.sp, color = Color.Gray, maxLines = 2)
+                                Text(name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+                                if (desc.isNotBlank()) Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                                 Text("$count عضو " + if (approval) "بموافقة الإدارة" else "انضمام فوري",
                                     fontSize = 12.sp, color = AqyalGold)
                             }
@@ -253,6 +269,7 @@ fun GroupsScreen(
                                 previewLoading = false
                             }
                         },
+                        modifier = Modifier.heightIn(min = 48.dp),
                         enabled = joinToken.trim().isNotBlank() && !previewLoading
                     ) { Text("معاينة") }
                     Button(
@@ -262,6 +279,7 @@ fun GroupsScreen(
                                 groups.joinWithToken(token) { showJoinDialog = false; joinToken = ""; previewJson = null }
                             }
                         },
+                        modifier = Modifier.heightIn(min = 48.dp),
                         enabled = joinToken.trim().isNotBlank() && groups.state != GroupState.Saving
                     ) { Text(if (previewJson != null) "تأكيد الانضمام" else "انضمام") }
                 }
@@ -385,8 +403,8 @@ private fun GroupsEmptyState(icon: androidx.compose.ui.graphics.vector.ImageVect
         Modifier.fillMaxWidth().padding(30.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp))
+        Icon(icon, contentDescription = title, tint = AqyalGold, modifier = Modifier.size(62.dp))
         Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp))
+        Text(detail, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
     }
 }

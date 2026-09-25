@@ -21,8 +21,18 @@ class StorageMonitorService {
         )
     }
 
+    /**
+     * مسح دفاعي (احتفاظ آمن): أي خطأ وصول/صلاحيات يُعيد 0 بدل إسقاط
+     * دورة التنظيف. المشي محدود بعمق معقول لتفادي التجمّد على روابط رمزية.
+     */
     private fun calculateSize(path: File): Long {
         if (!path.exists()) return 0L
-        return path.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+        return runCatching {
+            path.walkTopDown()
+                .onFail { _, _ -> /* تجاوز ملفات غير المقروءة — لا تُسقط الجردة */ }
+                .filter { it.isFile }
+                .map { runCatching { it.length() }.getOrDefault(0L) }
+                .sum()
+        }.getOrDefault(0L)
     }
 }

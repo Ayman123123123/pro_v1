@@ -55,11 +55,14 @@ fun isChannelAdmin(role: ChannelMemberRole): Boolean = when (role) {
 
 /**
  * هل يحق للعضو إرسال منشور علوي جديد؟
- * - وضع البث: الأدمن فقط.
+ * - وضع البث: OWNER/ADMIN فقط (spec P1-G الصارمة — MODERATOR يرد Thread ويتفاعل
+ *   لكن لا ينشر علويًا).
  * - الوضع المفتوح: أي عضو.
+ * وجهة واحدة: يفوّض إلى ChannelBoostsPolicy.canSendInBroadcast (المصدر الوحيد
+ * لمنطق البث) حتى لا ينحرف الفحصان عند أي تعديل لاحق.
  */
 fun canSendTopLevel(mode: ChannelMode, role: ChannelMemberRole): Boolean =
-    if (mode.isBroadcast) isChannelAdmin(role) else true
+    ChannelBoostsPolicy.canSendInBroadcast(role.name, mode.isBroadcast)
 
 /**
  * هل يحق الرد ضمن Thread على منشور موجود؟
@@ -126,8 +129,12 @@ fun perksForLevel(level: Int): ChannelLevelPerks {
 fun ChannelBoostState.perks(): ChannelLevelPerks = perksForLevel(level)
 
 // ────────────────────────────────────────────────────────────────
-// بحث سحابي مكمّل (TODO) — المحلي أولًا، السحابي مكمّل فقط
+// بحث سحابي مكمّل (DONE) — المحلي أولًا، السحابي مكمّل فقط
 // ────────────────────────────────────────────────────────────────
+// السلك مكتمل في ChannelsApi.list(search)/searchMerged + دمج mergeChannelSearch
+// (نقطة الدمج الوحيدة): حد أدنى حرفين + debounce موحّد + تجاهل الفشل بصمت.
+// كان TODO يطلب GET /api/channels?search= — أصبح موجودًا على العميل؛
+// أي سياسة بحث جديدة تُضاف في searchMerged فقط لا في الشاشات.
 
 /**
  * عنصر قناة للبحث/الدمج — نسخة عرض خفيفة (offline-safe، بلا شبكة).
@@ -160,10 +167,5 @@ fun mergeChannelSearch(
     return out
 }
 
-// TODO(P1-G/cloud-search): تكملة السلك السحابي عند توفر اتصال — لا يؤثر على بناء offline:
-//  1) Backend: أضف GET /api/channels?search= (مرآة CommunitiesController.list: regex على
-//     name/username/description في Mongo، حد 1..100، ترتيب subscriberCount DESC).
-//  2) Client: انسخ نمط CommunitiesApi.list(search) بـ AuthorizedApiClient.request("GET", …)
-//     داخل features/channels/ChannelsApi (ملف لاحق)، ثم ادمج بـ mergeChannelSearch(local, cloud).
-//  3) Debounce موحّد 300ms + حد أدنى حرفين + إلغاء السابق (collectLatest) مثل RedGlobalSearch.
-//  4) عند انقطاع الشبكة: تجاهل الخطأ بصمت واعرض المحلي فقط (offline-first).
+// كان TODO هنا يطلب سلك GET /api/channels?search= + دمج + debounce —
+// اكتمل في ChannelsApi (list/searchMerged) بنمط CommunitiesApi نفسه.

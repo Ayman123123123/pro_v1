@@ -69,6 +69,22 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _actionMessage = MutableStateFlow<String?>(null)
     val actionMessage = _actionMessage.asStateFlow()
 
+    // عدّاد تحميل: 3 جلبات متوازية كانت تتصارع على _isLoading (آخر من ينتهي يصفّره
+    // ويخفي سبينر البقية) — الآن يُصفَّر فقط عند اكتمال الكل.
+    private var loadingCount = 0
+    private fun startLoading() {
+        loadingCount++
+        _isLoading.value = true
+    }
+    private fun stopLoading() {
+        loadingCount = (loadingCount - 1).coerceAtLeast(0)
+        if (loadingCount == 0) _isLoading.value = false
+    }
+
+    // آخر فلتر بحث: إجراءات الحذف/التوثيق/الحظر كانت تعيد الجلب بلا فلتر
+    // فتضيع نتيجة بحث المشرف بعد كل إجراء — الآن تُحفظ وتُعاد.
+    private var lastSearch: String? = null
+
     init {
         refreshDashboard()
     }
@@ -77,14 +93,19 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     fun clearActionMessage() { _actionMessage.value = null }
 
     fun refreshDashboard(search: String? = null) {
+        if (search != null) lastSearch = search.trim().takeIf { it.isNotBlank() }
+        else if (search == null) {
+            // null الصريح من التحديث الدوري يحافظ على الفلتر؛ المسح يمرر "".
+        }
         fetchStats()
         fetchPendingUsers()
-        fetchUsers(search)
+        fetchUsers(lastSearch)
     }
 
     fun fetchUsers(search: String? = null) {
+        if (search != null) lastSearch = search.trim().takeIf { it.isNotBlank() }
         viewModelScope.launch {
-            _isLoading.value = true
+            startLoading()
             val query = buildString {
                 append("/api/admin/users?size=1000")
                 if (!search.isNullOrBlank()) append("&search=").append(java.net.URLEncoder.encode(search.trim(), "UTF-8"))
@@ -97,12 +118,17 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                         content.filterIsInstance<Map<*, *>>().map { raw ->
                             val redId = raw["redId"]?.toString().orEmpty()
                             val username = raw["username"]?.toString().orEmpty()
+                            // phoneNumber الحقيقي أولاً — كان يُشتق من username/redId فيُعرض معرّف
+                            // على أنه رقم هاتف (وهم). الترتيب: phoneNumber ثم username ثم redId.
+                            val phone = raw["phoneNumber"]?.toString()?.takeIf { it.isNotBlank() }
+                                ?: username.ifBlank { redId }
                             val lastSeenAt = parseInstantToMs(raw["lastSeen"] ?: raw["lastSeenAt"])
                             UserOverview(
                                 id = raw["id"]?.toString().orEmpty(),
-                                phoneNumber = username.ifBlank { redId },
+                                phoneNumber = phone,
                                 displayName = raw["displayName"]?.toString() ?: "بدون اسم",
-                                isOnline = lastSeenAt > 0 && (System.currentTimeMillis() - lastSeenAt) < PRESENCE_WINDOW_MS,
+                                // انحراف الساعة للأمام كان يعرض متصلاً وهمياً (diff سالب < النافذة).
+                                isOnline = lastSeenAt > 0 && run { val diff = System.currentTimeMillis() - lastSeenAt; diff in 0 until PRESENCE_WINDOW_MS },
                                 lastSeenAt = lastSeenAt,
                                 status = raw["status"]?.toString().orEmpty(),
                                 role = raw["role"]?.toString().orEmpty(),
@@ -127,38 +153,44 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                     _error.value = "تعذر جلب المستخدمين: ${res.message}"
                 }
             }
-            _isLoading.value = false
+            stopLoading()
         }
     }
 
     fun deleteUser(userId: String) {
         viewModelScope.launch {
-            _isLoading.value = true
+            startLoading()
             when (val res = client.request("DELETE", "/api/admin/users/$userId")) {
                 is ApiResult.Success -> {
                     _actionMessage.value = "تم حذف المستخدم"
-                    fetchUsers()
+                    _error.value = null
+                    fetchUsers(lastSearch)
                     fetchStats()
                 }
                 is ApiResult.Error -> _error.value = "تعذر حذف المستخدم: ${res.message}"
             }
-            _isLoading.value = false
+            stopLoading()
         }
     }
 
     private fun fetchStats() {
         viewModelScope.launch {
-            _isLoading.value = true
-            // Canonical: /api/admin/monitor/stats — active_users/total_messages + ذاكرة وuptime.
+            startLoading()
+            // Canonical: /api/admin/monitor/stats — يقبل snake_case وcamelCase معاً
+            // (الخادم قد يعيد activeCalls/activeUsers/totalUsers حسب النسخة).
             when (val res = client.request("GET", "/api/admin/monitor/stats")) {
                 is ApiResult.Success -> {
                     runCatching {
                         val map = parseJsonMap(res.value)
-                        val activeUsers = (map["active_users"] as? Number)?.toInt() ?: 0
+                        fun intOf(vararg keys: String): Int =
+                            keys.firstNotNullOfOrNull { (map[it] as? Number)?.toInt() } ?: 0
+                        val activeUsers = intOf("active_users", "activeUsers", "onlineUsers", "online_users")
+                        val totalUsers = intOf("total_users", "totalUsers", "usersCount", "users_count")
                         _systemStats.value = _systemStats.value.copy(
-                            usersCount = _systemStats.value.usersCount.coerceAtLeast(activeUsers),
-                            activeCalls = (map["active_calls"] as? Number)?.toInt() ?: 0,
-                            activeStreams = (map["active_streams"] as? Number)?.toInt() ?: 0
+                            usersCount = totalUsers.takeIf { it > 0 }
+                                ?: _systemStats.value.usersCount.coerceAtLeast(activeUsers),
+                            activeCalls = intOf("active_calls", "activeCalls", "calls_active", "ongoingCalls"),
+                            activeStreams = intOf("active_streams", "activeStreams", "streams_active", "liveStreams")
                         )
                     }
                 }
@@ -166,146 +198,169 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                     // لا نُصفّر الإحصائيات ولا نُظهر خطأً قاتلاً — قائمة المستخدمين هي المصدر.
                 }
             }
-            _isLoading.value = false
+            stopLoading()
         }
     }
 
     private fun fetchPendingUsers() {
         viewModelScope.launch {
-            _isLoading.value = true
-            when (val res = client.request("GET", "/api/admin/users/pending")) {
-                is ApiResult.Success -> {
-                    runCatching {
-                        val raw = res.value.trim()
-                        val list: List<Any?> = if (raw.startsWith("[")) parseJsonList(raw)
-                        else (parseJsonMap(raw)["content"] as? List<*>)?.filterNotNull() ?: emptyList()
-                        list.filterIsInstance<Map<*, *>>().map { item ->
-                            PendingUser(
-                                id = item["id"]?.toString().orEmpty(),
-                                phoneNumber = item["phoneNumber"]?.toString()
-                                    ?: item["username"]?.toString().orEmpty(),
-                                registeredAt = (item["registeredAt"] as? Number)?.toLong()
-                                    ?: parseInstantToMs(item["createdAt"]),
-                                username = item["username"]?.toString().orEmpty(),
-                                displayName = item["displayName"]?.toString().orEmpty(),
-                                redId = item["redId"]?.toString().orEmpty()
-                            )
+            startLoading()
+            val parsed = parsePendingBody(
+                when (val res = client.request("GET", "/api/admin/users/pending")) {
+                    is ApiResult.Success -> return@launch handlePendingSuccess(res.value)
+                    is ApiResult.Error -> {
+                        // fallback: بعض نسخ الباكند بلا /pending — فلترة حالة عبر القائمة العامة.
+                        if (res.message.contains("404", true) || res.message.contains("not found", true)) {
+                            when (val fb = client.request("GET", "/api/admin/users?status=PENDING&size=1000")) {
+                                is ApiResult.Success -> return@launch handlePendingSuccess(fb.value)
+                                is ApiResult.Error -> "تعذر جلب الحسابات المعلقة: ${fb.message} (الأصل: ${res.message})"
+                            }
+                        } else {
+                            "تعذر جلب الحسابات المعلقة: ${res.message}"
                         }
-                    }.onSuccess {
-                        _pendingUsers.value = it
-                        if (_users.value.isEmpty()) _error.value = null
-                    }.onFailure {
-                        _error.value = "تعذر تحليل الحسابات المعلقة"
                     }
                 }
-                is ApiResult.Error -> {
-                    _error.value = "تعذر جلب الحسابات المعلقة: ${res.message}"
-                }
-            }
-            _isLoading.value = false
+            )
+            _error.value = parsed
+            stopLoading()
         }
     }
 
+    private fun handlePendingSuccess(body: String) {
+        runCatching {
+            val raw = body.trim()
+            val list: List<Any?> = if (raw.startsWith("[")) parseJsonList(raw)
+            else (parseJsonMap(raw)["content"] as? List<*>)?.filterNotNull() ?: emptyList()
+            list.filterIsInstance<Map<*, *>>().map { item ->
+                PendingUser(
+                    id = item["id"]?.toString().orEmpty(),
+                    phoneNumber = item["phoneNumber"]?.toString()
+                        ?: item["username"]?.toString().orEmpty(),
+                    registeredAt = (item["registeredAt"] as? Number)?.toLong()
+                        ?: parseInstantToMs(item["createdAt"]),
+                    username = item["username"]?.toString().orEmpty(),
+                    displayName = item["displayName"]?.toString().orEmpty(),
+                    redId = item["redId"]?.toString().orEmpty()
+                )
+            }
+        }.onSuccess {
+            _pendingUsers.value = it
+            if (_users.value.isEmpty()) _error.value = null
+            stopLoading()
+        }.onFailure {
+            _error.value = "تعذر تحليل الحسابات المعلقة"
+            stopLoading()
+        }
+    }
+
+    private fun parsePendingBody(errorText: String): String = errorText
+
     fun approveUser(userId: String) {
         viewModelScope.launch {
-            _isLoading.value = true
+            startLoading()
             when (val res = client.request("POST", "/api/admin/users/$userId/approve", jsonBodyOf(emptyMap()))) {
                 is ApiResult.Success -> {
                     _actionMessage.value = "تمت الموافقة على الحساب"
+                    _error.value = null
                     fetchPendingUsers()
-                    fetchUsers()
+                    fetchUsers(lastSearch)
                 }
                 is ApiResult.Error -> _error.value = "تعذر التوثيق: ${res.message}"
             }
-            _isLoading.value = false
+            stopLoading()
         }
     }
 
     /** رفض مع سبب — POST /api/admin/users/{id}/reject {"reason": "..."}. */
     fun rejectUser(userId: String, reason: String) {
         viewModelScope.launch {
-            _isLoading.value = true
-            val clean = reason.trim()
+            startLoading()
+            val clean = reason.trim().take(300)
             if (clean.isEmpty()) {
                 _error.value = "سبب الرفض مطلوب"
-                _isLoading.value = false
+                stopLoading()
                 return@launch
             }
             when (val res = client.request("POST", "/api/admin/users/$userId/reject", jsonBodyOf(mapOf("reason" to clean)))) {
                 is ApiResult.Success -> {
                     _actionMessage.value = "تم رفض الحساب"
+                    _error.value = null
                     fetchPendingUsers()
                 }
                 is ApiResult.Error -> _error.value = "تعذر الرفض: ${res.message}"
             }
-            _isLoading.value = false
+            stopLoading()
         }
     }
 
     /** تعليق — POST /api/admin/users/action {"userId","action":"SUSPENDED","reason"}. */
     fun suspendUser(userId: String, reason: String? = null) {
         viewModelScope.launch {
-            _isLoading.value = true
+            startLoading()
             val body = jsonBodyOf(mapOf("userId" to userId, "action" to "SUSPENDED", "reason" to reason?.trim()))
             when (val res = client.request("POST", "/api/admin/users/action", body)) {
                 is ApiResult.Success -> {
                     _actionMessage.value = "تم تعليق المستخدم"
-                    fetchUsers()
+                    _error.value = null
+                    fetchUsers(lastSearch)
                 }
                 is ApiResult.Error -> _error.value = "تعذر التعليق: ${res.message}"
             }
-            _isLoading.value = false
+            stopLoading()
         }
     }
 
     /** حظر — POST /api/admin/users/{id}/ban {"reason": "..."}. */
     fun banUser(userId: String, reason: String? = null) {
         viewModelScope.launch {
-            _isLoading.value = true
+            startLoading()
             val body = jsonBodyOf(mapOf("reason" to reason?.trim().orEmpty()))
             when (val res = client.request("POST", "/api/admin/users/$userId/ban", body)) {
                 is ApiResult.Success -> {
                     _actionMessage.value = "تم حظر المستخدم"
-                    fetchUsers()
+                    _error.value = null
+                    fetchUsers(lastSearch)
                 }
                 is ApiResult.Error -> _error.value = "تعذر الحظر: ${res.message}"
             }
-            _isLoading.value = false
+            stopLoading()
         }
     }
 
     fun unbanUser(userId: String) {
         viewModelScope.launch {
-            _isLoading.value = true
+            startLoading()
             when (val res = client.request("POST", "/api/admin/users/$userId/unban", jsonBodyOf(emptyMap()))) {
                 is ApiResult.Success -> {
                     _actionMessage.value = "تم فك الحظر — عاد معلقاً حتى تسجيل جهاز جديد"
-                    fetchUsers()
+                    _error.value = null
+                    fetchUsers(lastSearch)
                 }
                 is ApiResult.Error -> _error.value = "تعذر فك الحظر: ${res.message}"
             }
-            _isLoading.value = false
+            stopLoading()
         }
     }
 
     /** دور — PUT /api/admin/users/{id}/role {"role": "ADMIN|USER"}. */
     fun setUserRole(userId: String, role: String) {
         viewModelScope.launch {
-            _isLoading.value = true
+            startLoading()
             val clean = role.trim().uppercase()
             if (clean != "ADMIN" && clean != "USER") {
                 _error.value = "دور غير مدعوم: $role"
-                _isLoading.value = false
+                stopLoading()
                 return@launch
             }
             when (val res = client.request("PUT", "/api/admin/users/$userId/role", jsonBodyOf(mapOf("role" to clean)))) {
                 is ApiResult.Success -> {
                     _actionMessage.value = "تم تحديث الدور إلى $clean"
-                    fetchUsers()
+                    _error.value = null
+                    fetchUsers(lastSearch)
                 }
                 is ApiResult.Error -> _error.value = "تعذر تحديث الدور: ${res.message}"
             }
-            _isLoading.value = false
+            stopLoading()
         }
     }
 
@@ -316,7 +371,15 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                 // ثوانٍ أم مللي؟ القيم الصغيرة (<1e12) ثوانٍ.
                 if (v in 1 until 1_000_000_000_000L) v * 1000 else v
             }
-            is String -> runCatching { java.time.Instant.parse(value.trim()).toEpochMilli() }.getOrDefault(0L)
+            is String -> {
+                val t = value.trim()
+                if (t.isEmpty()) return 0L
+                // رقم كنص (مللي أو ثوانٍ) قبل محاولة ISO-8601.
+                t.toLongOrNull()?.let { v ->
+                    return if (v in 1 until 1_000_000_000_000L) v * 1000 else v
+                }
+                runCatching { java.time.Instant.parse(t).toEpochMilli() }.getOrDefault(0L)
+            }
             else -> 0L
         }
     }

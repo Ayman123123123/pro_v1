@@ -15,6 +15,10 @@ export class LiveStreamManager extends EventEmitter {
   }
 
   async startLiveStream(room: Room, options: LiveStreamOptions): Promise<LiveStreamSession> {
+    this.validateOptions(options);
+    if (room.liveStream || this.getRoomStream(room.id)) {
+      throw new Error('Live stream already in progress');
+    }
     const streamId = `stream_${room.id}_${Date.now()}`;
     
     // Support multiple output targets (RTMP + SRT)
@@ -173,6 +177,63 @@ export class LiveStreamManager extends EventEmitter {
 
   getAllStreams(): LiveStreamSession[] {
     return Array.from(this.streams.values());
+  }
+
+  private validateOptions(options: LiveStreamOptions): void {
+    if (options.format !== 'flv' && options.format !== 'mp4') {
+      throw new Error('Invalid livestream options');
+    }
+    if (options.layout !== 'grid' && options.layout !== 'speaker' && options.layout !== 'pip' && options.layout !== 'custom') {
+      throw new Error('Invalid livestream options');
+    }
+    if (!Number.isInteger(options.width) || options.width < 160 || options.width > 3840) {
+      throw new Error('Invalid livestream options');
+    }
+    if (!Number.isInteger(options.height) || options.height < 120 || options.height > 2160) {
+      throw new Error('Invalid livestream options');
+    }
+    if (!Number.isInteger(options.framerate) || options.framerate < 1 || options.framerate > 60) {
+      throw new Error('Invalid livestream options');
+    }
+    if (!Number.isInteger(options.videoBitrate) || options.videoBitrate < 100 || options.videoBitrate > 20000) {
+      throw new Error('Invalid livestream options');
+    }
+    if (!Number.isInteger(options.audioBitrate) || options.audioBitrate < 32 || options.audioBitrate > 512) {
+      throw new Error('Invalid livestream options');
+    }
+    if (options.layout === 'custom') {
+      const custom = (options as { customLayout?: { regions?: unknown[] } }).customLayout;
+      if (!custom || !Array.isArray(custom.regions) || custom.regions.length === 0) {
+        throw new Error('Invalid livestream options');
+      }
+    }
+    // مفتاح البث يُحقن في سطر أوامر ffmpeg — يُمنع أي بياض/تحكم لمنع حقن الوسائط.
+    if (options.streamKey !== undefined && options.streamKey !== '') {
+      if (typeof options.streamKey !== 'string' || options.streamKey.length > 256 || /[\s"'`$\\;|&<>]/.test(options.streamKey)) {
+        throw new Error('Invalid livestream options');
+      }
+    }
+    if (options.rtmpUrl && !this.isAllowedRtmpUrl(options.rtmpUrl)) {
+      throw new Error('Invalid livestream options');
+    }
+    if (this.defaultRtmpUrl && !this.isAllowedRtmpUrl(this.defaultRtmpUrl)) {
+      throw new Error('Invalid livestream options');
+    }
+    for (const out of options.rtmpOutputs ?? []) {
+      if (!out || !this.isAllowedRtmpUrl(out.url)) {
+        throw new Error('Invalid livestream options');
+      }
+      if (out.streamKey && /[\s"'`$\\;|&<>]/.test(out.streamKey)) {
+        throw new Error('Invalid livestream options');
+      }
+    }
+    if (options.srtUrl && !options.srtUrl.startsWith('srt://')) {
+      throw new Error('Invalid livestream options');
+    }
+  }
+
+  private isAllowedRtmpUrl(url: string): boolean {
+    return url.startsWith('rtmp://') || url.startsWith('rtmps://');
   }
 
   private buildRtmpArgs(options: LiveStreamOptions, rtmpUrl: string): string[] {

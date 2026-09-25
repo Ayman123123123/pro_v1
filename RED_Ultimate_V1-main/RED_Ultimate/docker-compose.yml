@@ -10,7 +10,7 @@ services:
   # backend runtime UID. This preserves strict host permissions while allowing
   # the non-root Java process to read the signing key on native Linux Docker.
   identity-init:
-    image: alpine:3.21
+    image: alpine:3.22
     container_name: red-identity-init
     restart: "no"
     network_mode: none
@@ -230,7 +230,7 @@ services:
   # creates CREATE EXTENSION IF NOT EXISTS pg_trgm should run only on self-hosted
   # postgres where admin is superuser (as here). For managed DB, pre-create extension manually.
   db-postgres:
-    image: postgres:16.9-bookworm
+    image: postgres:16-bookworm
     container_name: red-db-sql
     restart: unless-stopped
     mem_limit: 1g
@@ -256,7 +256,7 @@ services:
 
   # ━━━━━━━━━━━━ 5. MongoDB 8 ━━━━━━━━━━━━
   db-mongo:
-    image: mongo:8.0.13-noble
+    image: mongo:8.0-noble
     container_name: red-db-nosql
     restart: unless-stopped
     mem_limit: 1g
@@ -282,7 +282,7 @@ services:
 
   # ━━━━━━━━━━━━ 6. Redis 7 — volatile-lru to avoid evicting active sessions ━━━━━━━━━━━━
   cache-redis:
-    image: redis:7.4.5-bookworm
+    image: redis:7.4-bookworm
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru", "--save", "900 1", "--save", "300 10"]
     container_name: red-cache
     restart: unless-stopped
@@ -304,7 +304,7 @@ services:
 
   # ━━━━━━━━━━━━ 7. MinIO (S3-compatible) — pinned + memory limit ━━━━━━━━━━━━
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: red-storage
     restart: unless-stopped
     mem_limit: 512m
@@ -394,7 +394,7 @@ services:
 
   # ━━━━━━━━━━━━ 8. Nginx Proxy + Admin UI — pinned + mem limits ━━━━━━━━━━━━
   nginx:
-    image: nginx:1.28.0-alpine
+    image: nginx:1.29.1-alpine
     container_name: red-proxy
     restart: unless-stopped
     mem_limit: 256m

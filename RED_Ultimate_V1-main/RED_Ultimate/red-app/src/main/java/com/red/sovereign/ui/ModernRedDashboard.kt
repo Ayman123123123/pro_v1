@@ -45,9 +45,6 @@ import com.red.sovereign.media.VoiceMessageViewModel
 import com.red.sovereign.settings.SettingsPage
 import com.red.sovereign.settings.SettingsViewModel
 import com.red.sovereign.settings.YounesSettingsSheet
-import com.red.sovereign.groups.GroupViewModel
-import com.red.sovereign.media.AttachmentViewModel
-import com.red.sovereign.media.VoiceMessageViewModel
 import com.red.sovereign.ui.components.*
 import com.red.sovereign.ui.screens.*
 import com.red.sovereign.ui.theme.*
@@ -71,6 +68,12 @@ enum class ModernSection(val icon: ImageVector, val label: String, val descripti
     CALLS(Icons.Default.Call, "المكالمات", "مركز المكالمات السيادي"),
     EXPLORE(Icons.Default.Explore, "استكشاف", "قنوات ومجتمعات وبثوث"),
     MORE(Icons.Default.MoreHoriz, "المزيد", "الإعدادات والخدمات")
+}
+
+// توحيد onChat (مع RedDashboard.resolveChatTarget): تطبيع + تحقق — يمنع فتح محادثة بمعرف فاسد.
+private fun resolveModernChatTarget(raw: String?): String? {
+    val clean = raw?.let { YounesId.normalizeInput(it) }?.trim().orEmpty()
+    return if (clean.isNotBlank() && YounesId.isValid(clean)) clean else null
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
@@ -178,9 +181,11 @@ fun ModernRedDashboard(
                 return@rememberLauncherForActivityResult
             }
             showLiveCreate = false
+            // توحيد المسار الحي (مع RedDashboard): تطبيع المعرف عبر RoomSeparationPolicy — لا خام.
+            val liveRawId = "stream-${account.redId}-${System.currentTimeMillis()}"
             LiveStreamService.start(
                 context,
-                "stream-${account.redId}-${System.currentTimeMillis()}",
+                RoomSeparationPolicy.normalizeStreamId(liveRawId),
                 account.redId,
                 true,
                 titleFinal,
@@ -329,9 +334,11 @@ fun ModernRedDashboard(
         RedGlobalSearch(
             onBack = { showSearch = false },
             onOpenConversation = { redId ->
-                pendingChatTarget = redId
-                showSearch = false
-                currentSection = ModernSection.CHATS
+                resolveModernChatTarget(redId)?.let {
+                    pendingChatTarget = it
+                    showSearch = false
+                    currentSection = ModernSection.CHATS
+                }
             }
         )
     }
@@ -342,9 +349,11 @@ fun ModernRedDashboard(
             directory = directory,
             onBack = { showContacts = false },
             onChat = { person ->
-                pendingChatTarget = person.redId
-                showContacts = false
-                currentSection = ModernSection.CHATS
+                resolveModernChatTarget(person.redId)?.let {
+                    pendingChatTarget = it
+                    showContacts = false
+                    currentSection = ModernSection.CHATS
+                }
             },
             onCall = { person, video ->
                 showContacts = false
@@ -383,9 +392,14 @@ fun ModernRedDashboard(
         ModernCreateGroupDialog(
             onDismiss = { showCreateGroup = false },
             onCreate = { name, description, memberIds ->
-                showCreateGroup = false
-                groups.create(name, description, memberIds = memberIds) {
-                    currentSection = ModernSection.GROUPS
+                // حارس العضو الواحد (موحد مع RedDashboard): لا مجموعة بلا أعضاء آخرين.
+                if (memberIds.isEmpty()) {
+                    android.widget.Toast.makeText(context, "اختر عضوًا واحدًا على الأقل لإنشاء المجموعة", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    showCreateGroup = false
+                    groups.create(name, description, memberIds = memberIds) {
+                        currentSection = ModernSection.GROUPS
+                    }
                 }
             },
             contacts = directory.contacts
@@ -524,7 +538,7 @@ fun ModernTopBar(
                 Box(
                     Modifier
                         .size(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(serverDot)
                 )
                 Text(
@@ -949,9 +963,16 @@ fun ModernCallsScreen(
     var showLiveDialog by remember { mutableStateOf(false) }
     var showSpaceDialog by remember { mutableStateOf(false) }
     var showGroupCallPicker by remember { mutableStateOf(false) }
+    // إزالة الميت: شاشة المجدولة الحقيقية بدل toast التحويل (موحدة مع RedDashboard).
+    var showScheduledCalls by remember { mutableStateOf(false) }
     var newCallTargetInput by remember { mutableStateOf("") }
     var roomInput by remember { mutableStateOf("") }
     var isSpaceHost by remember { mutableStateOf(false) }
+
+    if (showScheduledCalls) {
+        com.red.sovereign.features.calls.ScheduledCallsScreen(onBack = { showScheduledCalls = false })
+        return
+    }
 
     val privateCallLauncher = rememberCallPermissionLauncher(
         needCamera = true,
@@ -990,9 +1011,7 @@ fun ModernCallsScreen(
             onSpace = { spaceLauncher() },
             onLive = { liveLauncher() },
             onExplore = onExplore,
-            onScheduledCalls = {
-                android.widget.Toast.makeText(context, "المكالمات المجدولة من لوحة RedDashboard الكاملة", android.widget.Toast.LENGTH_SHORT).show()
-            }
+            onScheduledCalls = { showScheduledCalls = true }
         )
         Spacer(Modifier.height(10.dp))
         OutlinedTextField(
@@ -1033,10 +1052,17 @@ fun ModernCallsScreen(
                                 Text(call.peerLabel.ifBlank { call.peerId }, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
                                 Text("${call.type} · ${call.status}", color = YounesMuted, fontSize = 11.sp)
                             }
-                            IconButton(onClick = { YounesCallService.start(context, call.peerId, video = false) }) {
+                            IconButton(onClick = {
+                                // توحيد onChat: إعادة الاتصال تتطلب معرفًا صالحًا فقط.
+                                if (YounesId.isValid(call.peerId)) YounesCallService.start(context, call.peerId, video = false)
+                                else android.widget.Toast.makeText(context, YounesId.ERROR_MESSAGE, android.widget.Toast.LENGTH_SHORT).show()
+                            }) {
                                 Icon(Icons.Default.Call, "إعادة صوتية", tint = YounesPrimary)
                             }
-                            IconButton(onClick = { YounesCallService.start(context, call.peerId, video = true) }) {
+                            IconButton(onClick = {
+                                if (YounesId.isValid(call.peerId)) YounesCallService.start(context, call.peerId, video = true)
+                                else android.widget.Toast.makeText(context, YounesId.ERROR_MESSAGE, android.widget.Toast.LENGTH_SHORT).show()
+                            }) {
                                 Icon(Icons.Default.Videocam, "إعادة فيديو", tint = YounesPrimary)
                             }
                         }
@@ -1053,15 +1079,20 @@ fun ModernCallsScreen(
             onDismiss = { showGroupCallPicker = false },
             onStartCall = { selectedIds, isVideo ->
                 showGroupCallPicker = false
-                val selectedNames = selectedIds.map { id -> contacts.find { it.redId == id }?.displayName ?: id }
-                GroupCallService.startGroupCall(
-                    context = context,
-                    myUserId = ownUserId,
-                    inviteeIds = selectedIds,
-                    inviteeNames = selectedNames,
-                    isVideo = isVideo,
-                    hostName = myDisplayName
-                )
+                // حارس العضو الواحد: مكالمة جماعية بلا مدعوين = مع النفس — امنع بتفسير.
+                if (selectedIds.isEmpty()) {
+                    android.widget.Toast.makeText(context, "اختر عضوًا واحدًا على الأقل للمكالمة الجماعية", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    val selectedNames = selectedIds.map { id -> contacts.find { it.redId == id }?.displayName ?: id }
+                    GroupCallService.startGroupCall(
+                        context = context,
+                        myUserId = ownUserId,
+                        inviteeIds = selectedIds,
+                        inviteeNames = selectedNames,
+                        isVideo = isVideo,
+                        hostName = myDisplayName
+                    )
+                }
             }
         )
     }
@@ -1091,7 +1122,8 @@ fun ModernCallsScreen(
                 val isPriv = audience != "PUBLIC"
                 val password = if (isPriv) pass.trim().takeIf { it.isNotBlank() } else null
                 showLiveDialog = false
-                val streamId = RoomSeparationPolicy.normalizeStreamId("stream_${java.util.UUID.randomUUID().toString().take(8)}")
+                // توحيد المسار الحي (مع RedDashboard): نفس الصيغة stream-<المالك>-<زمن> ثم normalize — لا خام قصير.
+                val streamId = RoomSeparationPolicy.normalizeStreamId("stream-${ownUserId}-${System.currentTimeMillis()}")
                 LiveStreamService.start(
                     context = context,
                     streamId = streamId,
@@ -1152,11 +1184,15 @@ fun ModernCallsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = newCallTargetInput,
-                        onValueChange = { newCallTargetInput = it },
+                        onValueChange = { newCallTargetInput = YounesId.normalizeInput(it) },
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("معرف يونس (مثال: 10001)") },
                         singleLine = true
                     )
+                    // توحيد onChat: تلميح فوري عند معرف غير صالح (تطبيع عند الإدخال أعلاه).
+                    if (newCallTargetInput.trim().isNotBlank() && !YounesId.isValid(newCallTargetInput)) {
+                        Text(YounesId.ERROR_MESSAGE, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                    }
                     if (contacts.isNotEmpty()) {
                         Text("جهات الاتصال السريعة:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         LazyColumn(modifier = Modifier.fillMaxWidth().height(160.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1184,22 +1220,31 @@ fun ModernCallsScreen(
                 }
             },
             confirmButton = {
+                // توحيد onChat: تطبيع + تحقق YounesId قبل بدء المكالمة — يمنع الاتصال بمعرف فاسد.
+                val cleanModernTarget = YounesId.normalizeInput(newCallTargetInput)
+                val canDialModern = YounesId.isValid(cleanModernTarget)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            val clean = YounesId.normalizeInput(newCallTargetInput).ifBlank { newCallTargetInput.trim() }
-                            showNewCallDialog = false
-                            YounesCallService.start(context, clean, video = false)
-                            newCallTargetInput = ""
+                            if (!canDialModern) {
+                                android.widget.Toast.makeText(context, YounesId.ERROR_MESSAGE, android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                showNewCallDialog = false
+                                YounesCallService.start(context, cleanModernTarget, video = false)
+                                newCallTargetInput = ""
+                            }
                         },
                         enabled = newCallTargetInput.trim().isNotBlank()
                     ) { Text("صوتية") }
                     Button(
                         onClick = {
-                            val clean = YounesId.normalizeInput(newCallTargetInput).ifBlank { newCallTargetInput.trim() }
-                            showNewCallDialog = false
-                            YounesCallService.start(context, clean, video = true)
-                            newCallTargetInput = ""
+                            if (!canDialModern) {
+                                android.widget.Toast.makeText(context, YounesId.ERROR_MESSAGE, android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                showNewCallDialog = false
+                                YounesCallService.start(context, cleanModernTarget, video = true)
+                                newCallTargetInput = ""
+                            }
                         },
                         enabled = newCallTargetInput.trim().isNotBlank()
                     ) { Text("فيديو") }
@@ -1488,12 +1533,46 @@ fun ModernCreateGroupDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text("الأعضاء: ${selected.size}", fontSize = 12.sp, color = YounesMuted)
+                // حارس العضو الواحد: قائمة اختيار حقيقية — كانت تعرض العدد فقط (دائمًا 0) بلا طريقة للاختيار.
+                if (contacts.isEmpty()) {
+                    Text("لا توجد جهات اتصال — أضف صديقًا أولًا", fontSize = 11.sp, color = YounesMuted)
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(contacts, key = { it.redId }) { contact ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    if (selected.contains(contact.redId)) selected.remove(contact.redId)
+                                    else selected.add(contact.redId)
+                                },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = selected.contains(contact.redId),
+                                    onCheckedChange = { checked ->
+                                        if (checked) selected.add(contact.redId) else selected.remove(contact.redId)
+                                    }
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(contact.displayName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(contact.redId, fontSize = 11.sp, color = YounesMuted)
+                                }
+                            }
+                        }
+                    }
+                }
+                if (selected.isEmpty()) {
+                    Text("اختر عضوًا واحدًا على الأقل", fontSize = 11.sp, color = YounesMuted)
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = { onCreate(name, description.ifBlank { null }, selected.toList()) },
-                enabled = name.isNotBlank()
+                // حارس العضو الواحد: اسم غير فارغ + عضو واحد على الأقل (كان الاسم وحده).
+                enabled = name.isNotBlank() && selected.isNotEmpty()
             ) {
                 Text("إنشاء")
             }

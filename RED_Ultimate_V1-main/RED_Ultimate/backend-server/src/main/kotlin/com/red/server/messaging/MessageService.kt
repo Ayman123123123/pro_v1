@@ -42,7 +42,10 @@ class MessageService(
         // المفاتيح) أو بيانات قديمة مكررة يجب ألا يُسقط الإقلاع؛ المخصّص الذري يمنع التكرار أصلًا.
         runCatching {
             mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("uuid", Sort.Direction.ASC).unique())
-            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
+            // التسليم: يطابق pendingFor(receiverId,receiverDeviceId,status) مرتبًا بـ sequenceNumber
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("receiverId", Sort.Direction.ASC).on("receiverDeviceId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
+            // التسليم (catchup/sync): receiverId+status+createdAt ليطابق pendingFor(since) قبل الفرز بـ sequenceNumber
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("createdAt", Sort.Direction.ASC))
             // P9: فرادة (المحادثة، التسلسل) — شبكة أمان تحت المخصّص الذري findAndModify
             mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
             // V26: فهارس إضافية للميزات الجديدة
@@ -55,8 +58,12 @@ class MessageService(
             mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
             // P9: فرادة (المجموعة، التسلسل)
             mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
+            // TTL الاختفاء للمجموعات — يطابق استعلام cleanupDisappearing
+            mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("disappearAt", Sort.Direction.ASC))
             // P9: فرادة (القناة، التسلسل)
             mongo.indexOps(com.red.server.database.ChannelMessageDocument::class.java).createIndex(Index().on("channelId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
+            // فهرس التثبيت للقنوات — يطابق مرآة PinnedMessageService
+            mongo.indexOps(com.red.server.database.ChannelMessageDocument::class.java).createIndex(Index().on("channelId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
             mongo.indexOps(com.red.server.database.PinnedMessageDocument::class.java).createIndex(Index().on("messageUuid", Sort.Direction.ASC).unique())
         } catch (e: Exception) {
             log.warn("Failed to create group/channel indexes: {}", e.message)
@@ -125,6 +132,8 @@ class MessageService(
         // (الرمي هنا يحوّل إرسالًا ناجحًا إلى 500 وإعادة محاولة مكررة).
         runCatching {
             redis.opsForZSet().add("red:presence:index", message.senderId, System.currentTimeMillis().toDouble())
+            // TTL الحضور: تقليم أعضاء ZSET الأقدم من 48 ساعة حتى لا ينمو بلا حد
+            redis.opsForZSet().removeRangeByScore("red:presence:index", 0.0, (System.currentTimeMillis() - 48 * 3600_000).toDouble())
             redis.convertAndSend("red:messages:${message.receiverId}", saved.uuid)
         }.onFailure { e -> log.warn("Post-save fan-out failed for {}: {}", saved.uuid, e.message) }
         return saved
@@ -522,17 +531,13 @@ class MessageService(
         if (redIdA == redIdB) return true
         val a = users.findByRedId(redIdA.uppercase()) ?: return false
         val b = users.findByRedId(redIdB.uppercase()) ?: return false
+        // جهة واحدة تكفي هنا (إشارات الكتابة/التوجيه) — الصداقة المتبادلة للفيد عبر AudienceGuard فقط
+        // إزالة ازدواج: استعلام واحد بشرط OR بدل COUNT مكرر ذهابًا وإيابًا
         val cnt = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM red_contacts WHERE owner_id=? AND contact_id=?",
-            Int::class.java, a.id, b.id
+            "SELECT COUNT(*) FROM red_contacts WHERE (owner_id=? AND contact_id=?) OR (owner_id=? AND contact_id=?)",
+            Int::class.java, a.id, b.id, b.id, a.id
         ) ?: 0
-        if (cnt > 0) return true
-        // تحقق ثنائي الاتجاه
-        val cnt2 = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM red_contacts WHERE owner_id=? AND contact_id=?",
-            Int::class.java, b.id, a.id
-        ) ?: 0
-        return cnt2 > 0
+        return cnt > 0
     }
 
     /** Same block policy as messages — used by typing indicators and other pairwise signals. */
@@ -548,14 +553,16 @@ class MessageService(
     /** معرّفات الأعضاء النشطين للمجموعة — للبث الجماعي (مؤشر كتابة إلخ). */
     /** AUTO-FIX (message reliability): stored messages for this recipient that arrived after `since`. */
     fun pendingFor(redId: String, since: java.time.Instant, limit: Int): List<MessageDocument> {
-        val capped = limit.coerceIn(1, 500)
+        // إزالة ازدواج: نفس دلالة pendingFor الأساسية (SENT فقط، حد 50، ترتيب sequence ليطابق الفهرس)
+        val capped = limit.coerceIn(1, 50)
         val query = Query(
             Criteria.where("receiverId").`is`(redId)
+                .and("status").`is`("SENT")
                 .andOperator(
                     Criteria.where("createdAt").gt(since),
-                    Criteria.where("deletedForEveryoneAt").isNull()
+                    Criteria.where("deletedForEveryoneAt").`is`(null)
                 )
-        ).with(Sort.by(Sort.Direction.ASC, "createdAt")).limit(capped)
+        ).with(Sort.by(Sort.Direction.ASC, "sequenceNumber")).limit(capped)
         return mongo.find(query, MessageDocument::class.java)
     }
 
@@ -567,12 +574,10 @@ class MessageService(
         if (senderRedId == receiverRedId) return
         val sender = users.findByRedId(senderRedId) ?: throw NoSuchElementException("Sender identity not found")
         val receiver = users.findByRedId(receiverRedId) ?: throw NoSuchElementException("Receiver identity not found")
-        val blocked = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)",
-            Int::class.java,
-            sender.id, receiver.id, receiver.id, sender.id
-        ) ?: 0
-        require(blocked == 0) { "Messaging is not allowed between these identities" }
+        // إزالة ازدواج: حارس الجمهور هو مصدر الحقيقة الوحيد للحظر الثنائي
+        require(!com.red.server.social.AudienceGuard.isBlockedEitherDirection(jdbc, sender.id, receiver.id)) {
+            "Messaging is not allowed between these identities"
+        }
     }
 
     private fun enforceGroupMembership(message: RedProtos.ChatMessage) {

@@ -29,7 +29,18 @@ export class AuthManager {
     const cleanToken = token.replace(/^Bearer\s+/i, '');
     const parts = cleanToken.split('.');
 
-    if (parts.length !== 3) {
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
+      throw new Error('Unauthorized');
+    }
+
+    // رفض alg=none أو أي خوارزمية غير HS256 قبل التحقق من التوقيع.
+    let header: { alg?: string };
+    try {
+      header = JSON.parse(this.base64UrlDecode(parts[0] as string).toString('utf8')) as { alg?: string };
+    } catch {
+      throw new Error('Unauthorized');
+    }
+    if (header.alg !== 'HS256') {
       throw new Error('Unauthorized');
     }
 

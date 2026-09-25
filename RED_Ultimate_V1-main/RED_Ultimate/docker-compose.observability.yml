@@ -1,6 +1,10 @@
 # RED Sovereign — Full Observability Stack Override
 # Usage: docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 #
+# Config paths are canonical: infrastructure/observability/** (single source of
+# truth). Every volume below names a real file in that tree — directory mounts
+# that shadowed provisioning layouts and dangling config filenames were fixed.
+#
 # Complete observability stack with:
 # - Prometheus (metrics, 30d retention)
 # - Alertmanager (alerting)
@@ -80,7 +84,8 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./infrastructure/observability/prometheus:/etc/prometheus
+      - ./infrastructure/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     networks:
       - red-net
@@ -97,7 +102,7 @@ services:
     ports:
       - "9093:9093"
     volumes:
-      - ./infrastructure/observability/alertmanager:/etc/alertmanager
+      - ./infrastructure/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
     networks:
       - red-net
@@ -112,7 +117,8 @@ services:
     restart: unless-stopped
     <<: *resource-limits-large
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_admin_password
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-clock-panel,grafana-worldmap-panel
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=false
@@ -121,7 +127,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./infrastructure/observability/grafana:/etc/grafana/provisioning
+      - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     networks:
       - red-net
@@ -133,8 +140,6 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       <<: *healthcheck-defaults
     logging: *default-logging
-    secrets:
-      - grafana_admin_password
 
   loki:
     image: grafana/loki:3.1.0
@@ -142,13 +147,13 @@ services:
     restart: unless-stopped
     <<: *resource-limits-large
     command:
-      - -config.file=/etc/loki/local-config.yaml
+      - -config.file=/etc/loki/loki.yml
       - -target=all
     ports:
       - "3100:3100"
     volumes:
       - loki-data:/loki
-      - ./infrastructure/observability/loki:/etc/loki
+      - ./infrastructure/observability/loki/loki.yml:/etc/loki/loki.yml:ro
     networks:
       - red-net
     healthcheck:
@@ -162,7 +167,7 @@ services:
     restart: unless-stopped
     <<: *resource-limits-large
     command:
-      - -config.file=/etc/tempo.yaml
+      - -config.file=/etc/tempo/tempo.yml
       - -target=all
     ports:
       - "3200:3200"
@@ -170,7 +175,7 @@ services:
       - "4318:4318"
     volumes:
       - tempo-data:/var/tempo
-      - ./infrastructure/observability/tempo:/etc/tempo
+      - ./infrastructure/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
     networks:
       - red-net
     healthcheck:
@@ -208,7 +213,7 @@ services:
       - "8888:8888"   # Prometheus metrics
       - "13133:13133" # Health check
     volumes:
-      - ./infrastructure/observability/otel:/etc/otelcol-contrib
+      - ./infrastructure/observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yaml:ro
     networks:
       - red-net
     depends_on:
@@ -266,13 +271,13 @@ services:
     restart: unless-stopped
     <<: *resource-limits-small
     environment:
-      - DATA_SOURCE_NAME=postgresql://admin:${DB_PASSWORD}@postgres:5432/red_sovereign?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://admin:${DB_PASSWORD:?DB_PASSWORD is required}@db-postgres:5432/red_sovereign?sslmode=disable
     ports:
       - "9187:9187"
     networks:
       - red-net
     depends_on:
-      - postgres
+      - db-postgres
     logging: *default-logging
 
   redis-exporter:
@@ -281,14 +286,14 @@ services:
     restart: unless-stopped
     <<: *resource-limits-small
     environment:
-      - REDIS_ADDR=redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_ADDR=cache-redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     ports:
       - "9121:9121"
     networks:
       - red-net
     depends_on:
-      - redis
+      - cache-redis
     logging: *default-logging
 
   nginx-exporter:
@@ -297,7 +302,7 @@ services:
     restart: unless-stopped
     <<: *resource-limits-small
     environment:
-      - NGINX_SCRAPE_URI=http://nginx:8088/stub_status
+      - NGINX_SCRAPE_URI=http://nginx:80/stub_status
     ports:
       - "9113:9113"
     networks:
@@ -337,7 +342,3 @@ networks:
   red-net:
     driver: bridge
     enable_ipv6: false
-
-secrets:
-  grafana_admin_password:
-    file: ./secrets/grafana_admin_password.txt

@@ -22,6 +22,8 @@ class TypingHandler(
     private val redisManager: RedisManager
 ) : TextWebSocketHandler() {
     private val log = LoggerFactory.getLogger(TypingHandler::class.java)
+    /** المعدل: حارس مشترك (60 إطار/دقيقة لكل جلسة) — كان /ws/typing بلا حد فيُغرق Redis. */
+    private val frameLimiter = WebSocketRateLimiter(maxMessages = 60, windowMillis = 60_000)
 
     /**
      * نشر حالة "يكتب الآن" عبر Redis لكل المشتركين في المحادثة
@@ -41,6 +43,8 @@ class TypingHandler(
     }
 
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+        // المعدل أولاً: تجاوز الحد = إسقاط صامت بلا إغلاق (مؤشر عابر لا يستحق ERROR).
+        if (!frameLimiter.tryAcquire(session.id)) return
         try {
             val raw = message.payload.trim()
             if (raw.isEmpty()) return
@@ -66,5 +70,15 @@ class TypingHandler(
         } catch (e: Exception) {
             log.warn("Bad typing frame: {}", e.message)
         }
+    }
+
+    override fun afterConnectionClosed(session: WebSocketSession, status: org.springframework.web.socket.CloseStatus) {
+        // إغلاق: تنظيف نافذة المعدل فقط (بلا حالة غرف) — بلا رمي.
+        runCatching { frameLimiter.remove(session.id) }
+    }
+
+    override fun handleTransportError(session: WebSocketSession, exception: Throwable) {
+        // النقل المكسور يُعامل كإغلاق: تنظيف فقط، بلا بثّ وبلا رمي.
+        runCatching { afterConnectionClosed(session, org.springframework.web.socket.CloseStatus.SERVER_ERROR) }
     }
 }

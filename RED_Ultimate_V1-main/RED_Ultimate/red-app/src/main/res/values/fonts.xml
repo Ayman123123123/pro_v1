@@ -26,12 +26,14 @@
     <dimen name="spacing_xlarge">32dp</dimen>
     <dimen name="spacing_xxlarge">48dp</dimen>
 
-    <!-- Radius — Soft, professional, not clownish -->
+    <!-- Radius — مقياس واحد مع Shape.kt (لا قيم موازية):
+         small/OutlinedCard ‏14dp، Button/TextField ‏12dp، medium ‏20dp، large ‏28dp.
+         كانت button ‏14dp وinput ‏16dp وcard_small ‏12dp منحرفة عن Shape. -->
     <dimen name="card_radius">20dp</dimen>
-    <dimen name="card_radius_small">12dp</dimen>
+    <dimen name="card_radius_small">14dp</dimen>
     <dimen name="card_radius_large">28dp</dimen>
-    <dimen name="button_radius">14dp</dimen>
-    <dimen name="input_radius">16dp</dimen>
+    <dimen name="button_radius">12dp</dimen>
+    <dimen name="input_radius">12dp</dimen>
     <dimen name="avatar_radius">999dp</dimen>
     <dimen name="sheet_radius">28dp</dimen>
 </resources>

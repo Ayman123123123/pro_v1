@@ -338,16 +338,21 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateRole(group: Group, member: GroupMember, role: String) = viewModelScope.launch {
+        // حارس صلاحيات عميل (الخادم هو الفيصل): غير الإدارة لا يرسل طلبًا مستحيلًا.
+        if (!isGroupAdminRole(myRoleOf(group))) { state = GroupState.Error("صلاحيات غير كافية"); return@launch }
         // الخادم يقبل ADMIN/MODERATOR/MEMBER ويفرض OWNER — لا نحجب MODERATOR محلياً (كان مفقوداً من الواجهة).
-        require(role == "ADMIN" || role == "MEMBER" || role == "MODERATOR")
+        // التطبيع عبر normalizeGroupRole حتى لا تُرفض "admin" الصغيرة بخطأ محلي مضلل.
+        val cleanRole = normalizeGroupRole(role)
+        require(cleanRole == "ADMIN" || cleanRole == "MEMBER" || cleanRole == "MODERATOR")
         state = GroupState.Saving
-        when (val result = client.request("PATCH", "/api/groups/${group.id}/members/${member.userId}", json.encodeToString(UpdateGroupRoleRequest(role)))) {
+        when (val result = client.request("PATCH", "/api/groups/${group.id}/members/${member.userId}", json.encodeToString(UpdateGroupRoleRequest(cleanRole)))) {
             is ApiResult.Success -> decodeAndStore(result.value) {}
             is ApiResult.Error -> state = GroupState.Error(result.message)
         }
     }
 
     fun removeMember(group: Group, member: GroupMember) = viewModelScope.launch {
+        if (!canManageGroupMembers(myRoleOf(group), group.settings)) { state = GroupState.Error("صلاحيات غير كافية"); return@launch }
         state = GroupState.Saving
         when (val result = client.request("DELETE", "/api/groups/${group.id}/members/${member.userId}")) {
             is ApiResult.Success -> decodeAndStore(result.value) {}
@@ -357,6 +362,7 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
 
     /** LEGENDARY: حظر+طرد (الخادم جاهز POST /ban — كانت بلا زر عميل إطلاقاً) */
     fun banMember(group: Group, member: GroupMember, reason: String = "", done: () -> Unit = {}) = viewModelScope.launch {
+        if (!canManageGroupMembers(myRoleOf(group), group.settings)) { state = GroupState.Error("صلاحيات غير كافية"); return@launch }
         state = GroupState.Saving
         val body = org.json.JSONObject().put("userId", member.userId).put("reason", reason.take(200)).toString()
         when (val result = client.request("POST", "/api/groups/${group.id}/ban", body)) {
@@ -367,6 +373,7 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
 
     /** LEGENDARY: إلغاء حظر */
     fun unbanMember(group: Group, userId: String, done: () -> Unit = {}) = viewModelScope.launch {
+        if (!canManageGroupMembers(myRoleOf(group), group.settings)) { state = GroupState.Error("صلاحيات غير كافية"); return@launch }
         state = GroupState.Saving
         when (val result = client.request("DELETE", "/api/groups/${group.id}/bans/$userId")) {
             is ApiResult.Success -> { decodeAndStore(result.value) {}; done() }
@@ -577,6 +584,7 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun transferOwnership(group: Group, member: GroupMember, done: () -> Unit) = viewModelScope.launch {
+        if (normalizeGroupRole(myRoleOf(group)) != "OWNER") { state = GroupState.Error("نقل الملكية للمالك فقط"); return@launch }
         state = GroupState.Saving
         when (val result = client.request("POST", "/api/groups/${group.id}/transfer-ownership", json.encodeToString(TransferGroupOwnershipRequest(member.userId)))) {
             is ApiResult.Success -> decodeAndStore(result.value, done = done)
@@ -630,8 +638,13 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun decodeAndStore(value: String, prepend: Boolean = false, done: () -> Unit) {
-        runCatching { json.decodeFromString<Group>(value) }
+    /** دوري في المجموعة عبر المرجع الوحيد myGroupRole — حراس العميل لا يغنون عن الخادم. */
+    private fun myRoleOf(group: Group): String {
+        val myId = runCatching { TokenStore(getApplication()).redId }.getOrNull()
+        return myGroupRole(group, myId)
+    }
+
+    private fun decodeAndStore(value: String, prepend: Boolean = false, done: () -> Unit) {        runCatching { json.decodeFromString<Group>(value) }
             .onSuccess { updated ->
                 groups.indexOfFirst { it.id == updated.id }.takeIf { it >= 0 }?.let { groups[it] = updated }
                     ?: if (prepend) groups.add(0, updated) else groups.add(updated)

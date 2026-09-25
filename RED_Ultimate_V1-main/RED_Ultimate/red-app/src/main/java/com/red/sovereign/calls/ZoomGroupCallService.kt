@@ -34,7 +34,8 @@ import org.webrtc.SessionDescription
 import org.webrtc.VideoTrack
 import java.util.UUID
 
-/** Zoom: مكالمات جماعية مستقلة — 100 مشارك، رابط قصير 8 أحرف، قاعة انتظار اختيارية */
+/** Zoom: مكالمات جماعية مستقلة — 100 مشارك، رابط قصير 8 أحرف، قاعة انتظار اختيارية.
+ *  السقف المرجعي [CallLimits.ZOOM_SFU_MAX]؛ الثابت باقٍ للتوافق مع الواجهات. */
 const val ZOOM_LIMIT = 100
 
 enum class ZoomMemberStatus { RINGING, JOINED, DECLINED, NO_ANSWER, LEFT, BUSY, WAITING }
@@ -355,12 +356,28 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 if (newIds.isEmpty() || !isHost) return START_STICKY
                 val cur = ZoomRuntime.state
                 val existing = when(cur){ is ZoomUiState.Ringing->cur.members.map{it.userId}+myUserId; is ZoomUiState.Active->cur.members.map{it.userId}+myUserId; else->emptyList() }
-                val fresh = newIds.filterIndexed{ i, id-> id.isNotBlank() && id !in existing && id!=myUserId }
+                // إصلاح تباين الأسماء: اربط كل معرف باسمه الأصلي قبل الترشيح (كان fresh.mapIndexed
+                // يستخدم فهرس القائمة المُرشَّحة فيُسند اسماً لمعرف آخر عند وجود مكررات).
+                val idToName = newIds.mapIndexed { i, id -> id to newNames.getOrElse(i) { id } }.toMap()
+                val fresh = newIds.filter { id-> id.isNotBlank() && id !in existing && id!=myUserId }.distinct().take(CallLimits.ZOOM_SFU_MAX)
                 if (fresh.isEmpty()) return START_STICKY
+                // حدود الاجتماعات: سقف 100 موحد حتى عند الإضافة اللاحقة (كان يُفحص عند الإنشاء فقط).
+                val curCount = when (val s = ZoomRuntime.state) {
+                    is ZoomUiState.Ringing -> s.members.size + 1
+                    is ZoomUiState.Active -> s.members.size + 1
+                    else -> 1
+                }
+                CallLimits.checkZoom(curCount + fresh.size)?.let { msg ->
+                    android.util.Log.w("ZoomGroupCallService", "limit exceeded on add: $msg")
+                    runCatching {
+                        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    return START_STICKY
+                }
                 scope.launch(Dispatchers.Main.immediate){
                     when(val s=ZoomRuntime.state){
-                        is ZoomUiState.Ringing -> ZoomRuntime.state = s.copy(members=s.members+fresh.mapIndexed{i,id-> ZoomMember(id, newNames.getOrElse(i){id}, ZoomMemberStatus.RINGING)})
-                        is ZoomUiState.Active -> ZoomRuntime.state = s.copy(members=s.members+fresh.mapIndexed{i,id-> ZoomMember(id, newNames.getOrElse(i){id}, ZoomMemberStatus.RINGING)})
+                        is ZoomUiState.Ringing -> ZoomRuntime.state = s.copy(members=s.members+fresh.map{id-> ZoomMember(id, idToName[id]?.trim()?.take(64)?.takeIf { it.isNotBlank() } ?: id, ZoomMemberStatus.RINGING)})
+                        is ZoomUiState.Active -> ZoomRuntime.state = s.copy(members=s.members+fresh.map{id-> ZoomMember(id, idToName[id]?.trim()?.take(64)?.takeIf { it.isNotBlank() } ?: id, ZoomMemberStatus.RINGING)})
                         else->{}
                     }
                 }
@@ -377,8 +394,10 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 signaling.send(CallSignal(callId=meetingId, type=if(ZoomRuntime.isWaitingRoomEnabled) "ZOOM_WAITING_ON" else "ZOOM_WAITING_OFF", groupCallId=meetingId))
             }
             ACTION_CREATE_POLL -> {
-                val q = intent.getStringExtra("poll_question").orEmpty()
-                val opts = intent.getStringArrayListExtra("poll_options") ?: arrayListOf()
+                // حدود الاستطلاع: سؤال ≤200 حرف، 2..10 خيارات، كل خيار ≤100 حرف.
+                val q = intent.getStringExtra("poll_question").orEmpty().trim().take(200)
+                val opts = (intent.getStringArrayListExtra("poll_options") ?: arrayListOf())
+                    .map { it.trim().take(100) }.filter { it.isNotBlank() }.take(10)
                 if (q.isBlank() || opts.size < 2) return START_STICKY
                 val poll = ZoomPoll(question=q, options=opts)
                 ZoomRuntime.activePoll = poll
@@ -532,9 +551,10 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 val mId = signal.callId ?: signal.groupCallId ?: ""
                 val isVideo = signal.mode.equals("VIDEO", ignoreCase = true)
                 val hostId = signal.sourceUserId.orEmpty()
-                val hostName = signal.payload["hostName"]?.toString() ?: ""
-                val title = signal.payload["title"]?.toString() ?: "اجتماع Zoom"
-                val otherIds = signal.payload["inviteeIds"]?.toString()?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+                val hostName = signal.payload["hostName"]?.toString()?.trim()?.take(64) ?: ""
+                val title = signal.payload["title"]?.toString()?.trim()?.take(64)?.takeIf { it.isNotBlank() } ?: "اجتماع Zoom"
+                // حدود الوارد: قصّ المعرفات + سقف ZOOM_SFU_MAX يمنع دعوة ضخمة تُثقل الواجهة.
+                val otherIds = signal.payload["inviteeIds"]?.toString()?.split(",")?.map { it.trim().take(64) }?.filter { it.isNotBlank() }?.distinct()?.take(CallLimits.ZOOM_SFU_MAX) ?: emptyList()
 
                 if (mId.isBlank()) return
 
@@ -558,9 +578,11 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             "ZOOM_WAITING_ON" -> ZoomRuntime.isWaitingRoomEnabled = true
             "ZOOM_WAITING_OFF" -> ZoomRuntime.isWaitingRoomEnabled = false
             "ZOOM_POLL_CREATE" -> {
-                val q = signal.payload["question"].orEmpty()
-                val opts = signal.payload["options"]?.split("|") ?: emptyList()
-                val pid = signal.payload["pollId"].orEmpty()
+                // حدود الوارد: نفس سقوف الإنشاء تمنع استطلاعات ضخمة تُثقل الواجهة.
+                val q = signal.payload["question"].orEmpty().trim().take(200)
+                val opts = (signal.payload["options"]?.split("|") ?: emptyList())
+                    .map { it.trim().take(100) }.filter { it.isNotBlank() }.take(10)
+                val pid = signal.payload["pollId"].orEmpty().trim().take(64)
                 if (q.isNotBlank() && opts.size>=2) ZoomRuntime.activePoll = ZoomPoll(id=pid.ifBlank{UUID.randomUUID().toString()}, question=q, options=opts)
             }
             "ZOOM_POLL_VOTE" -> {
@@ -575,37 +597,42 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 }
             }
             "ZOOM_BREAKOUT_CREATE" -> {
-                val roomsRaw = signal.payload["rooms"].orEmpty()
+                // حدود الوارد: سقف 8 غرف + اسم ≤30 + قصّ المعرفات يمنع حمولة ضخمة تُثقل الشيت.
+                val roomsRaw = signal.payload["rooms"].orEmpty().trim().take(4000)
                 if (roomsRaw.isNotBlank()) {
-                    val rooms = roomsRaw.split(";").mapIndexed { idx, entry ->
+                    val rooms = roomsRaw.split(";").take(8).mapIndexed { idx, entry ->
                         val parts = entry.split(":", limit = 2)
-                        val name = parts.getOrNull(0) ?: "غرفة ${idx+1}"
-                        val ids = parts.getOrNull(1)?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+                        val name = parts.getOrNull(0)?.trim()?.take(30)?.takeIf { it.isNotBlank() } ?: "غرفة ${idx+1}"
+                        val ids = parts.getOrNull(1)?.split(",")?.map { it.trim().take(64) }?.filter { it.isNotBlank() }?.distinct()?.take(CallLimits.ZOOM_SFU_MAX) ?: emptyList()
                         ZoomBreakoutRoom(id = "br_${meetingId}_$idx", name = name, participantIds = ids)
                     }
                     ZoomRuntime.breakoutRooms = rooms
                 }
             }
             "ZOOM_BREAKOUT_ASSIGN" -> {
-                val roomId = signal.payload["roomId"]?.toString().orEmpty()
-                val userId = signal.payload["userId"]?.toString().orEmpty()
+                val roomId = signal.payload["roomId"]?.toString()?.trim()?.take(64).orEmpty()
+                val userId = signal.payload["userId"]?.toString()?.trim()?.take(64).orEmpty()
                 if (roomId.isNotBlank() && userId.isNotBlank()) {
                     ZoomRuntime.breakoutRooms = ZoomRuntime.breakoutRooms.map { room ->
-                        if (room.id == roomId) room.copy(participantIds = room.participantIds + userId) else room
+                        if (room.id == roomId && userId !in room.participantIds) room.copy(participantIds = (room.participantIds + userId).take(CallLimits.ZOOM_SFU_MAX)) else room
                     }
                 }
             }
             "ZOOM_BREAKOUT_MOVE" -> {
-                val roomId = signal.payload["roomId"]?.toString().orEmpty()
-                val userId = signal.payload["userId"]?.toString().orEmpty()
+                val roomId = signal.payload["roomId"]?.toString()?.trim()?.take(64).orEmpty()
+                val userId = signal.payload["userId"]?.toString()?.trim()?.take(64).orEmpty()
                 if (roomId.isNotBlank() && userId.isNotBlank()) {
-                    ZoomRuntime.breakoutRooms = ZoomRuntime.breakoutRooms.map { room ->
-                        if (room.id == roomId) room.copy(participantIds = room.participantIds + userId) else room
+                    // نقل حقيقي: إزالة من الغرف الأخرى ثم إضافة للهدف بلا تكرار (كان نسخاً مكرراً).
+                    val others = ZoomRuntime.breakoutRooms.map { room ->
+                        if (room.id != roomId) room.copy(participantIds = room.participantIds - userId) else room
+                    }
+                    ZoomRuntime.breakoutRooms = others.map { room ->
+                        if (room.id == roomId && userId !in room.participantIds) room.copy(participantIds = (room.participantIds + userId).take(CallLimits.ZOOM_SFU_MAX)) else room
                     }
                 }
             }
             "ZOOM_BREAKOUT_DELETE" -> {
-                val roomId = signal.payload["roomId"]?.toString().orEmpty()
+                val roomId = signal.payload["roomId"]?.toString()?.trim()?.take(64).orEmpty()
                 if (roomId.isNotBlank()) {
                     ZoomRuntime.breakoutRooms = ZoomRuntime.breakoutRooms.filter { it.id != roomId }
                 }
@@ -614,7 +641,17 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 ZoomRuntime.breakoutRooms = emptyList()
             }
             "ZOOM_BREAKOUT_BROADCAST" -> {
-                val text = signal.payload["text"]?.toString()?.orEmpty()
+                // كانت متغيراً ميتاً بلا أثر — إشعار صريح مقصوص (≤200) للمشاركين.
+                val text = signal.payload["text"]?.toString()?.trim()?.take(200).orEmpty()
+                if (text.isNotBlank()) {
+                    scope.launch {
+                        withContext(Dispatchers.Main.immediate) {
+                            runCatching {
+                                android.widget.Toast.makeText(this@ZoomGroupCallService, text, android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
             }
             "ZOOM_BREAKOUT_TIMER_START" -> {
                 // Timer start logic handled locally

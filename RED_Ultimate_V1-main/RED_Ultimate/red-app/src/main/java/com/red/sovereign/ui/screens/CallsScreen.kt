@@ -46,7 +46,11 @@ import java.util.concurrent.TimeUnit
 
 /**
  * CallsScreen - مركز المكالمات السيادي
- * 
+ *
+ * ملاحظة معمارية: المسار الحي في RedDashboard هو UnifiedCallsScreen
+ * (الخاصة) — هذه الشاشة بديل مستقل بنفس العقد (history/directory/onExplore)
+ * تُستخدم عند الحاجة لمركز كامل، فأُبقيت وحُسّنت بدل حذفها.
+ *
  * - مكالمات خاصة صوت منفصل وفيديو منفصل (أفضل من واتس وتيليجرام وزنجي)
  * - مكالمات مجموعات الدردشة صوت/فيديو كل على حدة
  * - مكالمات جماعية للأصدقاء تشبه زووم/إيمو منفصلة تماماً
@@ -124,8 +128,17 @@ fun CallsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("مركز المكالمات - يونس", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                title = {
+                    Column {
+                        Text("مركز المكالمات - يونس", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("P2P مشفّر E2EE", fontSize = 11.sp, color = Color.White.copy(alpha = 0.92f))
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SovereignColors.SurfaceNavy,
+                    scrolledContainerColor = SovereignColors.SurfaceNavy,
+                    titleContentColor = Color.White
+                )
             )
         }
     ) { padding ->
@@ -159,12 +172,12 @@ fun CallsScreen(
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("ابحث في المكالمات أو جهات الاتصال…") },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = AqyalGold,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                     )
                 )
             }
@@ -185,7 +198,7 @@ fun CallsScreen(
                 }
             }
 
-            item { Text("سجل المكالمات", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f)) }
+            item { Text("سجل المكالمات", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.92f)) }
 
             when {
                 history.loading && history.calls.isEmpty() -> item {
@@ -277,7 +290,7 @@ private fun CallsQuickLaunchers(
     onExplore: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("إطلاق سريع - أفضل من كل المنافسين", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+        Text("إطلاق سريع - أفضل من كل المنافسين", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.92f))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(listOf(
                 Triple("صوت", Icons.Rounded.Call, Brush.horizontalGradient(listOf(SovereignColors.VoipBlue, SovereignColors.Cyan))) to onPrivateCall,
@@ -304,14 +317,14 @@ private fun QuickActionCard(label: String, icon: ImageVector, brush: Brush, onCl
             .clip(RoundedCornerShape(16.dp))
             .background(SovereignColors.SurfaceNavy)
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = label, onClick = onClick)
             .padding(vertical = 12.dp)
     ) {
         Box(Modifier.size(44.dp).clip(CircleShape).background(brush), contentAlignment = Alignment.Center) {
-            Icon(icon, label, tint = Color.White, modifier = Modifier.size(24.dp))
+            Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(24.dp))
         }
         Spacer(Modifier.height(8.dp))
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -322,7 +335,7 @@ private fun OnlineContactsStrip(directory: DirectoryViewModel, onCall: (PublicRe
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("متصل الآن - مكالمات P2P فورية", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+            Text("متصل الآن - مكالمات P2P فورية", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.92f))
             if (online.isNotEmpty()) {
                 Text("${online.size}", fontSize = 12.sp, color = SovereignColors.Success)
             }
@@ -398,20 +411,20 @@ private fun CallHistoryRow(call: CallHistoryItem, onAudioCall: () -> Unit, onVid
             Column(Modifier.weight(1f)) {
                 Text(call.peerLabel.takeIf { it.isNotBlank() } ?: call.peerId, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(directionIcon, null, modifier = Modifier.size(14.dp), tint = statusColor)
+                    Icon(directionIcon, contentDescription = callStatusLabel(call.status), modifier = Modifier.size(14.dp), tint = statusColor)
                     Text(callStatusLabel(call.status), fontSize = 12.sp, color = statusColor)
                     if (duration.isNotBlank()) {
-                        Text("• $duration", fontSize = 12.sp, color = Color.Gray)
+                        Text("• $duration", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Text(formatCallTime(call.startedAt), fontSize = 11.sp, color = Color.Gray)
+                Text(formatCallTime(call.startedAt), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                IconButton(onClick = onAudioCall, modifier = Modifier.size(40.dp).background(SovereignColors.VoipBlue.copy(alpha = 0.15f), CircleShape)) {
-                    Icon(Icons.Rounded.Call, null, tint = SovereignColors.VoipBlue, modifier = Modifier.size(20.dp))
+                IconButton(onClick = onAudioCall, modifier = Modifier.size(48.dp).background(SovereignColors.VoipBlue.copy(alpha = 0.15f), CircleShape)) {
+                    Icon(Icons.Rounded.Call, "اتصال صوتي بـ ${call.peerLabel.ifBlank { call.peerId }}", tint = SovereignColors.VoipBlue, modifier = Modifier.size(22.dp))
                 }
-                IconButton(onClick = onVideoCall, modifier = Modifier.size(40.dp).background(Color(0xFF8B5CF6).copy(alpha = 0.15f), CircleShape)) {
-                    Icon(Icons.Rounded.Videocam, null, tint = Color(0xFF8B5CF6), modifier = Modifier.size(20.dp))
+                IconButton(onClick = onVideoCall, modifier = Modifier.size(48.dp).background(Color(0xFF8B5CF6).copy(alpha = 0.15f), CircleShape)) {
+                    Icon(Icons.Rounded.Videocam, "اتصال فيديو بـ ${call.peerLabel.ifBlank { call.peerId }}", tint = Color(0xFF8B5CF6), modifier = Modifier.size(22.dp))
                 }
             }
         }
@@ -424,9 +437,9 @@ private fun CallsEmptyState(icon: ImageVector, title: String, detail: String) {
         Modifier.fillMaxWidth().padding(30.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp))
+        Icon(icon, contentDescription = title, tint = AqyalGold, modifier = Modifier.size(62.dp))
         Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp))
+        Text(detail, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -438,15 +451,17 @@ private fun NewCallDialog(onDismiss: () -> Unit, onCall: (String, Boolean) -> Un
     val pattern = Regex(YounesId.PATTERN)
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
         title = { Text("مكالمة جديدة عبر يونس - P2P مشفر") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("أدخل معرّف يونس للاتصال به مباشرة (صوت منفصل وفيديو منفصل):", color = Color.Gray, fontSize = 12.sp)
+                Text("أدخل معرّف يونس للاتصال به مباشرة (صوت منفصل وفيديو منفصل):", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 OutlinedTextField(
                     value = redId,
                     onValueChange = { redId = YounesId.normalizeInput(it) },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text(YounesId.PLACEHOLDER) },
+                    label = { Text("معرّف يونس") },
                     singleLine = true
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -459,10 +474,11 @@ private fun NewCallDialog(onDismiss: () -> Unit, onCall: (String, Boolean) -> Un
         confirmButton = {
             Button(
                 onClick = { onCall(redId, video) },
+                modifier = Modifier.heightIn(min = 48.dp),
                 enabled = redId.matches(pattern)
             ) { Text(if (video) "اتصال فيديو" else "اتصال صوتي") }
         },
-        dismissButton = { TextButton(onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("إلغاء") } }
     )
 }
 
@@ -471,6 +487,7 @@ private fun ConferenceJoinDialog(onDismiss: () -> Unit, onJoin: (String) -> Unit
     var room by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
         title = { Text("الانضمام إلى مؤتمر - أفضل من زووم") },
         text = {
             OutlinedTextField(
@@ -478,11 +495,12 @@ private fun ConferenceJoinDialog(onDismiss: () -> Unit, onJoin: (String) -> Unit
                 onValueChange = { room = it },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("معرف الغرفة") },
+                label = { Text("معرف الغرفة") },
                 singleLine = true
             )
         },
-        confirmButton = { Button(onClick = { onJoin(room.trim()) }, enabled = room.trim().isNotBlank()) { Text("انضمام") } },
-        dismissButton = { TextButton(onDismiss) { Text("إلغاء") } }
+        confirmButton = { Button(onClick = { onJoin(room.trim()) }, modifier = Modifier.heightIn(min = 48.dp), enabled = room.trim().isNotBlank()) { Text("انضمام") } },
+        dismissButton = { TextButton(onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("إلغاء") } }
     )
 }
 
@@ -497,13 +515,14 @@ private fun LiveStreamDialog(
     var broadcaster by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
         title = { Text("مركز البث المباشر - أفضل من تيك توك ويوتيوب") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = room, onValueChange = { room = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("معرف البث") }, singleLine = true)
+                OutlinedTextField(value = room, onValueChange = { room = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("معرف البث") }, label = { Text("معرف البث") }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = broadcaster, onCheckedChange = { broadcaster = it }); Text("أنا المنتج") }
                 if (broadcaster) {
-                    OutlinedTextField(value = title, onValueChange = { title = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("عنوان البث") }, singleLine = true)
+                    OutlinedTextField(value = title, onValueChange = { title = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("عنوان البث") }, label = { Text("عنوان البث") }, singleLine = true)
                 }
                 Text("WebRTC <500ms للمتفاعلين + LL-HLS للجمهور - تفاعلات فقط بدون هدايا", fontSize = 10.sp, color = AqyalGold)
             }
@@ -512,9 +531,9 @@ private fun LiveStreamDialog(
             Button(onClick = {
                 if (broadcaster) onStart(room.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }, title.trim().ifBlank { "بث مباشر" })
                 else onJoin(room.trim())
-            }, enabled = broadcaster || room.trim().isNotBlank()) { Text(if (broadcaster) "بدء بث" else "انضمام") }
+            }, modifier = Modifier.heightIn(min = 48.dp), enabled = broadcaster || room.trim().isNotBlank()) { Text(if (broadcaster) "بدء بث" else "انضمام") }
         },
-        dismissButton = { TextButton(onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("إلغاء") } }
     )
 }
 
@@ -524,16 +543,17 @@ private fun SpaceDialog(onDismiss: () -> Unit, onJoin: (String, Boolean) -> Unit
     var asHost by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
         title = { Text("مساحة صوتية - أفضل من تويتر X") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = room, onValueChange = { room = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("معرف المساحة (اختياري)") }, singleLine = true)
+                OutlinedTextField(value = room, onValueChange = { room = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("معرف المساحة (اختياري)") }, label = { Text("معرف المساحة") }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = asHost, onCheckedChange = { asHost = it }); Text("الانضمام كمضيف") }
                 Text("13 متحدث + مستمعين لا نهائي + تفاعلات + تسجيل اختياري", fontSize = 10.sp, color = AqyalGold)
             }
         },
-        confirmButton = { Button(onClick = { onJoin(room.trim().ifBlank { "space-${System.currentTimeMillis() % 100000}" }, asHost || room.isBlank()) }) { Text("دخول مساحة") } },
-        dismissButton = { TextButton(onDismiss) { Text("إلغاء") } }
+        confirmButton = { Button(onClick = { onJoin(room.trim().ifBlank { "space-${System.currentTimeMillis() % 100000}" }, asHost || room.isBlank()) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("دخول مساحة") } },
+        dismissButton = { TextButton(onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("إلغاء") } }
     )
 }
 

@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
@@ -76,7 +77,7 @@ class PinnedMessageService(
     fun unpin(actorId: UUID, messageUuid: String): Boolean {
         val deleted = jdbc.update("DELETE FROM pinned_messages WHERE message_uuid=? AND pinned_by=?", messageUuid, actorId) > 0
         if (deleted) {
-            // إزالة المرآة من Mongo
+            // إزالة المرآة من Mongo — النطاقات الثلاثة (كانت القنوات تُنسى)
             mongo.updateFirst(
                 Query(Criteria.where("uuid").`is`(messageUuid)),
                 Update().set("isPinned", false).unset("pinnedAt").unset("pinnedBy"),
@@ -86,6 +87,11 @@ class PinnedMessageService(
                 Query(Criteria.where("uuid").`is`(messageUuid)),
                 Update().set("isPinned", false).unset("pinnedAt").unset("pinnedBy"),
                 GroupMessageDocument::class.java
+            )
+            mongo.updateFirst(
+                Query(Criteria.where("uuid").`is`(messageUuid)),
+                Update().set("isPinned", false).unset("pinnedAt").unset("pinnedBy"),
+                ChannelMessageDocument::class.java
             )
         }
         return deleted
@@ -133,6 +139,10 @@ class PinnedMessageService(
         return jdbc.update("DELETE FROM pinned_messages WHERE expires_at IS NOT NULL AND expires_at < NOW()")
     }
 
+    /** TTL التثبيتات المنتهية — المالك الوحيد للتنظيف (أُزيل الازدواج من AdvancedMessageService). */
+    @Scheduled(fixedDelay = 300_000)
+    fun cleanupExpiredScheduled(): Int = runCatching { cleanupExpired() }.getOrDefault(0)
+
     private fun existingPin(messageUuid: String, conversationId: String?, groupId: String?, channelId: String?): PinResponse? {
         val sql = when {
             conversationId != null -> "SELECT * FROM pinned_messages WHERE message_uuid=? AND conversation_id=? LIMIT 1"
@@ -163,7 +173,11 @@ class PinnedMessageService(
                     Query(Criteria.where("uuid").`is`(messageUuid).and("conversationId").`is`(conversationId)),
                     MessageDocument::class.java
                 ) ?: throw NoSuchElementException("الرسالة غير موجودة في هذه المحادثة")
-                require(message.senderId == actor || message.receiverId == actor) { "لا تملك صلاحية تثبيت رسالة هذه المحادثة" }
+                // حارس التثبيت: senderId/receiverId هما RED-ID بينما actorId هو UUID —
+                // المطابقة المباشرة كانت ترفض كل تثبيت خاص شرعي. نحل RED-ID عبر users.
+                val actorRedId = actorRedId(actorId)
+                require(message.senderId == actor || message.receiverId == actor ||
+                    (actorRedId != null && (message.senderId == actorRedId || message.receiverId == actorRedId))) { "لا تملك صلاحية تثبيت رسالة هذه المحادثة" }
             }
             groupId != null -> {
                 mongo.findOne(
@@ -192,9 +206,9 @@ class PinnedMessageService(
 
     private fun checkLimit(conversationId: String?, groupId: String?, channelId: String?) {
         val count = when {
-            conversationId != null -> jdbc.queryForObject("SELECT COUNT(*) FROM pinned_messages WHERE conversation_id=?", Int::class.java, conversationId) ?: 0
-            groupId != null -> jdbc.queryForObject("SELECT COUNT(*) FROM pinned_messages WHERE group_id=?", Int::class.java, UUID.fromString(groupId)) ?: 0
-            else -> jdbc.queryForObject("SELECT COUNT(*) FROM pinned_messages WHERE channel_id=?", Int::class.java, UUID.fromString(channelId)) ?: 0
+            conversationId != null -> jdbc.queryForObject("SELECT COUNT(*) FROM pinned_messages WHERE conversation_id=? AND (expires_at IS NULL OR expires_at > NOW())", Int::class.java, conversationId) ?: 0
+            groupId != null -> jdbc.queryForObject("SELECT COUNT(*) FROM pinned_messages WHERE group_id=? AND (expires_at IS NULL OR expires_at > NOW())", Int::class.java, UUID.fromString(groupId)) ?: 0
+            else -> jdbc.queryForObject("SELECT COUNT(*) FROM pinned_messages WHERE channel_id=? AND (expires_at IS NULL OR expires_at > NOW())", Int::class.java, UUID.fromString(channelId)) ?: 0
         }
         val max = when {
             conversationId != null -> MAX_PINNED_PRIVATE
@@ -204,9 +218,16 @@ class PinnedMessageService(
         require(count < max) { "تم الوصول للحد الأقصى للتثبيت ($max)" }
     }
 
+    /** RED-ID للممثل عبر users (حارس الخاصة) — null عند غيابه، best-effort لا يكسر المسار. */
+    private fun actorRedId(actorId: UUID): String? = runCatching {
+        jdbc.queryForObject("SELECT red_id FROM users WHERE id=?", String::class.java, actorId)
+    }.getOrNull()?.takeIf { !it.isNullOrBlank() }
+
     private fun setPinnedInMongo(messageUuid: String, conversationId: String?, groupId: String?, channelId: String?, actorRedId: String, pinned: Boolean) {
         val update = Update().set("isPinned", pinned).set("pinnedAt", Instant.now()).set("pinnedBy", actorRedId)
         mongo.updateFirst(Query(Criteria.where("uuid").`is`(messageUuid)), update, MessageDocument::class.java)
         mongo.updateFirst(Query(Criteria.where("uuid").`is`(messageUuid)), update, GroupMessageDocument::class.java)
+        // مرآة القنوات — كانت تُنسى فيثبت الـ pin في Postgres ويغيب عن قراءات Mongo
+        mongo.updateFirst(Query(Criteria.where("uuid").`is`(messageUuid)), update, ChannelMessageDocument::class.java)
     }
 }

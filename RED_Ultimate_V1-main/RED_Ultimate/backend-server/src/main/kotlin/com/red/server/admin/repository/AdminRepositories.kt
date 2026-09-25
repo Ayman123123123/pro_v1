@@ -94,6 +94,9 @@ interface UserReportRepository : JpaRepository<UserReport, UUID> {
     @Query("SELECT r FROM UserReport r WHERE r.category = :category ORDER BY r.createdAt DESC")
     fun findByCategoryOrderByCreatedAtDesc(@Param("category") category: String, pageable: Pageable): Page<UserReport>
 
+    @Query("SELECT r FROM UserReport r WHERE r.status = :status AND r.category = :category ORDER BY r.createdAt DESC")
+    fun findByStatusAndCategoryOrderByCreatedAtDesc(@Param("status") status: String, @Param("category") category: String, pageable: Pageable): Page<UserReport>
+
     @Query("SELECT r FROM UserReport r WHERE r.reporterId = :reporterId ORDER BY r.createdAt DESC")
     fun findByReporterIdOrderByCreatedAtDesc(@Param("reporterId") reporterId: UUID, pageable: Pageable): Page<UserReport>
 

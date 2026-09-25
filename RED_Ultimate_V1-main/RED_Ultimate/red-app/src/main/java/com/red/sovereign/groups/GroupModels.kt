@@ -52,3 +52,57 @@ fun parseInviteTokenQrAware(raw: String): String {
     if (t.startsWith("RED-GROUP:", ignoreCase = true)) return parseInviteToken(t.substring("RED-GROUP:".length))
     return parseInviteToken(t)
 }
+
+// ── وجهة واحدة لصلاحيات المجموعات (نص دور الخادم: OWNER/ADMIN/MODERATOR/MEMBER) ──
+// كانت الفحوص مبعثرة (require يدوي في updateRole + منطق واجهات) — أي دور جديد
+// أو خطأ إملائي كان يفتح ثغرة. هذه الدوال الخالصة هي المرجع الوحيد.
+
+/** تطبيع دور الخادم — غير المعروف يُعامل كعضو (أقل صلاحية). */
+fun normalizeGroupRole(raw: String?): String = when (raw?.trim()?.uppercase()) {
+    "OWNER" -> "OWNER"
+    "ADMIN" -> "ADMIN"
+    "MODERATOR" -> "MODERATOR"
+    else -> "MEMBER"
+}
+
+/** هل الدور إدارة (مالك/مسؤول)؟ */
+fun isGroupAdminRole(raw: String?): Boolean {
+    val role = normalizeGroupRole(raw)
+    return role == "OWNER" || role == "ADMIN"
+}
+
+/** هل يحق إدارة الأعضاء (إضافة/إزالة/حظر) مع مراعاة إعدادات المجموعة؟ */
+fun canManageGroupMembers(raw: String?, settings: GroupSettings): Boolean {
+    if (normalizeGroupRole(raw) == "OWNER") return true
+    if (normalizeGroupRole(raw) == "ADMIN") return true
+    // MODERATOR/MEMBER: يُسمح فقط عندما تفتح الإعدادات الدعوة للجميع.
+    if (normalizeGroupRole(raw) == "MODERATOR") return !settings.onlyAdminsCanAddMembers
+    return !settings.onlyAdminsCanAddMembers
+}
+
+/** هل يحق تعديل معلومات المجموعة؟ */
+fun canEditGroupInfo(raw: String?, settings: GroupSettings): Boolean {
+    if (normalizeGroupRole(raw) == "OWNER") return true
+    if (normalizeGroupRole(raw) == "ADMIN") return true
+    return !settings.onlyAdminsCanEditInfo
+}
+
+/** هل يحق الدعوة (رابط/رمز)؟ */
+fun canInviteToGroup(raw: String?, settings: GroupSettings): Boolean {
+    if (isGroupAdminRole(raw)) return true
+    return !settings.onlyAdminsCanInvite
+}
+
+/**
+ * دوري في المجموعة من قائمة الأعضاء + جلسة الخادم — المرجع الوحيد لحسابه
+ * على العميل (كان كل منادٍ يمسح members يدويًا بصيغ مختلفة: redId مقابل
+ * userId، حساسية حالة مختلفة). الأولوية لـ redId الجلسة، ثم ownerRedId.
+ */
+fun myGroupRole(group: Group, myRedId: String?): String {
+    val me = myRedId?.trim().orEmpty()
+    if (me.isNotEmpty()) {
+        group.members.firstOrNull { it.redId.equals(me, ignoreCase = true) }?.let { return normalizeGroupRole(it.role) }
+        if (group.ownerRedId.equals(me, ignoreCase = true)) return "OWNER"
+    }
+    return "MEMBER"
+}

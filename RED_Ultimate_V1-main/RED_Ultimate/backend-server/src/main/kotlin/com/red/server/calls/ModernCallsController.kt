@@ -77,7 +77,7 @@ class ModernCallsController(
         // التحقق من الصلاحيات والحدود
         when (request.type.uppercase()) {
             "GROUP_AUDIO", "GROUP_VIDEO" -> {
-                require(request.participantIds.size <= 32) { "Group call limit is 32 (WhatsApp limit)" }
+                require(request.participantIds.size <= UnifiedCallDeliveryService.MAX_GROUP_MEMBERS) { "Group call limit is ${UnifiedCallDeliveryService.MAX_GROUP_MEMBERS} (WhatsApp limit)" }
                 require(request.participantIds.isNotEmpty() || !request.groupId.isNullOrBlank()) { "Participants required for group call" }
             }
             "CONFERENCE" -> {
@@ -386,7 +386,7 @@ class ModernCallsController(
         return ResponseEntity.ok(mapOf(
             "pendingDeliveries" to deliveryService.getPendingCount(),
             "supportedTypes" to 8,
-            "maxGroupSize" to 32,
+            "maxGroupSize" to UnifiedCallDeliveryService.MAX_GROUP_MEMBERS,
             "maxConferenceSize" to 100,
             "features" to listOf(
                 "E2EE for 1-1",

@@ -86,8 +86,25 @@ class RedPushService : PushService() {
          * in that case; we only nudge a sync so the socket/mailbox can recover.
          */
         private fun decodeWake(context: Context, text: String): JSONObject? {
+            if (text.length > 8 * 1024) {
+                Log.w(TAG, "oversize wake (${text.length}) ignored - blind sync, no ring")
+                nudgeSync(context)
+                return null
+            }
             val body = SovereignPushCipher.envelopeBody(text)
             if (body != null) {
+                // رفض صريح للمغلفات بإصدار غير مدعوم — لا رنين وهمي من حمولة مزيفة.
+                val version = runCatching { JSONObject(text).optInt("v", 2) }.getOrDefault(2)
+                if (version != 2) {
+                    Log.w(TAG, "unsupported envelope v=$version - blind sync, no ring")
+                    nudgeSync(context)
+                    return null
+                }
+                if (body.length > 2048) {
+                    Log.w(TAG, "oversize sealed body ignored - blind sync, no ring")
+                    nudgeSync(context)
+                    return null
+                }
                 val endpoint = VoipPushRegistrar.currentEndpoint(context)
                 if (endpoint.isNullOrBlank()) {
                     Log.w(TAG, "sealed wake with no stored endpoint - blind sync, no ring")
@@ -101,12 +118,48 @@ class RedPushService : PushService() {
                 } else {
                     SovereignPushCipher.openV1(endpoint, body)
                 }
-                if (plain != null) return runCatching { JSONObject(plain) }.getOrNull()
+                if (plain != null) {
+                    // بلا وهم: المغلف المفتوح يجب أن يكون JSON صغيراً بشكل الإيقاظ
+                    // (t/i أو type/callId) — أي نص آخر مزيف يُسقط لمزامنة عمياء بلا رنين.
+                    if (plain.length > 2048 || !plain.trimStart().startsWith("{")) {
+                        Log.w(TAG, "sealed plain bad shape - blind sync, no ring")
+                        nudgeSync(context)
+                        return null
+                    }
+                    val obj = runCatching { JSONObject(plain) }.getOrNull()
+                    if (obj == null || !isKnownWakeShape(obj)) {
+                        Log.w(TAG, "sealed plain unknown shape - blind sync, no ring")
+                        nudgeSync(context)
+                        return null
+                    }
+                    return obj
+                }
                 Log.w(TAG, "sealed wake could not be opened (v2 then v1 failed) - blind sync, no ring")
                 nudgeSync(context)
                 return null
             }
-            return runCatching { JSONObject(text) }.getOrNull()
+            // Legacy v1 plaintext tolerance — مشروط بالشكل المعروف فقط، لا أي JSON.
+            val raw = runCatching { JSONObject(text) }.getOrNull() ?: return null
+            if (!isKnownWakeShape(raw)) {
+                Log.w(TAG, "plain wake unknown shape ignored - blind sync, no ring")
+                nudgeSync(context)
+                return null
+            }
+            // v1 بلا ختم: اشتراط callId/senderId غير فارغ حسب النوع — منع رنين وهمي.
+            val t = raw.optString("t").ifBlank { raw.optString("type") }
+            val id = raw.optString("i").ifBlank { raw.optString("callId").ifBlank { raw.optString("senderId") } }
+            if ((t == "CALL" || t == "CANCEL") && id.isBlank()) {
+                Log.w(TAG, "plain $t without id ignored - blind sync, no ring")
+                nudgeSync(context)
+                return null
+            }
+            return raw
+        }
+
+        /** أشكال الإيقاظ المعروفة فقط: CALL/CANCEL/MESSAGE — غيرها يُتجاهل. */
+        private fun isKnownWakeShape(json: JSONObject): Boolean {
+            val t = json.optString("t").ifBlank { json.optString("type") }
+            return t == "CALL" || t == "CANCEL" || t == "MESSAGE"
         }
 
         private fun handleCallPush(context: Context, json: JSONObject) {

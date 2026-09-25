@@ -45,7 +45,16 @@ object DatabaseMaintenance {
         "CREATE INDEX IF NOT EXISTS `index_starred_senderId` ON `starred_messages` (`senderId`)",
         "CREATE INDEX IF NOT EXISTS `index_media_uploads_conversationId` ON `media_uploads` (`conversationId`)",
         "CREATE INDEX IF NOT EXISTS `index_outbox_targetRedId` ON `outbox_messages` (`targetRedId`)",
-        "CREATE INDEX IF NOT EXISTS `index_outbox_status_priority_next` ON `outbox_messages` (`status`, `priority`, `nextAttemptAt`)"
+        "CREATE INDEX IF NOT EXISTS `index_outbox_status_priority_next` ON `outbox_messages` (`status`, `priority`, `nextAttemptAt`)",
+        // keyset paging (ChatHistoryPaging queryAfter/queryBefore): يستغل الفهرس بدل مسح الجدول
+        "CREATE INDEX IF NOT EXISTS `index_local_history_conv_created_desc` ON `local_history` (`conversationId`, `createdAt` DESC, `id` DESC)",
+        // Ultimate: استعلامات ORDER BY timestamp بلا فهرس مركّب كانت مسحًا كاملًا
+        "CREATE INDEX IF NOT EXISTS `index_notifications_user_timestamp` ON `notifications` (`userId`, `timestamp` DESC)",
+        "CREATE INDEX IF NOT EXISTS `index_live_comments_call_timestamp` ON `live_comments` (`callId`, `timestamp` DESC)",
+        "CREATE INDEX IF NOT EXISTS `index_call_quality_call_timestamp` ON `call_quality` (`callId`, `timestamp` ASC)",
+        "CREATE INDEX IF NOT EXISTS `index_ai_summaries_source_timestamp` ON `ai_summaries` (`sourceId`, `timestamp` DESC)",
+        "CREATE INDEX IF NOT EXISTS `index_sovereign_gifts_to_timestamp` ON `sovereign_gifts` (`toUserId`, `timestamp` DESC)",
+        "CREATE INDEX IF NOT EXISTS `index_sovereign_stories_user_timestamp` ON `sovereign_stories` (`userId`, `timestamp` DESC)"
     )
 
     /** تُنشئ الفهارس الناقصة إن غابت — idempotent. */

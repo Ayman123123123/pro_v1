@@ -2,6 +2,7 @@
 # Used because the Kotlin source in this snapshot does not compile
 # (DinstarHardwareService.kt has hundreds of unresolved references).
 # Mirrors the `runtime` stage of backend-server/Dockerfile.
+# Build context MUST be prebuilt-backend/ itself (app.jar sits next to this file).
 FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app

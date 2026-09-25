@@ -15,7 +15,11 @@ object ConnectionStatusRepository {
     data class Status(
         val state: ServerUiState = ServerUiState.CONNECTING,
         val retryInSec: Long = 0,
-        val lastChangeAt: Long = System.currentTimeMillis()
+        val lastChangeAt: Long = System.currentTimeMillis(),
+        /** مؤشر الحالة الحقيقية: هل القاطع مفتوح (cooldown) أم انقطاع عابر. */
+        val isBreakerOpen: Boolean = false,
+        /** آخر نجاح اتصال — تُحسب منه مدة الاستقرار في الواجهة. */
+        val lastOnlineAtMs: Long = 0L
     )
 
     private val _status = MutableStateFlow(Status())
@@ -27,14 +31,28 @@ object ConnectionStatusRepository {
      * الخنق: OFFLINE متكرر بنفس retryInSec يُحدَّث at-most مرة/ثانية.
      */
     @Volatile private var lastEmitAt = 0L
-    fun publish(state: ServerUiState, retryInSec: Long = 0) {
+    @Volatile private var lastOnlineAtMs = 0L
+    fun publish(state: ServerUiState, retryInSec: Long = 0, isBreakerOpen: Boolean = false) {
         val cur = _status.value
         val now = System.currentTimeMillis()
-        if (cur.state == state && cur.retryInSec == retryInSec) return
+        if (state == ServerUiState.ONLINE) lastOnlineAtMs = now
+        if (cur.state == state && cur.retryInSec == retryInSec && cur.isBreakerOpen == isBreakerOpen) return
         if (cur.state == state && state == ServerUiState.OFFLINE && now - lastEmitAt < 1_000L) return
         lastEmitAt = now
-        _status.value = Status(state, retryInSec.coerceAtLeast(0L), now)
+        _status.value = Status(state, retryInSec.coerceAtLeast(0L), now, isBreakerOpen, lastOnlineAtMs)
     }
 
+    /** مسارات مختصرة — المصدر الوحيد لها RedConnectionService.onState. */
+    fun publishOnline() = publish(ServerUiState.ONLINE, 0, false)
+    fun publishConnecting() = publish(ServerUiState.CONNECTING, 0, false)
+    fun publishOffline(retryInSec: Long = 0, isBreakerOpen: Boolean = false) =
+        publish(ServerUiState.OFFLINE, retryInSec, isBreakerOpen)
+
+    /** مسبار half-open/مهلة القاطع — تُستدعى من الخدمة عند فتح القاطع فقط. */
+    fun publishBreakerOpen(remainingSec: Long) =
+        publish(ServerUiState.OFFLINE, remainingSec.coerceAtLeast(1L), true)
+
     val isOnline: Boolean get() = _status.value.state == ServerUiState.ONLINE
+    val isOffline: Boolean get() = _status.value.state == ServerUiState.OFFLINE
+    val isBreakerOpenSnapshot: Boolean get() = _status.value.isBreakerOpen
 }

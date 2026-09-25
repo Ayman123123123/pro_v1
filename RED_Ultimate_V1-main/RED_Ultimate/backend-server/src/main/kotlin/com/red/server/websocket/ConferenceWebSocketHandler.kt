@@ -26,12 +26,18 @@ import java.util.concurrent.ConcurrentHashMap
 class ConferenceWebSocketHandler(
     private val objectMapper: ObjectMapper,
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private val roomAliases: RoomAliasService? = null
+    private val roomAliases: RoomAliasService? = null,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val conferenceRooms: com.red.server.calls.ConferenceRoomService? = null,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val accessGuard: ApprovedDeviceSessionGuard? = null
 ) : TextWebSocketHandler() {
     private val rooms = ConcurrentHashMap<String, MutableSet<WebSocketSession>>()
     private val sessionToRoom = ConcurrentHashMap<String, String>()
     private val roomRoles = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>() // roomId -> userId -> role
     private val roomHosts = ConcurrentHashMap<String, String>() // roomId -> host userId
+    /** جلسات طابور اللوبي لكل غرفة: accountId ← الجلسة (تُعامل كإغلاق لا كعضوية). */
+    private val lobbySessions = ConcurrentHashMap<String, ConcurrentHashMap<String, WebSocketSession>>()
 
     /**
      * غرفة الانتظار (Lobby — على غرار Zoom):
@@ -63,6 +69,8 @@ class ConferenceWebSocketHandler(
 
     /** حدّ التفاعلات: آخر إرسال لكل مستخدم (منع الإغراق — مستمع كان يرسل بلا حد). */
     private val lastReactionAt = ConcurrentHashMap<String, Long>()
+    /** المعدل: حارس نافذة ثابتة مشترك (120 إطار/دقيقة لكل جلسة) — إزالة التكرار مع Call/RedMaster/Live. */
+    private val frameLimiter = WebSocketRateLimiter(maxMessages = 120, windowMillis = 60_000)
 
     /** LEGENDARY Phase 7: دور مشارك (للتذاكر الواعية بالدور) — الأدوار مفتاحها redId. */
     fun getRole(roomId: String, vararg ids: String): String {
@@ -73,8 +81,24 @@ class ConferenceWebSocketHandler(
     }
 
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
-        val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
-        val incoming = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
+        // إغلاق: جهاز مسحوب/مرفوض يُغلق فوراً بلا معالجة (نمط RedMaster/Live).
+        if (accessGuard?.closeIfRevoked(session) == true) return
+        // المعدل أولاً: تجاوز الحد = خطأ بلا إغلاق.
+        if (!frameLimiter.tryAcquire(session.id)) {
+            sendError(session, "", "RATE_LIMITED", "Slow down")
+            return
+        }
+        val userId = session.attributes["userId"] as? String
+        if (userId.isNullOrBlank()) {
+            sendError(session, "", "UNAUTHENTICATED", "Authenticated RED ID is missing")
+            return
+        }
+        val incoming: IncomingConferenceSignal = try {
+            objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
+        } catch (_: Exception) {
+            sendError(session, "", "INVALID_PAYLOAD", "Invalid conference frame")
+            return
+        }
         // G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام.
         val resolvedRoomId = resolveRoom(incoming.roomId)
         val signal = if (resolvedRoomId == incoming.roomId) incoming else incoming.copy(roomId = resolvedRoomId)
@@ -85,6 +109,8 @@ class ConferenceWebSocketHandler(
             return
         }
 
+        // بلا إغلاق: أي عطل أثناء التوجيه (إرسال مكسور/حالة شاذة) = إطار ERROR فقط.
+        try {
         when (signal.type.uppercase()) {
             "JOIN" -> handleJoin(session, userId, signal)
             // CONSUME وICO والتفاوض متاحة للجميع — المستمع يحتاجها ليسمع.
@@ -98,7 +124,7 @@ class ConferenceWebSocketHandler(
                 // شاشةٌ في غرفة أُغلقت فيها المشاركة: رفضٌ صريح، لا إخفاءٌ في الواجهة فقط.
                 val sharingScreen = signal.payload["kind"]?.toString() == "screen" ||
                     signal.payload["source"]?.toString() == "screen"
-                if (sharingScreen && conferenceRooms.getRoom(signal.roomId)?.allowScreenShare == false) {
+                if (sharingScreen && conferenceRooms?.getRoom(signal.roomId)?.allowScreenShare == false) {
                     sendError(session, signal.roomId, "SCREEN_SHARE_DISABLED", "Host disabled screen sharing")
                 } else if (role in PUBLISHERS) relay(session, signal) else sendError(
                     session, signal.roomId, "NOT_ON_STAGE",
@@ -155,14 +181,17 @@ class ConferenceWebSocketHandler(
                 sendError(session, signal.roomId, "UNSUPPORTED_TYPE", "Unsupported conference signal type: ${signal.type}")
             }
         }
+        } catch (e: Exception) {
+            sendError(session, signal.roomId, "INTERNAL_ERROR", e.message?.takeIf { it.isNotBlank() } ?: "INTERNAL_ERROR")
+        }
     }
 
     private fun handleJoin(session: WebSocketSession, userId: String, signal: IncomingConferenceSignal) {
         val accountId = session.attributes["accountId"] as? String ?: userId
         // بوابة غرفة الانتظار قبل أي مقعد: من في الطابور لا يُحسب مشاركًا ولا تُقبل وسائطه،
         // وإلا صار الطابور ستارًا تجميليًا يستهلك سعة الغرفة ويغذي الـ SFU.
-        if (conferenceRooms.isLobbyEnabled(signal.roomId) && !isPrivileged(accountId, userId, signal.roomId)) {
-            val entry = conferenceRooms.enterLobby(
+        if (conferenceRooms?.isLobbyEnabled(signal.roomId) == true && !isPrivileged(accountId, userId, signal.roomId)) {
+            val entry = conferenceRooms?.enterLobby(
                 roomId = signal.roomId,
                 accountId = accountId,
                 redId = userId,
@@ -172,21 +201,23 @@ class ConferenceWebSocketHandler(
             if (entry != null) {
                 lobbySessions.computeIfAbsent(signal.roomId) { ConcurrentHashMap() }[accountId] = session
                 sessionToRoom[session.id] = signal.roomId
+                runCatching {
                 session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
                     "type" to "LOBBY",
                     "roomId" to signal.roomId,
                     "payload" to mapOf(
                         "state" to "waiting",
-                        "position" to conferenceRooms.lobbyQueue(signal.roomId).indexOfFirst { it.accountId == accountId }.let { if (it < 0) 1 else it + 1 }.toString(),
-                        "waiting" to conferenceRooms.lobbyCount(signal.roomId).toString()
+                        "position" to (conferenceRooms?.lobbyQueue(signal.roomId)?.indexOfFirst { it.accountId == accountId }?.let { if (it < 0) 1 else it + 1 } ?: 1).toString(),
+                        "waiting" to (conferenceRooms?.lobbyCount(signal.roomId) ?: 1).toString()
                     )
                 ))))
+                }
                 broadcastLobbyCount(signal.roomId)
                 return
             }
             // مُذَّن سابقًا (إعادة اتصال) أو مدعو: يُسمح به فورًا ويُخرج من الطابور إن كان فيه.
             lobbySessions[signal.roomId]?.remove(accountId)
-            conferenceRooms.leaveLobby(signal.roomId, accountId)
+            conferenceRooms?.leaveLobby(signal.roomId, accountId)
         }
         val room = rooms.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }
         // حدّ السعة مُنفذ (كان يقبل عدداً غير محدود فيخنق الـ mesh): 100 مشارك كحد X العملي.
@@ -248,8 +279,8 @@ class ConferenceWebSocketHandler(
 
         // Send room state to newcomer — includes roles (+ lobby state/waiting list)
         // buildRoomState تُعيد TextMessage جاهزة — لا غلاف إضافي (لا يوجد
-        // مُنشئ TextMessage(TextMessage) في Spring).
-        session.sendMessage(buildRoomState(signal.roomId, room, session, userId))
+        // مُنشئ TextMessage(TextMessage) في Spring). بلا إغلاق: فشل الإرسال = ERROR فقط.
+        runCatching { session.sendMessage(buildRoomState(signal.roomId, room, session, userId)) }
     }
 
     /**
@@ -580,9 +611,9 @@ class ConferenceWebSocketHandler(
         // الحضور والطابور مفاتيحهما accountId (هكذا تكتبهما REST)، فحذفهما بـ redId صامتٌ
         // ولا يحرّر شيئًا: يبقى المقعد محجوزًا حتى تمتلئ الغرفة ولا يدخل أحد بعدها.
         val accountId = session.attributes["accountId"] as? String ?: userId
-        conferenceRooms.removeParticipant(signal.roomId, accountId)
+        conferenceRooms?.removeParticipant(signal.roomId, accountId)
         lobbySessions[signal.roomId]?.remove(accountId)
-        conferenceRooms.leaveLobby(signal.roomId, accountId)
+        conferenceRooms?.leaveLobby(signal.roomId, accountId)
         val leaveMsg = objectMapper.writeValueAsString(mapOf(
             "type" to "PARTICIPANT_LEFT",
             "roomId" to signal.roomId,
@@ -622,16 +653,22 @@ class ConferenceWebSocketHandler(
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: org.springframework.web.socket.CloseStatus) {
-        val roomId = sessionToRoom.remove(session.id) ?: return
-        val room = rooms[roomId] ?: return
-        synchronized(room) { room.remove(session) }
+        // إغلاق: تنظيف كل حالة الجلسة (غرفة/انتظار/يد/كتم/حضور/معدل) بلا رمي — لا جلسات شبح.
+        runCatching { frameLimiter.remove(session.id) }
+        val roomId = sessionToRoom.remove(session.id)
+        // جلسة طابور لوبي بلا غرفة: نظّف قوائم الانتظار فقط ثم اخرج.
+        lobbySessions.values.forEach { it.entries.removeIf { e -> e.value.id == session.id } }
+        roomWaiting.values.forEach { waiting -> synchronized(waiting) { waiting.removeIf { it.id == session.id } } }
+        if (roomId == null) return
+        val room = rooms[roomId]
+        if (room != null) synchronized(room) { room.remove(session) }
         val userId = session.attributes["userId"] as? String ?: return
         val accountId = session.attributes["accountId"] as? String ?: userId
         roomHands[roomId]?.remove(userId)
         roomMuted[roomId]?.remove(userId)
-        conferenceRooms.removeParticipant(roomId, accountId)
+        runCatching { conferenceRooms?.removeParticipant(roomId, accountId) }
         lobbySessions[roomId]?.remove(accountId)
-        conferenceRooms.leaveLobby(roomId, accountId)
+        runCatching { conferenceRooms?.leaveLobby(roomId, accountId) }
         val leaveMsg = objectMapper.writeValueAsString(mapOf(
             "type" to "PARTICIPANT_LEFT",
             "roomId" to roomId,
@@ -677,6 +714,51 @@ class ConferenceWebSocketHandler(
         lastReactionAt.keys.removeIf { it.startsWith(prefix) }
     }
 
+    override fun handleTransportError(session: WebSocketSession, exception: Throwable) {
+        // النقل المكسور يُعامل كإغلاق: تنظيف فقط، بلا بثّ وبلا رمي.
+        runCatching { afterConnectionClosed(session, org.springframework.web.socket.CloseStatus.SERVER_ERROR) }
+    }
+
+    /** امتياز اللوبي/الطابور: المضيف وشريكه فقط — من الدور المحفوظ أو سجل conferenceRooms. */
+    private fun isPrivileged(accountId: String, userId: String, roomId: String): Boolean {
+        roomRoles[roomId]?.get(userId)?.let { return it in PRIVILEGED }
+        val rec = conferenceRooms?.getRoom(roomId) ?: return false
+        return rec.hostId == accountId || rec.hostRedId == userId
+    }
+
+    /** عدّاد اللوبي للمضيفين: يُبثّ لكل من في الغرفة لتنظيف قوائم الواجهة. */
+    private fun broadcastLobbyCount(roomId: String) {
+        val room = rooms[roomId] ?: return
+        val count = conferenceRooms?.lobbyCount(roomId) ?: roomWaiting[roomId]?.size ?: 0
+        val msg = objectMapper.writeValueAsString(mapOf(
+            "type" to "LOBBY_COUNT",
+            "roomId" to roomId,
+            "payload" to mapOf("waiting" to count.toString())
+        ))
+        room.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(msg)) } }
+    }
+
+    // ── توافق v1 (CallsV1Controller): نفس حالة rooms/roles/hosts — لا نظام جديد ──
+
+    fun createGroupCall(groupCallId: String, hostRedId: String, initialMembers: List<String>, mode: String) {
+        val effective = resolveRoom(groupCallId)
+        roomHosts.putIfAbsent(effective, hostRedId)
+        val roles = roomRoles.computeIfAbsent(effective) { ConcurrentHashMap() }
+        roles.putIfAbsent(hostRedId, "HOST")
+        initialMembers.filter { it.isNotBlank() && it != hostRedId }.take(MAX_PARTICIPANTS).forEach { roles.putIfAbsent(it, "LISTENER") }
+    }
+
+    fun endGroupCall(groupCallId: String, actorRedId: String) {
+        val effective = resolveRoom(groupCallId)
+        val targets = listOf(effective, groupCallId.trim()).distinct()
+        targets.forEach { id ->
+            rooms.remove(id)?.forEach { runCatching { it.close() } }
+            roomRoles.remove(id); roomHosts.remove(id); roomHands.remove(id)
+            roomMuted.remove(id); roomLobby.remove(id); roomWaiting.remove(id)
+            evictReactionKeys(id)
+        }
+    }
+
     /** G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام. */
     private fun resolveRoom(raw: String?): String {
         val v = raw?.trim().orEmpty()
@@ -685,8 +767,8 @@ class ConferenceWebSocketHandler(
     }
 
     companion object {
-        /** موحّد مع SFU (4..128) ومع SfuTicketController — كان 8..128 فيفشل القصير. */
-        private val ROOM_ID = Regex("^[A-Za-z0-9_-]{4,128}$")
+        /** إزالة التكرار: النمط الموحد الوحيد RoomSeparationPolicy.ROOM_ID (كان نسخة محلية). */
+        private val ROOM_ID = com.red.server.calls.RoomSeparationPolicy.ROOM_ID
 
         /** الأدوار المسموح لها بإرسال وسائط — ثابت لا حالة لكل نسخة. */
         private val PUBLISHERS = setOf("HOST", "CO_HOST", "SPEAKER")

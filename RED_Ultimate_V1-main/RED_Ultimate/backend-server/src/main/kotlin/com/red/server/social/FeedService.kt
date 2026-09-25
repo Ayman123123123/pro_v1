@@ -2,12 +2,15 @@ package com.red.server.social
 
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
+import jakarta.annotation.PostConstruct
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
+import org.springframework.data.mongodb.core.index.Index
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -20,6 +23,36 @@ class FeedService(
     private val jdbc: JdbcTemplate,
     private val linkCards: LinkCardService? = null
 ) {
+    /** الفهارس: تطابق استعلام الفيد (deletedAt+parentId+visibility+authorId+createdAt) + TTL الاختفاء + الخيط. */
+    @PostConstruct
+    fun indexes() {
+        runCatching {
+            mongo.indexOps(PostDocument::class.java).createIndex(
+                Index().on("deletedAt", Sort.Direction.ASC).on("parentId", Sort.Direction.ASC)
+                    .on("visibility", Sort.Direction.ASC).on("authorId", Sort.Direction.ASC)
+                    .on("createdAt", Sort.Direction.DESC)
+            )
+            mongo.indexOps(PostDocument::class.java).createIndex(Index().on("disappearingAt", Sort.Direction.ASC))
+            // الخيط: id OR parentId + deletedAt مرتبًا بـ createdAt — يطابق thread()
+            mongo.indexOps(PostDocument::class.java).createIndex(
+                Index().on("parentId", Sort.Direction.ASC).on("deletedAt", Sort.Direction.ASC)
+                    .on("createdAt", Sort.Direction.ASC)
+            )
+            // أقلام الكاتب: ترشيح authorId + فرز createdAt (صفحات الملف الشخصي/الردود)
+            mongo.indexOps(PostDocument::class.java).createIndex(
+                Index().on("authorId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC)
+            )
+        }
+    }
+
+    /** TTL المنشورات المؤقتة — حذف ناعم (نص فارغ + deletedAt) كحذف delete(). */
+    @Scheduled(fixedDelay = 300_000)
+    fun cleanupDisappearingPosts(): Int {
+        val q = Query(Criteria.where("disappearingAt").ne(null).lte(Instant.now()).and("deletedAt").`is`(null))
+        val res = mongo.updateMulti(q, Update().set("deletedAt", Instant.now()).set("text", ""), PostDocument::class.java)
+        return res.modifiedCount.toInt()
+    }
+
     fun create(userId: UUID, request: CreatePostRequest): PostDocument {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         require(user.status == AccountStatus.APPROVED)
@@ -38,7 +71,8 @@ class FeedService(
             authorUsername = user.username, authorDisplayName = user.displayName, text = text,
             visibility = request.visibility, kind = if (poll == null) PostKind.POST else PostKind.POLL,
             parentId = request.parentId, quotePostId = request.quotePostId, poll = poll, media = request.media,
-            linkCard = linkCard
+            linkCard = linkCard,
+            disappearingAt = request.disappearingSeconds.takeIf { it > 0 }?.let { Instant.now().plusSeconds(it.toLong().coerceIn(30, 604800)) }
         )
         mongo.save(post)
         request.parentId?.let { mongo.updateFirst(Query(Criteria.where("id").`is`(it)), Update().inc("replyCount", 1), PostDocument::class.java) }

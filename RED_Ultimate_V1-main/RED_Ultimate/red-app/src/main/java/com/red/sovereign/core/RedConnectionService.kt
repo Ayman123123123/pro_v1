@@ -317,13 +317,15 @@ class RedConnectionService : Service() {
      * إعادة دفع العالق SENDING من المخزن — نفس منطق الإقلاع، قابل للاستدعاء
      * والخدمة حيّة (ACTION_REDRIVE_STUCK) فيُغطى الفردي بعد الموت دون إعادة تشغيل.
      * idempotent: نفس clientId/uuid فيُزيل الخادم التكرار عبر unique index.
+     * الإرسال حتى الإقرار: يُغطي SENDING + QUEUED (كُتب على السلك بلا SERVER_ACK —
+     * موت العملية بعد drain وقبل ACK كان يضيع لأن DAO يجلب SENDING فقط).
      */
     private suspend fun redriveStuckFromStore() {
         val restoredGroups = runCatching { loadPersistedGroupPendings() }.getOrDefault(0)
         if (restoredGroups > 0) {
             android.util.Log.i("RedConnectionService", "restored $restoredGroups persisted group pending(s)")
         }
-        val stuck = runCatching { repository.getUnsentOutgoing() }.getOrDefault(emptyList())
+        val stuck = runCatching { getUnackedOutgoing() }.getOrDefault(emptyList())
         if (stuck.isEmpty()) {
             if (restoredGroups > 0 && connected) { drainGroupSends(); drainGroupPayloadSends() } else if (restoredGroups > 0) socket.connect()
             return
@@ -336,7 +338,10 @@ class RedConnectionService : Service() {
                 continue
             }
             // نضج 10s حتى لا نسبق إرسالاً حياً (SENDING→QUEUED→SERVER_ACK دورة لحظية).
-            if (System.currentTimeMillis() - row.createdAt < 10_000L) continue
+            // QUEUED القديم (>30s بلا ACK) يُعاد حتماً — السوكت يُبطّن عند الانقطاع
+            // ويُرجع id زائفاً، فبلا هذا يُفقد بعد الموت.
+            val maturity = if (row.status == "QUEUED") 30_000L else 10_000L
+            if (System.currentTimeMillis() - row.createdAt < maturity) continue
             // تجنب التكرار الذاكري لنفس clientId (idempotent).
             if (pendingSends.any { it.clientId == row.id }) continue
             val target = runCatching { repository.getConversation(row.conversationId)?.peerId }
@@ -345,15 +350,44 @@ class RedConnectionService : Service() {
             redriven++
         }
         if (stuckGroups > 0) {
-            android.util.Log.i("RedConnectionService", "$stuckGroups group message(s) stuck in SENDING — awaiting persisted redrive/recovery (never marked SENT)")
+            android.util.Log.i("RedConnectionService", "$stuckGroups group message(s) stuck unacked — awaiting persisted redrive/recovery (never marked SENT)")
             runCatching { com.red.sovereign.core.workers.MessageRecoveryWorker.enqueue(applicationContext) }
         }
         if (redriven > 0) {
-            android.util.Log.i("RedConnectionService", "re-driving $redriven unsent 1:1 message(s)")
+            android.util.Log.i("RedConnectionService", "re-driving $redriven unacked 1:1 message(s) (SENDING+QUEUED until SERVER_ACK)")
             if (connected) drainSends() else socket.connect()
-        } else if (restoredGroups > 0) {
+        } else if (restoredGroups > 0 || stuckGroups > 0) {
             if (connected) { drainGroupSends(); drainGroupPayloadSends() } else socket.connect()
         }
+    }
+
+    /**
+     * غير المُقَرّة: SENDING + QUEUED الصادرة (حتى SERVER_ACK).
+     * DAO يجلب SENDING فقط (لا يُلمس — خارج النطاق) فيُدمج مع QUEUED
+     * عبر استعلام خام + تحميل الصف الكامل — idempotent بذات المعرف.
+     */
+    private suspend fun getUnackedOutgoing(): List<LocalHistoryEntity> {
+        val merged = LinkedHashMap<String, LocalHistoryEntity>()
+        runCatching { repository.getUnsentOutgoing() }.getOrDefault(emptyList())
+            .forEach { merged.putIfAbsent(it.id, it) }
+        // QUEUED: كُتب على السلك (أو بُطّن offline) بلا إقرار — يُعاد حتى ACK.
+        val queuedIds = runCatching {
+            val db = com.red.sovereign.core.database.RedDatabase.getInstance(applicationContext)
+            val c = db.openHelper.readableDatabase.query(
+                "SELECT id FROM local_history WHERE outgoing = 1 AND status = 'QUEUED' ORDER BY createdAt ASC LIMIT 100", null
+            )
+            c.use {
+                val ids = ArrayList<String>()
+                val idx = it.getColumnIndexOrThrow("id")
+                while (it.moveToNext()) ids.add(it.getString(idx))
+                ids
+            }
+        }.getOrDefault(emptyList())
+        for (id in queuedIds) {
+            if (merged.containsKey(id)) continue
+            runCatching { repository.getLocalHistoryEntry(id) }.getOrNull()?.let { merged[id] = it }
+        }
+        return merged.values.sortedBy { it.createdAt }.take(100)
     }
 
     private fun drainSends() {
@@ -533,6 +567,10 @@ class RedConnectionService : Service() {
             ConnectionState.CONNECTED -> {
                 connected = true
                 attempts = 0
+                // circuit-breaker: نجاح واحد يغلق القاطع (half-open probe نجح)
+                reconnectFailures = 0
+                breakerOpenUntilMs = 0L
+                ConnectionStatusRepository.publishOnline()
                 reconnectTask?.cancel(false)
                 notifyConnection(getString(com.red.sovereign.R.string.status_connected_local))
                 scope.launch {
@@ -549,20 +587,45 @@ class RedConnectionService : Service() {
                 scope.launch { catchUpMissedMessages() }
                 runCatching { com.red.sovereign.calls.PendingOfferPoller.pollNow(applicationContext) }; runCatching { com.red.sovereign.calls.PendingOfferPoller.schedule(applicationContext) }
             }
-            ConnectionState.CONNECTING -> notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
-            ConnectionState.DISCONNECTED -> { connected = false; scheduleReconnect() }
-            ConnectionState.UNAUTHORIZED -> { connected = false; refreshAndReconnect() }
+            ConnectionState.CONNECTING -> {
+                ConnectionStatusRepository.publishConnecting()
+                notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
+            }
+            ConnectionState.DISCONNECTED -> {
+                connected = false
+                ConnectionStatusRepository.publishOffline(0)
+                scheduleReconnect()
+            }
+            ConnectionState.UNAUTHORIZED -> {
+                connected = false
+                ConnectionStatusRepository.publishOffline(0)
+                refreshAndReconnect()
+            }
         }
     }
 
     private fun refreshAndReconnect() {
-        val refresh = tokenStore.refreshToken ?: run { stopSelf(); return }
+        val refresh = tokenStore.refreshToken ?: run {
+            ConnectionStatusRepository.publishOffline(0)
+            notifyConnection(getString(com.red.sovereign.R.string.status_session_expired))
+            stopSelf(); return
+        }
+        ConnectionStatusRepository.publishConnecting()
         scope.launch {
             when (val result = AuthApi(applicationContext).refresh(refresh)) {
-                is ApiResult.Success -> { tokenStore.updateTokens(result.value); attempts = 0; socket.connect() }
-                is ApiResult.Error -> { notifyConnection(getString(com.red.sovereign.R.string.status_session_expired)); stopSelf() }
+                is ApiResult.Success -> { tokenStore.updateTokens(result.value); attempts = 0; reconnectFailures = 0; breakerOpenUntilMs = 0L; socket.connect() }
+                is ApiResult.Error -> { ConnectionStatusRepository.publishOffline(0); notifyConnection(getString(com.red.sovereign.R.string.status_session_expired)); stopSelf() }
             }
         }
+    }
+
+    /** مؤشر الحالة الحقيقية: هل قاطع إعادة الاتصال مفتوح الآن. */
+    fun isCircuitBreakerOpen(): Boolean = System.currentTimeMillis() < breakerOpenUntilMs
+
+    /** المهلة المتبقية للقاطع (ثوانٍ) — 0 إن كان مغلقاً. */
+    fun breakerRemainingSec(): Long {
+        val remain = breakerOpenUntilMs - System.currentTimeMillis()
+        return if (remain <= 0) 0L else (remain / 1000L).coerceAtLeast(1L)
     }
 
     private fun scheduleReconnect() {
@@ -571,7 +634,37 @@ class RedConnectionService : Service() {
         // السباق السابق مع onClosed كان يرمي RejectedExecutionException على
         // مؤشر OkHttp فينهار التطبيق كاملاً.
         if (scheduler.isShutdown || scheduler.isTerminated) return
-        val delay = minOf(60L, 1L shl minOf(attempts++, 6))
+        val now = System.currentTimeMillis()
+        // circuit-breaker: القاطع مفتوح → لا عاصفة reconnect؛ مسبار half-open واحد بعد المهلة.
+        if (now < breakerOpenUntilMs) {
+            val remainSec = ((breakerOpenUntilMs - now) / 1000L).coerceAtLeast(1L)
+            ConnectionStatusRepository.publishBreakerOpen(remainSec)
+            notifyConnection(getString(com.red.sovereign.R.string.status_disconnected_retry, remainSec))
+            reconnectTask = try {
+                scheduler.schedule({
+                    // half-open probe: محاولة واحدة تحسم (النجاح يغلق في onState)
+                    socket.connect()
+                }, remainSec, TimeUnit.SECONDS)
+            } catch (_: RejectedExecutionException) { null }
+            return
+        }
+        reconnectFailures++
+        if (reconnectFailures >= RECONNECT_BREAKER_THRESHOLD) {
+            // افتح القاطع: cooldown ثم half-open — يمنع cascade/storm بعد فشل متكرر.
+            breakerOpenUntilMs = now + RECONNECT_BREAKER_OPEN_MS
+            reconnectFailures = 0
+            ConnectionStatusRepository.publishBreakerOpen(RECONNECT_BREAKER_OPEN_MS / 1000L)
+            notifyConnection(getString(com.red.sovereign.R.string.status_disconnected_retry, RECONNECT_BREAKER_OPEN_MS / 1000L))
+            reconnectTask = try {
+                scheduler.schedule({ socket.connect() }, RECONNECT_BREAKER_OPEN_MS / 1000L, TimeUnit.SECONDS)
+            } catch (_: RejectedExecutionException) { null }
+            return
+        }
+        // backoff أُسّي مع jitter ±20% — يمنع Thundering Herd عند عودة الشبكة للجميع معاً.
+        val base = minOf(60L, 1L shl minOf(attempts++, 6))
+        val jitter = ((base * 0.2 * (Math.random() * 2 - 1)).toLong())
+        val delay = (base + jitter).coerceAtLeast(1L)
+        ConnectionStatusRepository.publishOffline(delay, false)
         notifyConnection(getString(com.red.sovereign.R.string.status_disconnected_retry, delay))
         reconnectTask = try {
             scheduler.schedule({
@@ -771,6 +864,7 @@ class RedConnectionService : Service() {
             RedProtos.RedRED.SignalCase.ACK -> {
                 // دورة الحالات QUEUED → SERVER_ACK → DELIVERED → READ — idempotent (UPDATE بنفس المعرف).
                 // SENT القديمة تُطبَّع إلى SERVER_ACK؛ الملف/الـ outbox يُتمَّم فقط هنا لا عند بدء الخدمة.
+                // الإرسال حتى الإقرار: لا يُحذف الملف/الصف إلا بهذا الفرع — أبداً عند drain.
                 val canonical = when (envelope.ack.status.uppercase()) {
                     "SENT", "SERVER_ACK", "ACK", "RECEIVED", "" -> "SERVER_ACK"
                     "DELIVERED" -> "DELIVERED"
@@ -779,6 +873,11 @@ class RedConnectionService : Service() {
                 }
                 repository.updateMessageStatus(envelope.ack.messageId, canonical)
                 com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(envelope.ack.messageId, canonical))
+                // نجاح واحد يغلق circuit-breaker المشترك (half-open probe نجح) — يُرى فوراً في العمال.
+                runCatching {
+                    com.red.sovereign.core.outbox.OutboxRepository.globalRecordSuccess()
+                    com.red.sovereign.core.outbox.OutboxRepository.persist(applicationContext)
+                }
                 // إتمام الـ outbox وحذف الوسائط فقط بعد إقرار الخادم — لا قبل.
                 scope.launch {
                     runCatching {
@@ -790,7 +889,10 @@ class RedConnectionService : Service() {
                             row.localMediaPath?.let { p -> runCatching { java.io.File(p).delete() } }
                         }
                     }
-                    runCatching { removeGroupPending(envelope.ack.messageId) }
+                    // الملف المحفوظ للمجموعات يُحذف فقط بإقرار حقيقي — لا بحالة مجهولة.
+                    if (canonical in setOf("SERVER_ACK", "SENT", "DELIVERED", "READ")) {
+                        runCatching { removeGroupPending(envelope.ack.messageId) }
+                    }
                 }
             }
             RedProtos.RedRED.SignalCase.DELETE -> {
@@ -989,8 +1091,12 @@ class RedConnectionService : Service() {
         .setSilent(true)
         .build()
 
-    private fun notifyConnection(text: String) =
+    private fun notifyConnection(text: String) {
+        // مؤشر الحالة الحقيقية: الإشعار الأمامي ثابت بلا وميض — لا تُعِد رسم نفس النص.
+        if (text == lastNotifiedText) return
+        lastNotifiedText = text
         getSystemService(NotificationManager::class.java).notify(CONNECTION_NOTIFICATION, connectionNotification(text))
+    }
 
     private fun openAppIntent(senderRedId: String? = null, conversationId: String? = null): PendingIntent {
         val i = Intent(this, MainActivity::class.java)
@@ -1046,6 +1152,9 @@ class RedConnectionService : Service() {
         // AUTO-FIX (message reliability): offline catch-up page size / hard page cap.
         private const val CATCHUP_PAGE_SIZE = 200
         private const val CATCHUP_MAX_PAGES = 25
+        /** circuit-breaker لإعادة الاتصال: 5 إخفاقات → cooldown دقيقة → half-open بمسبار واحد. */
+        private const val RECONNECT_BREAKER_THRESHOLD = 5
+        private const val RECONNECT_BREAKER_OPEN_MS = 60_000L
 
         /**
          * هل المحادثة مجموعة؟ يعتمد على prefix صريح بدل magic number (length>32).

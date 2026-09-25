@@ -6,7 +6,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * RED Sovereign Typography — عربية RTL سليمة.
+ * RED Sovereign Typography — عربية RTL سليمة — المقياس الوحيد (Single Scale).
  *
  * قواعد ملزمة (تتفوق على واتساب/تلجرام/سيجنال):
  * - عائلة واحدة ثنائية النص [PlexArabicFamily] — لا Default.
@@ -14,35 +14,39 @@ import androidx.compose.ui.unit.sp
  *   اتصال الحروف ويكسر الكلمات (كان 0.5/0.25/0.4sp هنا).
  * - حد أدنى مقروء 12sp لكل نص مرئي (labelSmall كان 11sp).
  * - ارتفاعات سخية للعربية (1.5–1.6×) لاستيعاب التشكيل والألف المقصورة.
+ * - أوزان حقيقية فقط: 400/500/600/700 الموجودة في res/font/plex_arabic.xml.
+ *   ممنوع Black/ExtraBold/Light (كانت تُصنّع صناعيًا من Bold/Regular).
+ * - المصدر الوحيد للمقياس: RedTheme.kt يعيد استعمال RedTypography هنا،
+ *   بلا تعريف موازٍ (مقياس واحد).
  */
 val RedTypography = Typography(
-    // Display
+    // Display — أوزان حقيقية (Bold بدل Black/ExtraBold المصنّعة)
     displayLarge = TextStyle(
         fontFamily = PlexArabicFamily,
-        fontWeight = FontWeight.Black,
+        fontWeight = FontWeight.Bold,
         fontSize = 57.sp,
         lineHeight = 64.sp,
         letterSpacing = 0.sp
     ),
     displayMedium = TextStyle(
         fontFamily = PlexArabicFamily,
-        fontWeight = FontWeight.ExtraBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 45.sp,
         lineHeight = 52.sp,
         letterSpacing = 0.sp
     ),
     displaySmall = TextStyle(
         fontFamily = PlexArabicFamily,
-        fontWeight = FontWeight.Black,
+        fontWeight = FontWeight.Bold,
         fontSize = 36.sp,
         lineHeight = 46.sp,
         letterSpacing = 0.sp
     ),
 
-    // Headline
+    // Headline — ExtraBold المصنّع → Bold حقيقي
     headlineLarge = TextStyle(
         fontFamily = PlexArabicFamily,
-        fontWeight = FontWeight.ExtraBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 32.sp,
         lineHeight = 42.sp,
         letterSpacing = 0.sp

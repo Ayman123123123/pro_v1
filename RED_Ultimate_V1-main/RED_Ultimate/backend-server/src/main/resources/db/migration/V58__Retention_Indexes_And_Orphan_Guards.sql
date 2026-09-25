@@ -34,7 +34,14 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created ON admin_audit_log(create
 CREATE INDEX IF NOT EXISTS idx_system_health_created ON system_health(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_usage_stats_created ON usage_stats(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sent_prekeys_consumed ON sent_prekey_records(consumed_at) WHERE consumed_at IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_backup_history_created ON backup_history(created_at DESC);
+-- guarded: backup_history has started_at (V19), not created_at — fresh-install fix, no-op where V59+ already reconciled
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='backup_history' AND column_name='created_at') THEN
+    CREATE INDEX IF NOT EXISTS idx_backup_history_created ON backup_history(created_at DESC);
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='backup_history' AND column_name='started_at') THEN
+    CREATE INDEX IF NOT EXISTS idx_backup_history_started ON backup_history(started_at DESC);
+  END IF;
+END $$;
 
 -- ── 5) دالة مساعدة: حذف دفعات آمن (تُستدعى من Scheduler بحد RED_RETENTION_BATCH_SIZE) ──
 CREATE OR REPLACE FUNCTION red_retention_delete(table_name TEXT, cutoff TIMESTAMPTZ, batch INT)

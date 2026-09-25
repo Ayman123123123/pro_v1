@@ -29,6 +29,19 @@ data class MessageWithReactions(
     val reactions: List<MessageReactionEntity>
 )
 
+/**
+ * عقد تنظيف الأيتام عند حذف محادثة (لا FK بين outbox/media والمحادثات عمدًا —
+ * الترتيب خارج المعاملة قد يكسر المزامنة، لذا التنظيف صريح):
+ * LocalRepository.deleteConversation يحذف outbox/media/FTS عبر
+ * deleteByConversation + FTS SQL، وDatabaseMaintenance يكنس يتامى FTS دوريًا.
+ * stars/reactions تُحذف تلقائيًا عبر FK CASCADE من local_history.
+ */
+data class ConversationWithStars(
+    @Embedded val conversation: ConversationEntity,
+    @Relation(parentColumn = "id", entityColumn = "conversationId")
+    val stars: List<StarredMessageEntity>
+)
+
 data class PollWithVotes(
     @Embedded val poll: MightyPollEntity,
     @Relation(parentColumn = "id", entityColumn = "pollId")

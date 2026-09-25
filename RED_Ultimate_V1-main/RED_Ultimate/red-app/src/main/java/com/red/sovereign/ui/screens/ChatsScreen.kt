@@ -256,7 +256,7 @@ private fun formatClockTime(timestamp: Long): String =
 private fun Avatar(text: String) = Box(Modifier.size(42.dp).clip(CircleShape).background(AqyalGold), contentAlignment = Alignment.Center) { Text(text, color = Color.Black, fontWeight = FontWeight.Black) }
 
 @Composable
-private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp)) }
+private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, contentDescription = title, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
 
 @Composable
 fun MessageInfoRow(label: String, value: String) {
@@ -306,10 +306,10 @@ fun MessageReactions(
 
 @Composable
 private fun MessageActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, detail: String, onClick: () -> Unit) {
-    Surface(Modifier.fillMaxWidth().clickable(onClick = onClick), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+    Surface(Modifier.fillMaxWidth().clickable(onClickLabel = title, onClick = onClick), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(YounesEmerald.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = YounesEmerald, modifier = Modifier.size(22.dp))
+                Icon(icon, contentDescription = title, tint = YounesEmerald, modifier = Modifier.size(22.dp))
             }
             Column(Modifier.padding(start = 14.dp)) {
                 Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
@@ -321,7 +321,7 @@ private fun MessageActionRow(icon: androidx.compose.ui.graphics.vector.ImageVect
 
 @Composable
 private fun ReactionEmojiBar(onPick: (String) -> Unit) {
-    val quick = remember { listOf("??", "??", "??", "??", "??", "??", "??", "??", "??", "??") }
+    val quick = remember { listOf("❤️", "👍", "😂", "😮", "😢", "🙏", "👏", "🔥", "🎉", "✅") }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
         items(quick) { emoji ->
             Surface(
@@ -370,20 +370,20 @@ private fun AttachmentSheet(
         Text("إرفاق", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         HorizontalDivider()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f).clickable(onClick = { onCamera(); onDismiss() }).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.CameraAlt, null, tint = YounesEmerald, modifier = Modifier.size(40.dp))
+            Column(Modifier.weight(1f).clickable(onClickLabel = "الكاميرا", onClick = { onCamera(); onDismiss() }).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.CameraAlt, contentDescription = "الكاميرا", tint = YounesEmerald, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.height(4.dp))
                 Text("الكاميرا", fontWeight = FontWeight.Medium)
                 Text("التقط صورة أو فيديو", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
-            Column(Modifier.weight(1f).clickable(onClick = { onGallery(); onDismiss() }).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Search, null, tint = AqyalCyanGlow, modifier = Modifier.size(40.dp))
+            Column(Modifier.weight(1f).clickable(onClickLabel = "المعرض", onClick = { onGallery(); onDismiss() }).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Search, contentDescription = "المعرض", tint = AqyalCyanGlow, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.height(4.dp))
                 Text("المعرض", fontWeight = FontWeight.Medium)
                 Text("اختر من صورك وفيديوهاتك", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
-            Column(Modifier.weight(1f).clickable(onClick = { onDocument(); onDismiss() }).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, tint = AqyalGold, modifier = Modifier.size(40.dp))
+            Column(Modifier.weight(1f).clickable(onClickLabel = "ملف", onClick = { onDocument(); onDismiss() }).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = "ملف", tint = AqyalGold, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.height(4.dp))
                 Text("ملف", fontWeight = FontWeight.Medium)
                 Text("PDF والمستندات الأخرى", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -805,7 +805,7 @@ fun ChatHubScreen(
                                         Text(request.requester.displayName, color = Color.White, fontWeight = FontWeight.SemiBold)
                                         Text("@${request.requester.username} • ${request.requester.redId.take(12)}", color = AqyalCyanGlow, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
-                                    OutlinedButton({ directory.resolve(request, false) }, Modifier.heightIn(min = 48.dp)) { Text("رفض", color = YounesMuted) }
+                                    OutlinedButton({ directory.resolve(request, false) }, Modifier.heightIn(min = 48.dp)) { Text("رفض", color = MaterialTheme.colorScheme.onSurface) }
                                     Button({ directory.resolve(request, true) }, Modifier.heightIn(min = 48.dp), colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) { Text("قبول", color = Color(0xFF002118)) }
                                 }
                             }
@@ -941,7 +941,8 @@ fun ChatHubScreen(
                             OutlinedTextField(
                                 chatSearchQuery, { chatSearchQuery = it }, Modifier.fillMaxWidth(),
                                 placeholder = { Text("ابحث في المحادثات…") },
-                                leadingIcon = { Icon(Icons.Default.Search, null) },
+                                label = { Text("بحث المحادثات") },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
                                 singleLine = true, shape = RoundedCornerShape(14.dp)
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -949,10 +950,10 @@ fun ChatHubScreen(
                                 FilterChip(selected = chatUnreadFilter, onClick = { chatUnreadFilter = true }, label = { Text("غير المقروء") })
                             }
                             // رسائلي — محادثة الذات E2EE
-                            Card(Modifier.fillMaxWidth().clickable { target = account.redId },
+                            Card(Modifier.fillMaxWidth().clickable(onClickLabel = "رسائلي") { target = account.redId },
                                 colors = CardDefaults.cardColors(containerColor = YounesEmerald.copy(alpha = 0.12f))) {
                                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Bookmark, null, tint = YounesEmerald)
+                                    Icon(Icons.Default.Bookmark, contentDescription = "رسائلي", tint = YounesEmerald)
                                     Spacer(Modifier.width(8.dp))
                                     Text("رسائلي — ملاحظات ومرفقات خاصة", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                                 }
@@ -1113,15 +1114,16 @@ fun ChatHubScreen(
                                     }
                                 )
                                 Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text(formatClockTime(item.timestamp), fontSize = 10.sp, color = if (item.outgoing) Color(0x99001B14) else MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (editedMessageIds.containsKey(item.id)) Text("معدّلة", fontSize = 10.sp)
+                                    Text(formatClockTime(item.timestamp), fontSize = 11.sp, color = if (item.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (editedMessageIds.containsKey(item.id)) Text("معدّلة", fontSize = 11.sp, color = if (item.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (item.outgoing) {
                                         val ticks = when (item.status) {
                                             "READ" -> "✓✓"
                                             "DELIVERED" -> "✓✓"
                                             else -> "✓"
                                         }
-                                        Text(ticks, color = if (item.status == "READ") AqyalCyanGlow else Color(0x99001B14), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        // داكن معتم على الفقاعة الزمردية (≥6:1) — الأزرق الشفاف على الزمرد راسب ≈1.8:1.
+                                        Text(ticks, color = Color(0xFF002118), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }

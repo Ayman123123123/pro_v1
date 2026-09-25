@@ -37,8 +37,19 @@ class DeviceSettingsViewModel(application: Application) : AndroidViewModel(appli
     fun load() = viewModelScope.launch {
         loading = true; error = null
         when (val response = client.request("GET", "/api/devices")) {
-            is ApiResult.Success -> runCatching { json.decodeFromString<List<SettingsDevice>>(response.value) }
-                .onSuccess { devices.clear(); devices.addAll(it) }.onFailure { error = "INVALID_DEVICE_RESPONSE" }
+            is ApiResult.Success -> runCatching {
+                val raw = response.value.trim()
+                if (raw.startsWith("[")) {
+                    json.decodeFromString<List<SettingsDevice>>(raw)
+                } else {
+                    // الخادم قد يعيد صفحة {content:[...]} بدل مصفوفة خام.
+                    val root = json.decodeFromString<Map<String, kotlinx.serialization.json.JsonElement>>(raw)
+                    val content = root["content"]?.let {
+                        json.decodeFromJsonElement<List<SettingsDevice>>(it)
+                    } ?: emptyList()
+                    content
+                }
+            }.onSuccess { devices.clear(); devices.addAll(it) }.onFailure { error = "INVALID_DEVICE_RESPONSE" }
             is ApiResult.Error -> error = response.message
         }
         loading = false

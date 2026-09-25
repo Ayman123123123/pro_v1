@@ -29,6 +29,11 @@ class StoryIndexInitializer(private val mongo: MongoTemplate) {
             mongo.indexOps(StoryDocument::class.java)
                 .createIndex(Index().on("ownerId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC))
         }
+        // deletedAt — كل استعلامات active() تُرشَّح به؛ بلا فهرس يصبح مسحًا كاملًا
+        runCatching {
+            mongo.indexOps(StoryDocument::class.java)
+                .createIndex(Index().on("deletedAt", Sort.Direction.ASC))
+        }
         runCatching {
             mongo.indexOps(StoryView::class.java)
                 .createIndex(Index().on("storyId", Sort.Direction.ASC))

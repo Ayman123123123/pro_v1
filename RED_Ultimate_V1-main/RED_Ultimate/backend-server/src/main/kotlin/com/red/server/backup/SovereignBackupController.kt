@@ -41,15 +41,21 @@ class SovereignBackupController(
         require(file.size <= maxSizeMb * 1024L * 1024L) { "Backup exceeds ${maxSizeMb}MB limit (got ${file.size / 1024}KB)" }
         // تحقق أساسي: الاسم يجب أن ينتهي بـ .enc والتوقيع اختياري
         val original = file.originalFilename ?: "red_backup.enc"
-        require(original.endsWith(".enc")) { "Backup must be encrypted (.enc)" }
-        if (!checksum.isNullOrBlank()) {
-            require(checksum.matches(Regex("^[0-9a-f]{64}$"))) { "Invalid SHA-256 checksum" }
+        require(original.endsWith(".enc", ignoreCase = true)) { "Backup must be encrypted (.enc)" }
+        val normalizedChecksum = checksum?.trim()?.lowercase()
+        if (!normalizedChecksum.isNullOrBlank()) {
+            require(normalizedChecksum.matches(Regex("^[0-9a-f]{64}$"))) { "Invalid SHA-256 checksum" }
+            // سلامة الوسائط: البصمة تُحسب على البايتات المستلمة فعلًا — عدم
+            // التطابق = رفض بلا تخزين (fail-closed)، لا تحذير صامت.
+            val actual = sha256Hex(file.bytes)
+            require(actual == normalizedChecksum) { "Backup checksum mismatch" }
         }
 
-        // MediaService.upload يكتب إلى MinIO تحت users/{userId}/UUID.bin — نستخدمه مباشرة
-        val result = media.upload(userId, file)
+        // مسار مخصص sovereign-backups/{userId}/{uuid}.enc — يحقق شرط verify
+        // (المالكية بالبادئة) ويتجاوز رفض الماسح لامتداد .enc.
+        val result = media.uploadBackup(userId, file)
 
-        log.info("Sovereign backup uploaded: user={} key={} size={} checksum={}", userId, result.objectKey, file.size, checksum?.take(12))
+        log.info("Sovereign backup uploaded: user={} key={} size={} checksum={}", userId, result.objectKey, file.size, normalizedChecksum?.take(12))
 
         return ResponseEntity.ok(mapOf(
             "id" to result.objectKey,
@@ -69,8 +75,15 @@ class SovereignBackupController(
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
         val userId = UUID.fromString(authentication.name)
-        require(key.startsWith("sovereign-backups/$userId/")) { "Key does not belong to user" }
+        // المالكية بالبادئة: المسار الحالي sovereign-backups/{uid}/ + القديم
+        // users/{uid}/ (توافق) — أي مفتاح آخر مرفوض قبل أي I/O.
+        require(key.startsWith("sovereign-backups/$userId/") ||
+            key.startsWith("users/$userId/")) { "Key does not belong to user" }
         val exists = try { media.metadata(key); true } catch (_: Exception) { false }
         return ResponseEntity.ok(mapOf("key" to key, "exists" to exists))
     }
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
 }

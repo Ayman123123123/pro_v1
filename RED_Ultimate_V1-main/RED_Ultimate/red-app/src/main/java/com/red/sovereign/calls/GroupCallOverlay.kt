@@ -100,7 +100,8 @@ fun GroupCallOverlay() {
 @Composable
 private fun MinimizedGroupCallBar(state: GroupCallUiState.Active) {
     val context = LocalContext.current
-    val joinedCount = state.members.count { it.status == GroupCallMemberStatus.JOINED } + 1
+    val joinedCount = (state.members.count { it.status == GroupCallMemberStatus.JOINED } + 1).coerceIn(1, CallLimits.GROUP_CALL_MAX)
+    val cappedLabel = CallLimits.groupParticipantsLabel(joinedCount)
     androidx.compose.ui.window.Popup(
         alignment = Alignment.BottomEnd,
         offset = androidx.compose.ui.unit.IntOffset(x = 24, y = -160)
@@ -119,7 +120,7 @@ private fun MinimizedGroupCallBar(state: GroupCallUiState.Active) {
                     Text(if (state.isVideo) "فيديو جماعي" else "صوت جماعي", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("$joinedCount مشاركون", color = Color.White.copy(0.7f), fontSize = 10.sp)
+                    Text(cappedLabel, color = Color.White.copy(0.88f), fontSize = 10.sp)
                     WhatsAppElapsedTimer(state.startedAt)
                 }
                 if (state.isVideo && GroupCallRuntime.eglContext != null) {
@@ -236,7 +237,8 @@ private fun WhatsAppActivePanel(state: GroupCallUiState.Active) {
 @Composable
 private fun WhatsAppActiveHeader(state: GroupCallUiState.Active) {
     val groupName = GroupCallRuntime.activeGroupName.ifBlank { "مجموعة يونس" }
-    val joinedCount = state.members.count { it.status == GroupCallMemberStatus.JOINED } + 1
+    val joinedCount = (state.members.count { it.status == GroupCallMemberStatus.JOINED } + 1).coerceIn(1, CallLimits.GROUP_CALL_MAX)
+    val countLabel = CallLimits.groupCountLabel(joinedCount)
     // Liquid Glass: مؤشر جودة حي — يقرأ lastStats مباشرة بلا Flow
     val quality = CallQualityManager.lastStats
     Row(
@@ -251,7 +253,7 @@ private fun WhatsAppActiveHeader(state: GroupCallUiState.Active) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         if (state.isVideo) "مكالمة فيديو جماعية" else "مكالمة صوتية جماعية",
-                        color = Color.White.copy(0.7f), fontSize = 12.sp
+                        color = Color.White.copy(0.88f), fontSize = 12.sp
                     )
                     WhatsAppElapsedTimer(state.startedAt)
                     // جودة الشبكة Liquid Glass
@@ -268,11 +270,11 @@ private fun WhatsAppActiveHeader(state: GroupCallUiState.Active) {
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            // عدد المشاركين
+            // عدد المشاركين — يعرض السقف 32 ليتضح الحد للمستخدم
             Box(
                 Modifier.clip(RoundedCornerShape(20.dp)).background(Color.White.copy(0.12f)).padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
-                Text("$joinedCount", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(countLabel, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             // شارة التشفير
             Box(
@@ -371,7 +373,7 @@ private fun WhatsAppAvatarTile(
             }
         }
         Text(label.take(14), color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (isSelf) FontWeight.Bold else FontWeight.Medium)
-        Text(if (isMuted) "مكتوم" else if (isSpeaking) "يتحدث..." else "متصل", color = if (isSpeaking) YounesEmerald else Color.White.copy(0.55f), fontSize = 10.sp)
+        Text(if (isMuted) "مكتوم" else if (isSpeaking) "يتحدث..." else "متصل", color = if (isSpeaking) YounesEmerald else Color.White.copy(0.82f), fontSize = 10.sp)
     }
 }
 
@@ -552,7 +554,7 @@ private fun WhatsAppControlIsland(
                 }
             }
         }
-        Text(if (state.isVideo) "مكالمة فيديو جماعية · مشفّرة" else "مكالمة صوتية جماعية · مشفّرة", color = Color.White.copy(0.45f), fontSize = 10.sp)
+        Text(if (state.isVideo) "مكالمة فيديو جماعية · مشفّرة" else "مكالمة صوتية جماعية · مشفّرة", color = Color.White.copy(0.78f), fontSize = 10.sp)
     }
 }
 
@@ -595,9 +597,9 @@ private fun WhatsAppIncomingPanel(state: GroupCallUiState.IncomingGroup) {
             Text(groupName, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(state.hostName.ifBlank { state.hostId }.let { "$it يدعوك" }, color = Color.White.copy(0.85f), fontSize = 15.sp, fontWeight = FontWeight.Medium)
             if (state.otherMembers.isNotEmpty()) {
-                Text("+ ${state.otherMembers.size} آخرون في المكالمة", color = Color.White.copy(0.55f), fontSize = 13.sp)
+                Text("+ ${state.otherMembers.size} آخرون في المكالمة", color = Color.White.copy(0.82f), fontSize = 13.sp)
             }
-            Text("المكالمة مشفّرة E2EE", color = Color.White.copy(0.4f), fontSize = 11.sp)
+            Text("المكالمة مشفّرة E2EE", color = Color.White.copy(0.78f), fontSize = 11.sp)
         }
 
         // أفاتار نابض مع دوائر متحدة — InfiniteTransition يعيش فقط داخل
@@ -649,7 +651,7 @@ private fun WhatsAppIncomingPanel(state: GroupCallUiState.IncomingGroup) {
                     Text("رفض", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            Text("يمكنك الانضمام لاحقاً من داخل المجموعة حتى بعد الرفض", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text("يمكنك الانضمام لاحقاً من داخل المجموعة حتى بعد الرفض", color = Color.White.copy(0.78f), fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
         }
     }
 }
@@ -685,7 +687,8 @@ private fun IncomingRingHalo() {
 @Composable
 private fun WhatsAppRingingPanel(state: GroupCallUiState.Ringing) {
     val context = LocalContext.current
-    val groupName = GroupCallRuntime.activeGroupName.ifBlank { "المجموعة" }
+    val groupName = GroupCallRuntime.activeGroupName.ifBlank { "مجموعة يونس" }
+    val totalIncludingSelf = (state.members.size + 1).coerceIn(1, CallLimits.GROUP_CALL_MAX)
     Column(
         modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -698,7 +701,7 @@ private fun WhatsAppRingingPanel(state: GroupCallUiState.Ringing) {
                 Text(if (state.isVideo) "📹 مكالمة فيديو جماعية" else "📞 مكالمة صوتية جماعية", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Text("ترن $groupName", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("جاري الاتصال بـ ${state.members.size} أشخاص — أول من يقبل يبدأ المكالمة", color = Color.White.copy(0.6f), fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("جاري الاتصال بـ ${CallLimits.groupCountLabel(totalIncludingSelf)} — أول من يقبل يبدأ المكالمة", color = Color.White.copy(0.85f), fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
 
         LazyVerticalGrid(
@@ -720,7 +723,7 @@ private fun WhatsAppRingingPanel(state: GroupCallUiState.Ringing) {
         ) {
             Icon(Icons.Default.CallEnd, null, tint = Color.White, modifier = Modifier.size(28.dp))
         }
-        Text("إلغاء", color = Color.White.copy(0.6f), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+        Text("إلغاء", color = Color.White.copy(0.82f), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
@@ -769,10 +772,10 @@ private fun WhatsAppMemberTile(member: GroupCallMember) {
     val (border, label, col) = when (member.status) {
         GroupCallMemberStatus.RINGING   -> Triple(YounesEmerald, "يرن...", Color(0xFFFFC107))
         GroupCallMemberStatus.JOINED    -> Triple(YounesEmerald, "انضم ✓", YounesEmerald)
-        GroupCallMemberStatus.DECLINED  -> Triple(Color(0xFFE53935), "رفض", Color(0xFFE53935))
-        GroupCallMemberStatus.NO_ANSWER -> Triple(Color(0xFF6B7280), "لم يرد", Color(0xFF6B7280))
-        GroupCallMemberStatus.LEFT      -> Triple(Color(0xFF6B7280), "غادر", Color(0xFF6B7280))
-        GroupCallMemberStatus.BUSY      -> Triple(Color(0xFFFB8C00), "مشغول", Color(0xFFFB8C00))
+        GroupCallMemberStatus.DECLINED  -> Triple(Color(0xFFE53935), "رفض", Color(0xFFFF8A80))
+        GroupCallMemberStatus.NO_ANSWER -> Triple(Color(0xFF9CA3AF), "لم يرد", Color(0xFFC7CDD6))
+        GroupCallMemberStatus.LEFT      -> Triple(Color(0xFF9CA3AF), "غادر", Color(0xFFC7CDD6))
+        GroupCallMemberStatus.BUSY      -> Triple(Color(0xFFFB8C00), "مشغول", Color(0xFFFFB74D))
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.size(68.dp).scale(pulse).clip(CircleShape)
@@ -782,7 +785,7 @@ private fun WhatsAppMemberTile(member: GroupCallMember) {
             Text(member.displayName.take(2).uppercase(), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
         Text(member.displayName.take(12), color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(col.copy(0.15f)).padding(horizontal = 7.dp, vertical = 2.dp)) {
+        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(col.copy(0.24f)).padding(horizontal = 7.dp, vertical = 2.dp)) {
             Text(label, color = col, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         }
     }
@@ -866,7 +869,7 @@ private fun GroupCallVideoTile(
                                 Modifier.clip(RoundedCornerShape(8.dp)).background(Color.White.copy(0.12f))
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
-                                Text("الكاميرا متوقفة", color = Color.White.copy(0.7f), fontSize = 9.sp)
+                                Text("الكاميرا متوقفة", color = Color.White.copy(0.88f), fontSize = 9.sp)
                             }
                         }
                     }

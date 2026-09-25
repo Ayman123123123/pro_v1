@@ -2,8 +2,9 @@
 <!--
     YOUNES Sovereign — Official Palette — LIGHT (values/) — 2026-09-24
     نظير values-night/ بالأسماء نفسها. تباين AA محسوب (WCAG 1.4.3):
-    أبيض على primary الداكن 5.62:1، كحلي #0F1B2D على لؤلؤي #F7F8FA ‏15:1،
-    ثانوي #5A6B7D على الأبيض 5.2:1، حد تفاعلي #5A6B7D ‏≥3:1 (1.4.11).
+    أبيض على primary الداكن 5.31:1، كحلي #0F1B2D على لؤلؤي #F7F8FA ‏16.27:1،
+    ثانوي #5A6B7D على الأبيض 5.48:1، ثالثي #5F7185 على الأبيض 5.02:1،
+    حد تفاعلي #5A6B7D ‏5.48:1 (1.4.11). المعطّل #6B7E94 ‏4.17:1 (≥3:1، معفى).
     الأحمر (yns_error) لدور Danger فقط — ليس لون علامة.
 -->
 <resources>
@@ -36,8 +37,8 @@
     <color name="yns_on_surface">#0F1B2D</color>
     <color name="yns_text_primary">#0F1B2D</color>
     <color name="yns_text_secondary">#5A6B7D</color>
-    <color name="yns_text_tertiary">#7A8FA3</color>
-    <color name="yns_text_disabled">#8A98A8</color>
+    <color name="yns_text_tertiary">#5F7185</color>
+    <color name="yns_text_disabled">#6B7E94</color>
 
     <!-- الحدود: تفاعلي مقابل زخرفي (WCAG 1.4.11) -->
     <color name="yns_outline">#5A6B7D</color>

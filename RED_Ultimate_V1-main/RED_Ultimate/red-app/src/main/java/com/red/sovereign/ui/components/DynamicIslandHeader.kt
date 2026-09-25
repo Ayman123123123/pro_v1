@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -60,17 +61,24 @@ fun DynamicIslandHeader(
     contentDescription: String? = null
 ) {
     var isExpanded by remember { mutableStateOf(false) }
+    // reduceMotion: قفزة فورية بلا أنيميشن (تفضيل تقليل الحركة).
+    val reduceMotion = com.red.sovereign.ui.theme.AppThemeState.reduceMotion
     val widthState by animateDpAsState(
         targetValue = if (isExpanded) 280.dp else 190.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = if (reduceMotion) spring(stiffness = Spring.StiffnessMedium)
+        else spring(stiffness = Spring.StiffnessMediumLow),
         label = "island_width"
     )
-    // وصف ديناميكي حسب الحالة: مكالمة / تسجيل / شبكة — يُمرَّر صراحةً عند الحاجة.
-    val resolvedDesc = contentDescription ?: when (icon) {
-        Icons.Rounded.Call -> "مكالمة نشطة: $title"
-        Icons.Rounded.Mic -> "تسجيل جارٍ: $title"
-        Icons.Rounded.Wifi -> "حالة الشبكة: $title"
-        else -> title
+    // الوصف يشمل العنوان الفرعي حتى لو كان مطويًا — قارئ الشاشة لا يفقد السياق.
+    val resolvedDesc = contentDescription ?: buildString {
+        append(when (icon) {
+            Icons.Rounded.Call -> "مكالمة نشطة: "
+            Icons.Rounded.Mic -> "تسجيل جارٍ: "
+            Icons.Rounded.Wifi -> "حالة الشبكة: "
+            else -> ""
+        })
+        append(title)
+        if (subtitle != null) append(" · $subtitle")
     }
 
     AnimatedVisibility(
@@ -87,13 +95,16 @@ fun DynamicIslandHeader(
             Surface(
                 modifier = Modifier
                     .width(widthState)
-                    .height(38.dp)
+                    .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .border(1.dp, SovereignColors.GlassBorder, RoundedCornerShape(20.dp))
-                    .clickable {
-                        isExpanded = !isExpanded
-                        onClick()
-                    },
+                    .clickable(
+                        onClickLabel = resolvedDesc,
+                        onClick = {
+                            isExpanded = !isExpanded
+                            onClick()
+                        }
+                    ),
                 color = SovereignColors.SurfaceNavy.copy(alpha = 0.92f),
                 shadowElevation = 8.dp
             ) {
@@ -125,7 +136,7 @@ fun DynamicIslandHeader(
                     if (subtitle != null && isExpanded) {
                         Text(
                             text = "· $subtitle",
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = Color.White.copy(alpha = 0.85f),
                             fontSize = 11.sp
                         )
                     }

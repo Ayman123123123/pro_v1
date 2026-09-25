@@ -1,6 +1,9 @@
 # RED Sovereign — Docker Compose Production Override
 # Extends base docker-compose.yml with production settings
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Config paths are canonical: infrastructure/observability/** (single source of
+# truth). The legacy monitoring/** copies are kept for reference only.
 
 services:
   # coturn TURN/STUN
@@ -18,7 +21,13 @@ services:
     ports:
       - "3478:3478/tcp"
       - "3478:3478/udp"
+      # Parity with base: TURNS + TCP relay range (clients advertise 5349/443).
+      - "5349:5349/tcp"
+      - "5349:5349/udp"
+      - "443:443/tcp"
+      - "80:80/tcp"
       - "45000-45050:45000-45050/udp"
+      - "45000-45050:45000-45050/tcp"
     networks:
       - red-net
     healthcheck:
@@ -41,7 +50,7 @@ services:
 
   # Prometheus
   prometheus:
-    image: prom/prometheus:v2.52.0
+    image: prom/prometheus:v3.1.0
     container_name: red-prometheus
     restart: unless-stopped
     mem_limit: 1g
@@ -55,7 +64,8 @@ services:
     expose:
       - "9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     networks:
       - red-net
@@ -67,7 +77,7 @@ services:
 
   # Alertmanager
   alertmanager:
-    image: prom/alertmanager:v0.26.0
+    image: prom/alertmanager:v0.28.0
     container_name: red-alertmanager
     restart: unless-stopped
     mem_limit: 256m
@@ -75,27 +85,27 @@ services:
     expose:
       - "9093"
     volumes:
-      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./infrastructure/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
     networks:
       - red-net
 
   # Grafana
   grafana:
-    image: grafana/grafana:10.4.0
+    image: grafana/grafana:11.4.0
     container_name: red-grafana
     restart: unless-stopped
     mem_limit: 512m
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
     # Internal only — expose via Nginx reverse-proxy, not host port.
     expose:
       - "3000"
     volumes:
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infrastructure/observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./infrastructure/observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - grafana-data:/var/lib/grafana
     networks:
       - red-net
@@ -109,7 +119,7 @@ services:
 
   # Node Exporter
   node-exporter:
-    image: prom/node-exporter:v1.7.0
+    image: prom/node-exporter:v1.8.2
     container_name: red-node-exporter
     restart: unless-stopped
     mem_limit: 128m
@@ -149,12 +159,12 @@ services:
 
   # Exporters
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.15.0
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
     container_name: red-postgres-exporter
     restart: unless-stopped
     mem_limit: 128m
     environment:
-      - DATA_SOURCE_NAME=postgresql://admin:${DB_PASSWORD}@db-postgres:5432/red_sovereign?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://admin:${DB_PASSWORD:?DB_PASSWORD is required}@db-postgres:5432/red_sovereign?sslmode=disable
     expose:
       - "9187"
     networks:
@@ -163,13 +173,13 @@ services:
       - db-postgres
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.58.0
+    image: oliver006/redis_exporter:v1.66.0
     container_name: red-redis-exporter
     restart: unless-stopped
     mem_limit: 128m
     environment:
       - REDIS_ADDR=cache-redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     expose:
       - "9121"
     networks:
@@ -178,12 +188,12 @@ services:
       - cache-redis
 
   nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:1.4.0
+    image: nginx/nginx-prometheus-exporter:1.4.2
     container_name: red-nginx-exporter
     restart: unless-stopped
     mem_limit: 64m
     environment:
-      - NGINX_SCRAPE_URI=http://nginx:8088/stub_status
+      - NGINX_SCRAPE_URI=http://nginx:80/stub_status
     expose:
       - "9113"
     networks:

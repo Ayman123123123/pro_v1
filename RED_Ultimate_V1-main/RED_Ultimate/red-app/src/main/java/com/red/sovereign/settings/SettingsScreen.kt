@@ -248,13 +248,8 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
                         )
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        // إعادة دفع القيم الحالية نفسها — كل setter يعيد PUT /api/social/privacy.
-                        TextButton(onClick = {
-                            vm.setLastSeenVisibility(vm.state.lastSeenVisibility)
-                            vm.setWhoCanCall(vm.state.whoCanCall)
-                            vm.setReadReceipts(vm.state.readReceipts)
-                            vm.setTypingIndicators(vm.state.typingIndicators)
-                        }) { Text("إعادة المحاولة") }
+                        // دفع واحد مدمج لآخر القيم — بدل 4 PUT متوازية كانت تتسابق.
+                        TextButton(onClick = { vm.retryPrivacySync() }) { Text("إعادة المحاولة") }
                         TextButton(onClick = vm::clearSyncError) { Text("إخفاء") }
                     }
                 }
@@ -636,7 +631,7 @@ private fun WallpaperSettings() {
     }
 }
 
-@Composable private fun StarredSettings(onOpenConversation: (String) -> Unit = {}) {
+@Composable private fun StarredSettings(onOpenConversation: ((String) -> Unit)? = null) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val org = remember { com.red.sovereign.core.ChatOrganizationStore(context) }
     val repo = remember { com.red.sovereign.core.database.LocalRepository(context) }
@@ -691,8 +686,17 @@ private fun WallpaperSettings() {
                         maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { onOpenConversation(starred.conversationId) }) { Text("فتح المحادثة") }
-                        Spacer(Modifier.weight(1f))
+                        if (onOpenConversation != null) {
+                            TextButton(onClick = { onOpenConversation(starred.conversationId) }) { Text("فتح المحادثة") }
+                            Spacer(Modifier.weight(1f))
+                        } else {
+                            Text(
+                                "الفتح من قائمة المحادثات",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                         TextButton(onClick = {
                             if (org.isStarred(starred.messageId)) org.toggleStarred(starred.messageId)
                             scope.launch { runCatching { repo.unstarMessage(starred.messageId) } }

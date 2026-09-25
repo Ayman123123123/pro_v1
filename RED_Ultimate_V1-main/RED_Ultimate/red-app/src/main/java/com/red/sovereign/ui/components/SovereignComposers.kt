@@ -573,7 +573,14 @@ private fun StoryLivePreview(
                 else -> {
                     val bg = runCatching { Color(android.graphics.Color.parseColor(bgColor)) }.getOrElse { Color(0xFF1565C0) }
                     Box(Modifier.fillMaxWidth().height(220.dp).background(bg), contentAlignment = Alignment.Center) {
-                        Text(textStory.ifBlank { "معاينة النص…" }, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(16.dp))
+                        // ستارة داكنة خلف النص — تضمن تباين ≥4.5:1 على كل الخلفيات الست (البرتقالي/الأصفر فاتحان).
+                        Text(
+                            textStory.ifBlank { "معاينة النص…" },
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            modifier = Modifier.padding(16.dp).background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(8.dp)).padding(8.dp)
+                        )
                     }
                 }
             }

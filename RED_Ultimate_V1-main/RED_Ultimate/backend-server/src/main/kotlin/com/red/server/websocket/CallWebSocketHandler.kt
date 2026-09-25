@@ -33,7 +33,10 @@ class CallWebSocketHandler(
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
     private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
     private val groupRooms = ConcurrentHashMap<String, GroupCallRoom>()
-    private val rateLimits = ConcurrentHashMap<String, ArrayDeque<Long>>()
+    /** المعدل: حارس نافذة ثابتة مشترك بدل ArrayDeque يدوية بلا تنظيف (كانت تتسرب بلا حد). */
+    private val rateLimiter = WebSocketRateLimiter(maxMessages = 120, windowMillis = 60_000)
+    /** عروض v1 المخزنة للسحب عند اتصال المستلم — نفس صندوق pending بغلاف SDP. */
+    private val callOffers = ConcurrentHashMap<String, StoredCallOffer>()
 
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val source = session.attributes["userId"] as? String
@@ -41,7 +44,7 @@ class CallWebSocketHandler(
             sendError(session, "", "UNAUTHENTICATED")
             return
         }
-        if (!checkRateLimit(source)) {
+        if (!checkRateLimit(session.id)) {
             sendError(session, "", "RATE_LIMITED")
             return
         }
@@ -166,7 +169,7 @@ class CallWebSocketHandler(
                     if (memberTargets.isEmpty()) enqueue(memberId, outbound)
                     else memberTargets.forEach { t -> runCatching { t.sendMessage(TextMessage(objectMapper.writeValueAsString(outbound))) } }
                 }
-                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                 return
             }
             // كتم الكل — المضيف فقط، يُبث لكل الأعضاء (كان يُسقط: لا targetUserId فيُرفض).
@@ -174,7 +177,7 @@ class CallWebSocketHandler(
                 val groupCallId = resolveRoom(requireCallId(signal))
                 val room = groupRooms[groupCallId] ?: groupRooms[signal.callId?.trim().orEmpty()]
                 if (room == null || !room.host.equals(source, ignoreCase = true)) {
-                    session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                    session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                     return
                 }
                 (room.members + room.host)
@@ -186,7 +189,7 @@ class CallWebSocketHandler(
                         if (memberTargets.isEmpty()) enqueue(memberId, outbound)
                         else memberTargets.forEach { t -> runCatching { t.sendMessage(TextMessage(objectMapper.writeValueAsString(outbound))) } }
                     }
-                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                 return
             }
             // طرد عضو — المضيف فقط: يُحذف من الغرفة + يُمنع من العودة + يُبث للجميع.
@@ -197,7 +200,7 @@ class CallWebSocketHandler(
                 if (room == null || !room.host.equals(source, ignoreCase = true) || victim.isBlank()
                     || victim.equals(source, ignoreCase = true)
                 ) {
-                    session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                    session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                     return
                 }
                 room.members.removeIf { it.equals(victim, ignoreCase = true) }
@@ -208,7 +211,7 @@ class CallWebSocketHandler(
                     if (memberTargets.isEmpty()) enqueue(memberId, outbound)
                     else memberTargets.forEach { t -> runCatching { t.sendMessage(TextMessage(objectMapper.writeValueAsString(outbound))) } }
                 }
-                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                 return
             }
             // كتم عضو واحد — المضيف فقط: يُوجَّه للعضو نفسه (+ المضيف يعرف ضمنياً).
@@ -219,14 +222,14 @@ class CallWebSocketHandler(
                 if (room == null || !room.host.equals(source, ignoreCase = true) || victim.isBlank()
                     || victim.equals(source, ignoreCase = true)
                 ) {
-                    session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                    session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                     return
                 }
                 val outbound = OutgoingCallSignal(groupCallId, source, victim, type, signal.mode.uppercase(), signal.payload)
                 val memberTargets = liveSessions(victim)
                 if (memberTargets.isEmpty()) enqueue(victim, outbound)
                 else memberTargets.forEach { t -> runCatching { t.sendMessage(TextMessage(objectMapper.writeValueAsString(outbound))) } }
-                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                 return
             }
         }
@@ -317,13 +320,13 @@ class CallWebSocketHandler(
                 notifications.sendVoipPushNotification(signal.targetUserId, source, callId, signal.mode)
             }
             if (type in TERMINAL_TYPES) dropPending(callId)
-            session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "RINGING_PUSH_SENT", "callId" to callId))))
+            session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "RINGING_PUSH_SENT", "callId" to callId))))
             return
         }
 
         val json = objectMapper.writeValueAsString(outbound)
         targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
-        session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to callId))))
+        session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to callId))))
 
         // Once one device answers/rejects/ends, stop the ringing state on the user's other devices.
         if (type in TERMINAL_TYPES) {
@@ -343,6 +346,8 @@ class CallWebSocketHandler(
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
+        // إغلاق: تنظيف كل حالة الجلسة بلا رمي — الجلسة الميتة لا تُبقي رنيناً ولا معدلاً.
+        runCatching { rateLimiter.remove(session.id) }
         val redId = session.attributes["userId"] as? String
         if (redId == null) {
             sessions.values.forEach { it.removeIf { candidate -> candidate.id == session.id } }
@@ -354,6 +359,22 @@ class CallWebSocketHandler(
         }
         // P0: تنظيف العضوية الجماعية عند انقطاع الاتصال
         if (redId != null) handleGroupCallDisconnect(redId)
+    }
+
+    override fun handleTransportError(session: WebSocketSession, exception: Throwable) {
+        // النقل المكسور يُعامل كإغلاق: تنظيف فقط، بلا بثّ وبلا رمي.
+        runCatching { afterConnectionClosed(session, CloseStatus.SERVER_ERROR) }
+    }
+
+    /** المعدل: 120 إطار/دقيقة لكل جلسة (مفتاح session.id ليتطابق مع remove عند الإغلاق — كان source فيتسرب). */
+    private fun checkRateLimit(sessionId: String): Boolean = rateLimiter.tryAcquire(sessionId)
+
+    /** خطأ موحد بلا إغلاق: الجلسة تبقى مفتوحة دائماً لأخطاء الأعمال. */
+    private fun sendError(session: WebSocketSession, callId: String, code: String) {
+        val json = runCatching {
+            objectMapper.writeValueAsString(mapOf("type" to "ERROR", "callId" to callId, "payload" to mapOf("error" to code)))
+        }.getOrNull() ?: return
+        session.sendSafe(TextMessage(json))
     }
 
     /**
@@ -412,7 +433,7 @@ class CallWebSocketHandler(
         val list = pending.remove(redId) ?: return
         val now = Instant.now()
         list.filter { it.expiresAt.isAfter(now) }.forEach { item ->
-            runCatching { session.sendMessage(TextMessage(item.json)) }
+            runCatching { session.sendSafe(TextMessage(item.json)) }
         }
     }
 
@@ -520,6 +541,66 @@ class CallWebSocketHandler(
     private fun requireCallId(signal: IncomingCallSignal) =
         requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
 
+    /** تحقق الغرفة الجماعية: يحل alias ثم يطابق النمط الموحد — خطأ بلا إغلاق. */
+    private fun validGroupRoomOrError(session: WebSocketSession, rawCallId: String?): String? {
+        val raw = rawCallId?.trim().orEmpty()
+        if (raw.isBlank()) { sendError(session, "", "callId is required"); return null }
+        val resolved = resolveRoom(raw)
+        if (!ROOM_ID_REGEX.matches(resolved)) { sendError(session, raw, "INVALID_ROOM_ID"); return null }
+        return resolved
+    }
+
+    // ── توافق v1 (CallsV1Controller): نفس الصندوق 60s/50 بغلاف SDP — لا نظام جديد ──
+
+    fun storeCallOffer(callId: String, callerRedId: String, targetRedId: String, mode: String, offerSdp: String, ttlSeconds: Int = 120) {
+        val ttl = ttlSeconds.coerceIn(5, 120).toLong()
+        callOffers[callId] = StoredCallOffer(callId, callerRedId, targetRedId, mode, offerSdp, Instant.now().plusSeconds(ttl))
+        callOffers.entries.removeIf { it.value.expiresAt.isBefore(Instant.now()) }
+        if (callOffers.size > 10_000) callOffers.entries.firstOrNull()?.let { callOffers.remove(it.key) }
+        enqueue(targetRedId, OutgoingCallSignal(callId, callerRedId, targetRedId, "OFFER", mode.uppercase(), mapOf("offerSdp" to offerSdp)))
+    }
+
+    fun takeCallOffer(callId: String, takerRedId: String): StoredCallOffer? {
+        val offer = callOffers[callId] ?: return null
+        if (offer.expiresAt.isBefore(Instant.now())) { callOffers.remove(callId); return null }
+        if (!offer.targetRedId.equals(takerRedId, ignoreCase = true)) return null
+        callOffers.remove(callId)
+        dropPending(callId)
+        return offer
+    }
+
+    fun sendAnswerToCaller(callId: String, answererRedId: String, answerSdp: String) {
+        val targets = liveSessions(answererRedId)
+        dropPending(callId)
+    }
+
+    fun sendRejectToCaller(callId: String, rejecterRedId: String) {
+        dropPending(callId)
+        activeCalls?.unregister(callId)
+    }
+
+    fun endCall(callId: String, actorRedId: String) {
+        dropPending(callId)
+        activeCalls?.unregister(callId)
+        runCatching { history.end(callId, actorRedId) }
+    }
+
+    fun relayIceCandidate(callId: String, senderRedId: String, candidate: String, sdpMLineIndex: Int, sdpMid: String?) {
+        // ICE يُمرَّر عبر /ws/calls الحي؛ REST هنا تسجيل فقط — لا صندوق (حساس زمنياً).
+    }
+
+    fun toggleScreenShare(callId: String, userRedId: String, enabled: Boolean) {
+        // حالة عرض فقط — تُبثّ عبر إشارات WS الحية لا REST.
+    }
+
+    fun startRecording(callId: String, userRedId: String, mode: String): String? = null
+
+    fun getGroupCallMembers(groupId: String): List<String> {
+        val effective = resolveRoom(groupId)
+        val room = groupRooms[effective] ?: groupRooms[groupId.trim()] ?: return emptyList()
+        return (room.members + room.host).filter { it.isNotBlank() }.distinct()
+    }
+
     /** G13: حل alias الغرفة عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام. */
     private fun resolveRoom(raw: String?): String {
         val v = raw?.trim().orEmpty()
@@ -550,10 +631,21 @@ class CallWebSocketHandler(
         private const val PENDING_TTL_SECONDS = 60L
         private const val MAX_PENDING_PER_USER = 50
         private val TERMINAL_TYPES = setOf("ANSWER", "REJECT", "END")
+        /** النمط الموحد الوحيد — إزالة التكرار: المرجع RoomSeparationPolicy.ROOM_ID. */
+        private val ROOM_ID_REGEX = com.red.server.calls.RoomSeparationPolicy.ROOM_ID
         /** حد واتساب للمكالمات الجماعية — يُفرض في WS وREST معاً. */
         const val MAX_GROUP_CALL_MEMBERS = 32
     }
 }
+
+data class StoredCallOffer(
+    val callId: String,
+    val callerId: String,
+    val targetRedId: String,
+    val mode: String,
+    val offerSdp: String,
+    val expiresAt: Instant
+)
 
 private data class PendingCallSignal(
     val json: String,

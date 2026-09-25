@@ -55,4 +55,36 @@ object CallLimits {
     fun checkZoom(totalMembers: Int): String? = check(Kind.ZOOM, totalMembers)
     fun checkMesh(peerCount: Int): String? = check(Kind.MESH, peerCount)
     fun checkLiveCohost(cohosts: Int): String? = check(Kind.LIVE_COHOST, cohosts)
+
+    /** المقاعد المتبقية قبل بلوغ السقف — 0 إن ممتلئ. */
+    fun remaining(kind: Kind, currentCount: Int): Int =
+        (limitFor(kind) - currentCount.coerceAtLeast(0)).coerceAtLeast(0)
+
+    /** تحقق الإضافة أثناء المكالمة: الإجمالي بعد الإضافة مقابل السقف. */
+    fun checkAdd(kind: Kind, currentTotal: Int, toAdd: Int): String? {
+        if (toAdd <= 0) return null
+        return check(kind, currentTotal + toAdd)
+    }
+
+    /** اختصار مسار الإضافة الجماعية (المضيف + الأعضاء + الجدد مقابل 32). */
+    fun checkGroupCallAdd(currentTotal: Int, toAdd: Int): String? =
+        checkAdd(Kind.GROUP_CALL, currentTotal, toAdd)
+
+    /** هل بلغت المكالمة الجماعية السقف؟ */
+    fun isGroupCallFull(totalMembers: Int): Boolean = totalMembers >= GROUP_CALL_MAX
+
+    /** تسمية العدّ الموحدة «n/32» مع تثبيت العرض عند السقف حتى لا يظهر 33/32. */
+    fun groupCountLabel(totalIncludingSelf: Int): String =
+        "${totalIncludingSelf.coerceIn(0, GROUP_CALL_MAX)}/$GROUP_CALL_MAX"
+
+    /** تسمية المشاركين الموحدة مع تباين المفرد/المثنى/الجمع. */
+    fun groupParticipantsLabel(totalIncludingSelf: Int): String {
+        val n = totalIncludingSelf.coerceIn(0, GROUP_CALL_MAX)
+        val unit = when (n) {
+            1 -> "مشارك واحد"
+            2 -> "مشاركان"
+            else -> "$n مشاركاً"
+        }
+        return "$unit / $GROUP_CALL_MAX"
+    }
 }

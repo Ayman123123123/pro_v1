@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { mkdirSync, statfsSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, resolve, sep } from 'path';
 import { Room, RecordingOptions, RecordingSession } from './types.js';
 import { MediaManager } from './media.js';
 import { EventEmitter } from 'events';
@@ -19,8 +19,12 @@ export class RecordingManager extends EventEmitter {
   }
 
   async startRecording(room: Room, options: RecordingOptions): Promise<RecordingSession> {
+    this.validateOptions(options);
+    if (room.recording || this.getRoomRecording(room.id)) {
+      throw new Error('Recording already in progress');
+    }
     const recordingId = `rec_${room.id}_${Date.now()}`;
-    const outputPath = options.outputPath || `${this.outputDir}/${recordingId}.${options.format}`;
+    const outputPath = this.resolveSafeOutputPath(options.outputPath, recordingId, options.format);
 
     mkdirSync(dirname(outputPath), { recursive: true });
     mkdirSync(this.outputDir, { recursive: true });
@@ -164,6 +168,50 @@ export class RecordingManager extends EventEmitter {
 
   getAllRecordings(): RecordingSession[] {
     return Array.from(this.recordings.values());
+  }
+
+  private validateOptions(options: RecordingOptions): void {
+    if (options.format !== 'mp4' && options.format !== 'webm') {
+      throw new Error('Invalid recording options');
+    }
+    if (options.layout !== 'grid' && options.layout !== 'speaker' && options.layout !== 'pip' && options.layout !== 'custom') {
+      throw new Error('Invalid recording options');
+    }
+    if (!Number.isInteger(options.width) || options.width < 160 || options.width > 3840) {
+      throw new Error('Invalid recording options');
+    }
+    if (!Number.isInteger(options.height) || options.height < 120 || options.height > 2160) {
+      throw new Error('Invalid recording options');
+    }
+    if (!Number.isInteger(options.framerate) || options.framerate < 1 || options.framerate > 60) {
+      throw new Error('Invalid recording options');
+    }
+    if (!Number.isInteger(options.videoBitrate) || options.videoBitrate < 100 || options.videoBitrate > 20000) {
+      throw new Error('Invalid recording options');
+    }
+    if (!Number.isInteger(options.audioBitrate) || options.audioBitrate < 32 || options.audioBitrate > 512) {
+      throw new Error('Invalid recording options');
+    }
+    if (options.layout === 'custom') {
+      const custom = (options as { customLayout?: { regions?: unknown[] } }).customLayout;
+      if (!custom || !Array.isArray(custom.regions) || custom.regions.length === 0) {
+        throw new Error('Invalid recording options');
+      }
+    }
+  }
+
+  private resolveSafeOutputPath(customPath: string | undefined, recordingId: string, format: string): string {
+    const base = resolve(this.outputDir);
+    if (!customPath) return resolve(base, `${recordingId}.${format}`);
+    if (customPath.includes('\0')) throw new Error('Invalid output path');
+    const resolved = resolve(base, customPath);
+    if (resolved !== base && !resolved.startsWith(base + sep)) {
+      throw new Error('Invalid output path');
+    }
+    if (!/\.(mp4|webm)$/i.test(resolved)) {
+      throw new Error('Invalid output path');
+    }
+    return resolved;
   }
 
   private buildFfmpegArgs(room: Room, options: RecordingOptions, outputPath: string): string[] {

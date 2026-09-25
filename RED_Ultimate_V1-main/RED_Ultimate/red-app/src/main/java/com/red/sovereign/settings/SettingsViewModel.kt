@@ -269,8 +269,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setMobileDownload(value: Boolean) = update(state.copy(autoDownloadMobile = value))
     fun setAutoDownloadLimit(value: Int) = update(state.copy(autoDownloadLimitMb = value.coerceIn(1, 99)))
     fun setNotificationPreview(value: Boolean) = update(state.copy(notificationPreview = value))
-    fun setMessageNotifications(value: Boolean) = update(state.copy(messageNotifications = value))
-    fun setCallNotifications(value: Boolean) = update(state.copy(callNotifications = value))
+    fun setMessageNotifications(value: Boolean) = update(state.copy(messageNotifications = value)).also { applyNotificationChannels() }
+    fun setCallNotifications(value: Boolean) = update(state.copy(callNotifications = value)).also { applyNotificationChannels() }
     fun setDataSaverCalls(value: Boolean) = update(state.copy(dataSaverCalls = value))
     // LEGENDARY FIX: قبول السرعات الست الموحدة (كانت ترفض 0.5/0.75/1.25 المختارة في المشغل فتعود للافتراضي)
     fun setDefaultPlaybackSpeed(value: Float) = update(state.copy(defaultPlaybackSpeed = value.takeIf { it in setOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f) } ?: 1f))
@@ -292,16 +292,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setEnterToSend(value: Boolean) = update(state.copy(enterToSend = value))
     fun setSaveMediaToGallery(value: Boolean) = update(state.copy(saveMediaToGallery = value))
     fun setAutoArchiveMuted(value: Boolean) = update(state.copy(autoArchiveMuted = value))
-    fun setGroupNotifications(value: Boolean) = update(state.copy(groupNotifications = value))
+    fun setGroupNotifications(value: Boolean) = update(state.copy(groupNotifications = value)).also { applyNotificationChannels() }
     fun setLockTimeoutSeconds(value: Int) = update(state.copy(lockTimeoutSeconds = value.coerceIn(5, 300)))
     fun setThemePreset(value: String) = update(state.copy(themePreset = value))
     fun setThemeMode(value: String) = update(state.copy(themeMode = value))
     fun setLiquidGlass(value: Boolean) = update(state.copy(liquidGlassEnabled = value))
     fun setCustomPrimary(value: Int) = update(state.copy(customPrimary = value))
     // ─── البنود الثمانية المفعّلة في DeviceSettingsScreen — كل setter يحفظ فوراً ──
-    fun setNotificationSound(value: Boolean) = update(state.copy(notificationSound = value))
-    fun setNotificationVibration(value: Boolean) = update(state.copy(notificationVibration = value))
-    fun setNotificationLed(value: Boolean) = update(state.copy(notificationLed = value))
+    // قنوات النظام تُطبق فوراً هنا أيضاً (وليس فقط من DeviceSettingsDialogs) حتى لا
+    // يبقى مبدّل SettingsSheet وهمياً: القيمة محفوظة لكن القناة لم تتغير.
+    fun setNotificationSound(value: Boolean) = update(state.copy(notificationSound = value)).also { applyNotificationChannels() }
+    fun setNotificationVibration(value: Boolean) = update(state.copy(notificationVibration = value)).also { applyNotificationChannels() }
+    fun setNotificationLed(value: Boolean) = update(state.copy(notificationLed = value)).also { applyNotificationChannels() }
     fun setMediaQuality(value: String) = update(state.copy(mediaQuality = sanitizeMediaQuality(value)))
     fun setConnectionMode(value: String) = update(state.copy(connectionMode = sanitizeConnectionMode(value)))
     // ─── نغمة مكالمة RED + اهتزاز الرنين — تُحفظ فوراً ويقرأها YounesCallService/GroupCallService ──
@@ -357,6 +359,29 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val privacyJson = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
+    /** يطبق قنوات النظام من القيم المحفوظة حالياً — مبدّلات الإشعارات الستة تستدعيه. */
+    private fun applyNotificationChannels() {
+        runCatching { NotificationPrefs.apply(getApplication()) }
+            .onFailure { Log.w("SettingsViewModel", "NotificationPrefs.apply failed", it) }
+    }
+
+    /**
+     * إعادة دفع واحدة مدمجة لآخر قيم الخصوصية (بدل 4 PUT متوازية من زر
+     * "إعادة المحاولة" كانت تتسابق على _syncError وتُربك الخادم).
+     */
+    fun retryPrivacySync() {
+        val s = state
+        pushPrivacy(
+            PrivacySyncBody(
+                lastSeen = s.lastSeenVisibility,
+                onlineStatus = s.lastSeenVisibility,
+                readReceipts = if (s.readReceipts) "EVERYONE" else "NOBODY",
+                calls = s.whoCanCall,
+                typingIndicators = if (s.typingIndicators) "EVERYONE" else "NOBODY"
+            )
+        )
+    }
+
     private fun pushPrivacy(body: PrivacySyncBody) = viewModelScope.launch {
         runCatching {
             val client = AuthorizedApiClient(TokenStore(getApplication()))
@@ -364,8 +389,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }.onFailure {
             Log.e("SettingsViewModel", "PUT /api/social/privacy failed", it)
             _syncError.value = "تعذر مزامنة الخصوصية: ${it.message?.take(120)}"
-        }.onSuccess {
-            _syncError.value = null
+        }.onSuccess { result ->
+            // request يعيد ApiResult لا يرمي عند خطأ HTTP — ميّز النجاح عن الفشل الصريح.
+            when (result) {
+                is com.red.sovereign.auth.ApiResult.Success -> _syncError.value = null
+                is com.red.sovereign.auth.ApiResult.Error -> {
+                    Log.e("SettingsViewModel", "PUT /api/social/privacy error: ${result.message}")
+                    _syncError.value = "تعذر مزامنة الخصوصية: ${result.message.take(120)}"
+                }
+            }
         }
     }
 

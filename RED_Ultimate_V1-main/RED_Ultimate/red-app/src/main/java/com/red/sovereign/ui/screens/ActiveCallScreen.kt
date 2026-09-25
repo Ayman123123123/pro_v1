@@ -290,7 +290,7 @@ fun ActiveCallScreen(modifier: Modifier = Modifier) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("مكالمة ثانية من $waitingName", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             if (waitingName != waiting.peer) {
-                                Text(waiting.peer, color = Color.White.copy(0.6f), fontSize = 11.sp)
+                                Text(waiting.peer, color = Color.White.copy(alpha = 0.92f), fontSize = 12.sp)
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(

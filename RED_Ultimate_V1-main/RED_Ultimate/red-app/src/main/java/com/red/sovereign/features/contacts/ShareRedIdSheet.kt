@@ -209,15 +209,19 @@ fun ShareRedIdSheet(
 }
 
 /**
- * يولّد رمز QR حقيقي عبر ZXing بتنسيق `RED-12345` — نفس الصيغة التي
+ * يولّد رمز QR حقيقي عبر ZXing — نفس الصيغة التي
  * يقبلها ماسح التطبيق ([QrScannerSheet]) والمعرّف الموحّد [com.red.sovereign.core.YounesId].
+ * لا يُضاعِف البادئة: إن كان redId مخزّنًا بصيغة `RED-12345` يُرمَّز كما هو،
+ * وإلا يُرمَّز الخام (الماسح يطبّع عبر YounesId.normalizeInput أيًا كانت الصيغة).
  */
 private fun buildQrBitmap(redId: String, size: Int = 512): Bitmap? = runCatching {
+    val clean = redId.trim()
+    val payload = if (clean.startsWith("RED-", ignoreCase = true) || clean.startsWith("YNS-", ignoreCase = true)) clean.uppercase() else clean
     val hints = mapOf(
         EncodeHintType.MARGIN to 2,
         EncodeHintType.CHARACTER_SET to "UTF-8"
     )
-    val matrix = QRCodeWriter().encode("RED-$redId", BarcodeFormat.QR_CODE, size, size, hints)
+    val matrix = QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, size, size, hints)
     val pixels = IntArray(size * size)
     for (y in 0 until size) {
         val rowOffset = y * size

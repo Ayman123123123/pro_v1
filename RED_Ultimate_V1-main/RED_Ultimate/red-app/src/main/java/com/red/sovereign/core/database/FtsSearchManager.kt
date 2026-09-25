@@ -118,6 +118,15 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
                 "AFTER DELETE ON messages BEGIN " +
                 "DELETE FROM messages_fts WHERE messageId = old.id; END"
         )
+        // الجدول الفعلي هو local_history (لا messages) — بدونه تتراكم يتامى FTS
+        // عند كل حذف محادثة/رسالة. best-effort: يُنشأ إن وُجد الجدول.
+        runCatching {
+            db.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS local_history_fts_delete " +
+                    "AFTER DELETE ON local_history BEGIN " +
+                    "DELETE FROM messages_fts WHERE messageId = old.id; END"
+            )
+        }
     }
 
     fun indexMessage(messageId: String, conversationId: String, senderId: String, plaintext: String) {

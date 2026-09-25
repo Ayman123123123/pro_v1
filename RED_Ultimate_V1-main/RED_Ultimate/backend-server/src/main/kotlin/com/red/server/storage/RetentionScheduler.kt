@@ -46,11 +46,20 @@ class RetentionScheduler(
      * `java.time.Instant` فيرمي «Can't infer the SQL type…» عند التنفيذ.
      * الجملة تُصرَّف بلا شكوى، ويسقط التنظيف كاملًا في أول تشغيل مجدول —
      * صامتًا لأن المُجدوِل يبتلع الاستثناء.
+     *
+     * allow-list صارمة (احتفاظ آمن): أي جدول/عمود خارج الثوابت المعتمدة
+     * يُرفض فورًا (fail-closed) بدل تمريره للـ SQL.
      */
-    private fun deleteBatch(table: String, column: String, cutoff: Instant, limit: Int): Int = jdbc.update(
-        """DELETE FROM $table WHERE id IN (
-              SELECT id FROM $table WHERE $column < ? ORDER BY $column ASC LIMIT ?
-            )""",
-        java.sql.Timestamp.from(cutoff), limit
-    )
+    private fun deleteBatch(table: String, column: String, cutoff: Instant, limit: Int): Int {
+        val allowed = mapOf(
+            "admin_audit_log" to setOf("created_at"),
+            "system_health" to setOf("last_check_at")
+        )
+        require(allowed[table]?.contains(column) == true) { "Retention: table/column not allowed ($table.$column)" }
+        return jdbc.update(
+            "DELETE FROM $table WHERE id IN (" +
+                "SELECT id FROM $table WHERE $column < ? ORDER BY $column ASC LIMIT ?)",
+            java.sql.Timestamp.from(cutoff), limit
+        )
+    }
 }

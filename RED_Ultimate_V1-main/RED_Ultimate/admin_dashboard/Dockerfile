@@ -18,7 +18,7 @@ COPY . .
 # Strict gates: ESLint 9 (flat) + Vite 5 bundle — one layer, fail-fast.
 RUN npm run lint && npm run build
 
-FROM nginx:1.29-alpine
+FROM nginx:1.29.1-alpine
 LABEL maintainer="YOUNES Sovereign" \
       description="YOUNES Master Admin — Unified 16-page dashboard (RTL dark, antd, echarts)" \
       version="1.0.0"

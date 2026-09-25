@@ -39,9 +39,11 @@ import com.red.sovereign.ui.theme.YounesEmerald
 fun FocusedSearchDialog(
     initialQuery: String = "",
     contacts: List<PublicRedProfile> = emptyList(),
+    serverResults: List<PublicRedProfile> = emptyList(),
     isOnline: (String) -> Boolean = { false },
     onDismiss: () -> Unit,
-    onResultClick: (PublicRedProfile) -> Unit
+    onResultClick: (PublicRedProfile) -> Unit,
+    onAddServerResult: (PublicRedProfile) -> Unit = {}
 ) {
     // المفتاح initialQuery: تغيّر الاستعلام الأولي (إعادة فتح ببحث مختلف)
     // يُعيد تهيئة الحقل بدل تجمّده على أول قيمة رُكّبت بها الشاشة.
@@ -165,6 +167,43 @@ fun FocusedSearchDialog(
                                     null,
                                     tint = Color.Gray
                                 )
+                            }
+                            HorizontalDivider(Modifier.padding(start = 72.dp))
+                        }
+                        // مكمّل الخادم داخل الحوار — لا يحجب المحلي، زر إضافة مباشر.
+                        val knownIds = results.map { it.redId }.toSet()
+                        val extra = serverResults.filter { it.redId !in knownIds }
+                        if (extra.isNotEmpty()) {
+                            item(key = "server-header") {
+                                Text(
+                                    "من الخادم • ${extra.size}",
+                                    color = YounesEmerald,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                        items(extra, key = { "srv-${it.redId}" }) { person ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier.size(48.dp).clip(CircleShape)
+                                        .background(YounesEmerald.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(person.displayName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(person.displayName, fontWeight = FontWeight.SemiBold)
+                                    Text("@${person.username} • ${person.redId}", color = Color.Gray, fontSize = 12.sp)
+                                }
+                                TextButton(onClick = { onAddServerResult(person) }) { Text("إضافة") }
                             }
                             HorizontalDivider(Modifier.padding(start = 72.dp))
                         }

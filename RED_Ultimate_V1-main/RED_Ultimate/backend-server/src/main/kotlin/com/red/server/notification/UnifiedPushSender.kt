@@ -46,6 +46,11 @@ class UnifiedPushSender {
      * Never logs the endpoint itself - topic URLs are bearer capabilities.
      */
     fun send(endpoint: String, payload: ByteArray): Int {
+        // التسليم: سقف حجم الإيقاظ (8KB) — الحمولات الشاردة تُرفض محليًا بدل إغراق الموزع
+        if (payload.isEmpty() || payload.size > 8 * 1024) {
+            logger.warn("push.send_rejected reason=bad_size size={}", payload.size)
+            return -1
+        }
         val url = parse(endpoint) ?: return -1
         val outbound = sealWake(endpoint, payload)
         var code = -1

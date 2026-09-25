@@ -6,7 +6,7 @@ on:
       - 'fix/**'
       - 'extracted/**'
     paths:
-      - 'RED_Ultimate_V1-main/**'
+      - 'RED_Ultimate/**'
       - 'workflow-ready/**'
   workflow_dispatch:
     inputs:
@@ -65,7 +65,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-red-${{ runner.os }}-${{ hashFiles('RED_Ultimate_V1-main/RED_Ultimate/gradle/libs.versions.toml','RED_Ultimate_V1-main/RED_Ultimate/gradle/wrapper/gradle-wrapper.properties') }}
+          key: gradle-red-${{ runner.os }}-${{ hashFiles('RED_Ultimate/gradle/libs.versions.toml','RED_Ultimate/gradle/wrapper/gradle-wrapper.properties') }}
 
       - name: Resolve inputs
         id: inputs
@@ -83,20 +83,21 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          ROOT="RED_Ultimate_V1-main/RED_Ultimate"
+          ROOT="RED_Ultimate"
           cd "$ROOT"
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
-          cat >> gradle.properties <<EOF
-          RED_SERVER_URL=${{ steps.inputs.outputs.server_url }}
-          RED_TARGET_ABI=${{ steps.inputs.outputs.target_abi }}
-          EOF
-          ./gradlew :app:assembleDebug -PRED_SKIP_BUILD_LOGIC=true --stacktrace --no-daemon --info 2>&1 | tee build-output.log
+          # Pass via -P flags (never append to gradle.properties — that would
+          # pollute the checkout for later steps and leak into the cache).
+          ./gradlew :app:assembleDebug -PRED_SKIP_BUILD_LOGIC=true \
+            -PRED_SERVER_URL="${{ steps.inputs.outputs.server_url }}" \
+            -PRED_TARGET_ABI="${{ steps.inputs.outputs.target_abi }}" \
+            --stacktrace --no-daemon --info 2>&1 | tee build-output.log
 
       - name: Extract build errors
         if: always()
         run: |
-          LOG="RED_Ultimate_V1-main/RED_Ultimate/build-output.log"
+          LOG="RED_Ultimate/build-output.log"
           if [ -f "$LOG" ]; then
             {
               echo "## Build result: ${{ steps.build.outcome }}"
@@ -120,7 +121,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-output-log
-          path: RED_Ultimate_V1-main/RED_Ultimate/build-output.log
+          path: RED_Ultimate/build-output.log
           if-no-files-found: ignore
 
       - name: Upload APK
@@ -128,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: red-app-debug
-          path: RED_Ultimate_V1-main/RED_Ultimate/red-app/build/outputs/apk/debug/*.apk
+          path: RED_Ultimate/red-app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Attach APK to release
@@ -137,7 +138,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          APK=$(find RED_Ultimate_V1-main/RED_Ultimate/red-app/build/outputs/apk/debug -name '*.apk' | head -1)
+          APK=$(find RED_Ultimate/red-app/build/outputs/apk/debug -name '*.apk' | head -1)
           cp "$APK" red-app-debug.apk
           gh release upload v1.0.0 red-app-debug.apk --repo "$GITHUB_REPOSITORY" --clobber
           echo "APK attached to release v1.0.0"

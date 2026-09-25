@@ -27,13 +27,15 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
       - name: Run unit tests
-        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        # :app is mapped to red-app/ via projectDir in settings.gradle.kts —
+        # the single canonical Android product. There is no :red-app project.
+        working-directory: RED_Ultimate
         run: |
           chmod +x ./gradlew
-          ./gradlew :red-app:testDebugUnitTest --no-daemon --stacktrace
+          ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: '**/build/test-results/**/*.xml'
+          path: 'RED_Ultimate/**/build/test-results/**/*.xml'

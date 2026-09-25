@@ -11,6 +11,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import com.red.sovereign.core.ServerEndpoint
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -334,6 +337,7 @@ private fun ModernNetworkStateRow(state: NetworkState) {
 
 @Composable
 private fun ModernDiscoveredServerCard(server: DiscoveredServer) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -399,8 +403,12 @@ private fun ModernDiscoveredServerCard(server: DiscoveredServer) {
                 }
             }
             
-            IconButton(onClick = { /* connect */ }) {
-                Icon(Icons.Filled.Link, null, tint = SovereignRedPrimary)
+            IconButton(onClick = {
+                runCatching { ServerEndpoint.update(context.applicationContext, server.url) }
+                    .onSuccess { Toast.makeText(context, "تم حفظ نقطة الاتصال", Toast.LENGTH_SHORT).show() }
+                    .onFailure { Toast.makeText(context, "تعذر الحفظ", Toast.LENGTH_SHORT).show() }
+            }) {
+                Icon(Icons.Filled.Link, "حفظ كنقطة اتصال", tint = SovereignRedPrimary)
             }
         }
     }

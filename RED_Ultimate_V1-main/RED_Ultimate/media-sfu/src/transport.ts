@@ -19,6 +19,9 @@ export class TransportManager extends EventEmitter {
   }
 
   async createWebRtcTransport(router: Router, direction: 'send' | 'recv'): Promise<WebRtcTransport> {
+    if (direction !== 'send' && direction !== 'recv') {
+      throw new Error('Invalid message format');
+    }
     const listenInfo = { protocol: 'udp' as const, ip: '0.0.0.0', announcedAddress: this.config.announcedIp || undefined };
     const listenInfoTcp = { protocol: 'tcp' as const, ip: '0.0.0.0', announcedAddress: this.config.announcedIp || undefined };
 

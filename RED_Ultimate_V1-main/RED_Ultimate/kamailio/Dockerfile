@@ -1,8 +1,9 @@
 # RED Sovereign — Kamailio SBC Dockerfile
-# Based on official kamailio:5.8-bookworm
+# Official image moved off Docker Hub to GHCR (kamailio.org: "Due to Docker Hub
+# restrictions we migrated to Github Packages Registry").
 # Includes: TLS, WebSocket, RTPengine, carrier routing, topology hiding
 
-FROM kamailio:5.8-bookworm
+FROM ghcr.io/kamailio/kamailio:5.8.7-bookworm
 
 # Install additional modules and tools
 RUN apt-get update && apt-get install -y --no-install-recommends \

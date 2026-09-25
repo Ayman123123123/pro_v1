@@ -127,8 +127,8 @@ object RedColorScheme {
         surfaceContainerHigh = Color(0xFFE6E8EB),
         surfaceContainerHighest = Color(0xFFDDE1E6),
 
-        // Outlines — تفاعلي 3.34:1 على الأبيض (≥3:1)، والفاصل زخرفي
-        outline = Color(0xFF7A8FA3),
+        // Outlines — تفاعلي 5.48:1 على الأبيض (≥3:1)، والفاصل زخرفي
+        outline = Color(0xFF5A6B7D),
         outlineVariant = Color(0xFFD0D7DE),
 
         // Inverse
@@ -253,7 +253,7 @@ object RedColorScheme {
                 surfaceContainerLow = Color(0xFFF7F8FA),
                 surfaceContainerHigh = Color(0xFFE6E8EB),
                 surfaceContainerHighest = Color(0xFFDDE1E6),
-                outline = Color(0xFF7A8FA3),
+                outline = Color(0xFF5A6B7D),
                 outlineVariant = Color(0xFFD0D7DE),
                 inversePrimary = tonal.tone80,
                 inverseSurface = Color(0xFF0A0F18),

@@ -5,8 +5,12 @@
 -- ═══════════════════════════════════════════════════════════════════════
 
 -- ── 1) Materialized View: إحصائيات القنوات (بدون messages - في MongoDB) ──
+-- guarded fresh-install: community_id/deleted_at/message_count تضاف في V64 — تُبنى هنا فقط إن وُجدت، وإلا تتولاها V65
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='channels')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='channels' AND column_name='community_id')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='channels' AND column_name='deleted_at')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='channels' AND column_name='message_count')
      AND NOT EXISTS (SELECT 1 FROM pg_matviews WHERE matviewname = 'mv_daily_channel_stats') THEN
     CREATE MATERIALIZED VIEW mv_daily_channel_stats AS
     SELECT
@@ -51,9 +55,11 @@ DO $$ BEGIN
 END $$;
 
 -- ── 3) Materialized View: أعضاء القناة النشطين ──
+-- guarded fresh-install: left_at يضاف في V64 — يُبنى هنا فقط إن وُجد، وإلا تتولاه V65
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='channel_members')
      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='channel_members' AND column_name='joined_at')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='channel_members' AND column_name='left_at')
      AND NOT EXISTS (SELECT 1 FROM pg_matviews WHERE matviewname = 'mv_channel_active_members') THEN
     CREATE MATERIALIZED VIEW mv_channel_active_members AS
     SELECT

@@ -197,7 +197,7 @@ fun YounesLiveStreamOverlay() {
                             Text("🎙", fontSize = 48.sp)
                         }
                         Text("بث صوتي مباشر", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("🎞 الجودة: صوت فقط — وفّر البيانات", color = Color.Gray, fontSize = 12.sp)
+                        Text("🎞 الجودة: صوت فقط — وفّر البيانات", color = Color(0xFFCBD5E1), fontSize = 12.sp)
                     }
                 }
             } else if (isBroadcaster && localVideo != null) {
@@ -228,7 +228,7 @@ fun YounesLiveStreamOverlay() {
                         }
                         if (camErr == "PERMISSION" && isBroadcaster) {
                             Text("📷 إذن الكاميرا مرفوض", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("البث يعمل صوت فقط الآن. امنح الإذن لتشغيل الفيديو.", color = Color.Gray, fontSize = 13.sp)
+                            Text("البث يعمل صوت فقط الآن. امنح الإذن لتشغيل الفيديو.", color = Color(0xFFCBD5E1), fontSize = 13.sp)
                             Button(
                                 onClick = { requestMediaPermissions() },
                                 colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.LiveContainer),
@@ -237,7 +237,7 @@ fun YounesLiveStreamOverlay() {
                             ) { Text("منح إذن الكاميرا والميكروفون") }
                         } else if (camErr == "UNAVAILABLE" && isBroadcaster) {
                             Text("📷 الكاميرا غير متاحة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("قد تكون مشغولة بتطبيق آخر أو غير مدعومة — أنت تبث صوت فقط.", color = Color.Gray, fontSize = 13.sp)
+                            Text("قد تكون مشغولة بتطبيق آخر أو غير مدعومة — أنت تبث صوت فقط.", color = Color(0xFFCBD5E1), fontSize = 13.sp)
                             Button(
                                 onClick = { LiveStreamService.retryMedia(context) },
                                 colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.Cyan),
@@ -265,7 +265,7 @@ fun YounesLiveStreamOverlay() {
                                     shape = RoundedCornerShape(12.dp)
                                 ) { Text("🎞 صوت فقط", color = Color.White, fontSize = 12.sp) }
                             }
-                            TextButton(onClick = { LiveStreamService.stop(context) }) { Text("مغادرة", color = Color.Gray) }
+                            TextButton(onClick = { LiveStreamService.stop(context) }) { Text("مغادرة", color = Color(0xFFCBD5E1)) }
                         }
                         if (!hasCam() && isBroadcaster && camErr == null) {
                             TextButton(onClick = { requestMediaPermissions() }) { Text("طلب صلاحيات الكاميرا/الصوت", color = SovereignColors.Cyan, fontSize = 12.sp) }
@@ -397,7 +397,7 @@ fun YounesLiveStreamOverlay() {
                             .padding(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text("الضيوف (${coHosts.size}/4)", color = Color(0xFFF5C842), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("الضيوف (${coHosts.size}/${CallLimits.LIVE_COHOST_MAX})", color = Color(0xFFF5C842), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         for (row in coHosts.chunked(2)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 for ((uid, track) in row) {
@@ -612,7 +612,8 @@ fun YounesLiveStreamOverlay() {
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(
                                         text = "${msg.senderName}: ",
-                                        color = Color(0xFFC0C0C0),
+                                        // تباين: فضي فاتح E2E8F0 بدل C0C0C0 ليُقرأ على التدرج الأسود.
+                                        color = Color(0xFFE2E8F0),
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -695,7 +696,7 @@ fun YounesLiveStreamOverlay() {
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp),
-                        placeholder = { Text(if (replyTo != null) "رد..." else "أضف تعليقاً...", color = Color.White.copy(0.7f), fontSize = 13.sp) },
+                        placeholder = { Text(if (replyTo != null) "رد..." else "أضف تعليقاً...", color = Color.White.copy(0.85f), fontSize = 13.sp) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = Color.White.copy(alpha = 0.2f),
@@ -976,7 +977,7 @@ private fun ViewersSheet(
                             Text(
                                 if (viewerCount == 0) "لا يوجد مشاهدون بعد — ادعُ أصدقاءك!"
                                 else "انضم $viewerCount مشاهِد — تظهر الأسماء فور تفاعلهم أو إضافتهم كأصدقاء",
-                                color = Color.Gray, fontSize = 13.sp
+                                color = Color(0xFFCBD5E1), fontSize = 13.sp
                             )
                         }
                     } else {
@@ -988,7 +989,7 @@ private fun ViewersSheet(
                             value = viewerQuery,
                             onValueChange = { viewerQuery = it },
                             modifier = Modifier.fillMaxWidth().height(48.dp),
-                            placeholder = { Text("بحث عن مشاهد...", color = Color.Gray, fontSize = 12.sp) },
+                            placeholder = { Text("بحث عن مشاهد...", color = Color(0xFFCBD5E1), fontSize = 12.sp) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -1023,7 +1024,7 @@ private fun ViewersSheet(
                                     }
                                     Column(Modifier.weight(1f)) {
                                         Text(name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(id, color = Color.Gray, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(id, color = Color(0xFFCBD5E1), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                     if (isBroadcaster) {
                                         // إدارة المذيع: كتم + طرد (كان عرض فقط بأيقونة Person)
@@ -1038,7 +1039,7 @@ private fun ViewersSheet(
                                             modifier = Modifier.clickable { onKick(id) }.padding(4.dp)
                                         )
                                     } else {
-                                        Icon(Icons.Default.Person, null, tint = Color.White.copy(0.5f), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Person, null, tint = Color.White.copy(0.85f), modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -1046,7 +1047,7 @@ private fun ViewersSheet(
                         if (viewerCount > viewerIds.size) {
                             Text(
                                 "+${viewerCount - viewerIds.size} مشاهِد آخر لم تصل بياناته بعد",
-                                color = Color.Gray, fontSize = 12.sp
+                                color = Color(0xFFCBD5E1), fontSize = 12.sp
                             )
                         }
                     }
@@ -1083,7 +1084,7 @@ private fun RaisedHandsSheet(
                     }
                     if (hands.isEmpty()) {
                         Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                            Text("لا توجد طلبات — سيظهر هنا من يرفع يده للصعود كمضيف مشارك", color = Color.Gray, fontSize = 13.sp)
+                            Text("لا توجد طلبات — سيظهر هنا من يرفع يده للصعود كمضيف مشارك", color = Color(0xFFCBD5E1), fontSize = 13.sp)
                         }
                     } else {
                         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1098,18 +1099,18 @@ private fun RaisedHandsSheet(
                                     }
                                     Column(Modifier.weight(1f)) {
                                         Text(h.userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(h.userId, color = Color.Gray, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(h.userId, color = Color(0xFFCBD5E1), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                     Button(
                                         onClick = { onApprove(h.userId) },
                                         colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.Cyan),
                                         shape = RoundedCornerShape(12.dp)
                                     ) { Text("قبول", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
-                                    TextButton(onClick = { onReject(h.userId) }) { Text("رفض", color = Color.Gray, fontSize = 12.sp) }
+                                    TextButton(onClick = { onReject(h.userId) }) { Text("رفض", color = Color(0xFFCBD5E1), fontSize = 12.sp) }
                                 }
                             }
                         }
-                        Text("الحد الأقصى 4 مضيفين مشاركين في نفس الوقت", color = Color.Gray, fontSize = 11.sp)
+                        Text("الحد الأقصى ${CallLimits.LIVE_COHOST_MAX} مضيفين مشاركين في نفس الوقت", color = Color(0xFFE2E8F0), fontSize = 11.sp)
                     }
                 }
             }
@@ -1131,7 +1132,7 @@ private fun QualitySheet(
             ) {
                 Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("🎞 جودة المشاهدة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("التلقائي يختار الأفضل حسب شبكتك. اختر جودة منخفضة لتوفير البيانات وتقليل التقطيع.", color = Color.Gray, fontSize = 12.sp)
+                    Text("التلقائي يختار الأفضل حسب شبكتك. اختر جودة منخفضة لتوفير البيانات وتقليل التقطيع.", color = Color(0xFFCBD5E1), fontSize = 12.sp)
                     LiveQuality.entries.forEach { q ->
                         val selected = q == current
                         Row(
@@ -1207,14 +1208,14 @@ private fun HostControlsSheet(
                         onClick = onUnpin,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text("📌 إلغاء تثبيت التعليق", color = Color.Gray) }
+                    ) { Text("📌 إلغاء تثبيت التعليق", color = Color(0xFFCBD5E1)) }
                     HorizontalDivider(color = Color.White.copy(0.08f))
                     Text("🚫 الكلمات المحظورة (افصل بفاصلة)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     OutlinedTextField(
                         value = blockedWords,
                         onValueChange = onBlockedWordsChange,
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("مثال: spam, إعلان, xxx", color = Color.Gray, fontSize = 12.sp) },
+                        placeholder = { Text("مثال: spam, إعلان, xxx", color = Color(0xFFCBD5E1), fontSize = 12.sp) },
                         singleLine = false,
                         minLines = 1,
                         maxLines = 3,
@@ -1252,7 +1253,7 @@ private fun InviteFromLiveSheet(
             ) {
                 Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("دعوة إلى البث", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("شارك الرابط أو ادعُ صديقاً عبر معرّف يونس", color = Color.Gray, fontSize = 12.sp)
+                    Text("شارك الرابط أو ادعُ صديقاً عبر معرّف يونس", color = Color(0xFFCBD5E1), fontSize = 12.sp)
                     // رابط
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(0.08f)).clickable { onCopyLink() }.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("younes://livestream/$streamId", color = SovereignColors.Cyan, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -1287,7 +1288,7 @@ private fun InviteFromLiveSheet(
                         value = inviteRedId,
                         onValueChange = onRedIdChange,
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("مثال: 12345", color = Color.Gray) },
+                        placeholder = { Text("مثال: 12345", color = Color(0xFFCBD5E1)) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color.White.copy(0.06f), unfocusedContainerColor = Color.White.copy(0.04f), focusedBorderColor = SovereignColors.LiveContainer, unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White),
                         shape = RoundedCornerShape(12.dp)
@@ -1296,7 +1297,7 @@ private fun InviteFromLiveSheet(
                         onClick = onInviteFriend,
                         enabled = inviteRedId.isNotBlank(),
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.LiveContainer, disabledContainerColor = Color.Gray.copy(0.3f)),
+                        colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.LiveContainer, disabledContainerColor = Color(0xFF94A3B8).copy(0.35f)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(16.dp))
@@ -1467,7 +1468,7 @@ private fun LiveIncomingCard(state: LiveStreamUiState.Incoming) {
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text("انضم لمشاهدة البث المباشر والتفاعل", color = Color.Gray, fontSize = 14.sp)
+                    Text("انضم لمشاهدة البث المباشر والتفاعل", color = Color(0xFFCBD5E1), fontSize = 14.sp)
                 }
                 Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(

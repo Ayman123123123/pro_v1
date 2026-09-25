@@ -132,8 +132,8 @@ class AdminV2Controller(
             )},
             "page" to page,
             "size" to size,
-            "totalElements" to allUsers.totalElements,
-            "totalPages" to allUsers.totalPages
+            "totalElements" to totalElements,
+            "totalPages" to totalPages
         ))
     }
 
@@ -375,9 +375,10 @@ class AdminV2Controller(
         @PathVariable name: String,
         @RequestBody body: Map<String, Any?>,
         authentication: Authentication
-    ): ResponseEntity<FeatureFlag> {
+    ): ResponseEntity<Any> {
         val adminId = UUID.fromString(authentication.name)
         val updated = service.updateFeatureFlag(name, adminId, body)
+            ?: return ResponseEntity.status(404).body(mapOf("success" to false, "error" to "FLAG_NOT_FOUND"))
         service.recordAudit(
             adminId = adminId,
             adminUsername = authentication.principal.toString(),
@@ -387,7 +388,7 @@ class AdminV2Controller(
             targetId = name,
             description = "Updated feature flag: ${body.keys}"
         )
-        return ResponseEntity.ok(updated ?: FeatureFlag().apply { flagName = "NOT_FOUND" })
+        return ResponseEntity.ok(updated)
     }
 
     // ━━━━━━━━━━━━━━━━ 🚨 User Reports ━━━━━━━━━━━━━━━━
@@ -406,8 +407,7 @@ class AdminV2Controller(
         val result = when {
             assignedToMe && adminId != null && status != null ->
                 service.getReportsForAdmin(adminId, status, pageable)
-            status != null -> service.getReports(status, pageable)
-            else -> service.getReports(null, pageable)
+            else -> service.getReportsFiltered(status, category, pageable)
         }
         return ResponseEntity.ok(result)
     }

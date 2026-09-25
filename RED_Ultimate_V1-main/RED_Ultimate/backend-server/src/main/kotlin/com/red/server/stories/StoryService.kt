@@ -143,7 +143,14 @@ class StoryService(
 
     @Scheduled(fixedDelay = 300_000)
     fun cleanupExpired() {
-        val expired = mongo.find(Query(Criteria.where("expiresAt").lte(Instant.now())), StoryDocument::class.java)
+        // احتفاظ آمن محدود: دفعة واحدة ≤500 مرتبة بالأقدم — بلا تحميل
+        // غير محدود في الذاكرة. TTL في Mongo يحذف المستند، وهذا المسار
+        // يحذف كائن MinIO أولًا ثم المستند (OrphanCleanupScheduler شبكة أمان أخيرة).
+        val expired = mongo.find(
+            Query(Criteria.where("expiresAt").lte(Instant.now()))
+                .with(Sort.by(Sort.Direction.ASC, "expiresAt")).limit(EXPIRED_CLEANUP_BATCH),
+            StoryDocument::class.java
+        )
         expired.forEach { story ->
             if (story.mediaKey.isNotBlank()) runCatching { media.delete(story.mediaKey) }
         }
@@ -198,5 +205,7 @@ class StoryService(
     private companion object {
         val HEX_COLOR = Regex("^#[0-9A-Fa-f]{6}$")
         const val MAX_STORY_DURATION_MS = 24 * 60 * 60 * 1000L
+        /** سقف دفعة تنظيف القصص المنتهية لكل دورة (احتفاظ آمن محدود). */
+        const val EXPIRED_CLEANUP_BATCH = 500
     }
 }

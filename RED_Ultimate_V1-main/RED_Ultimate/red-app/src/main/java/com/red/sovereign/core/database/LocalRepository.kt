@@ -265,11 +265,20 @@ class LocalRepository(context: Context) {
         }
     }
 
-    /** يحذف كل بيانات محادثة: السجل المحلي + الرسائل + تفاعلاتها + صف المحادثة. */
+    /** يحذف كل بيانات محادثة: السجل + الرسائل + تفاعلاتها + outbox/media/FTS + صف المحادثة.
+     * stars تُحذف عبر FK CASCADE من local_history. outbox/media بلا FK عمدًا
+     * (ترتيب المزامنة) فيُحذفان صراحةً هنا best-effort — لا معاملة عابرة للـ DAO
+     * دون لمس RedDatabase (خارج النطاق)، والـ FTS trigger يغطي الباقي. */
     suspend fun deleteConversation(convId: String) {
         dao.deleteLocalHistoryByConversation(convId)
         dao.deleteMessagesByConversation(convId)
         dao.deleteReactionsByConversation(convId)
+        runCatching { outboxDao.deleteByConversation(convId) }
+        runCatching { mediaDao.deleteByConversation(convId) }
+        runCatching {
+            RedDatabase.getInstance(appCtx).openHelper.writableDatabase
+                .execSQL("DELETE FROM messages_fts WHERE conversationId = ?", arrayOf(convId))
+        }
         dao.deleteConversationRow(convId)
     }
 

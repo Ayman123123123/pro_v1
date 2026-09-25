@@ -21,6 +21,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -88,7 +90,7 @@ fun ModernMessageBubble(
                 Text(
                     text = senderRedId,
                     color = YounesMuted,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -140,14 +142,14 @@ fun ModernMessageBubble(
             }
             Text(
                 text = time,
-                fontSize = 11.sp,
-                color = if (isMe) Color.White.copy(alpha = 0.7f) else YounesMuted
+                fontSize = 12.sp,
+                color = if (isMe) Color.White.copy(alpha = 0.87f) else YounesMuted
             )
             if (isMe) {
                 val tickColor = when (status) {
-                    "READ" -> YounesReadTick
-                    "DELIVERED" -> Color.White.copy(alpha = 0.7f)
-                    else -> Color.White.copy(alpha = 0.5f)
+                    "READ" -> YounesPrimaryGlow
+                    "DELIVERED" -> Color.White.copy(alpha = 0.92f)
+                    else -> Color.White.copy(alpha = 0.87f)
                 }
                 Text(
                     text = when (status) {
@@ -189,11 +191,11 @@ fun ModernChatInputBar(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // زر إيموجي
+            // زر إيموجي — هدف لمس 48dp
             IconButton(
                 onClick = onEmoji,
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(YounesSurface2)
             ) {
@@ -216,34 +218,32 @@ fun ModernChatInputBar(
                 maxLines = 5
             )
             
-            // زر مرفقات
+            // زر مرفقات — هدف لمس 48dp
             IconButton(
                 onClick = onAttach,
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(YounesSurface2)
             ) {
                 Icon(Icons.Default.AttachFile, "مرفقات", tint = YounesMuted)
             }
             
-            // زر إرسال/صوت
-            val sendModifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(
-                    if (messageText.isNotBlank()) YounesPrimary
-                    else if (isRecording) YounesRose
-                    else YounesSurface2
-                )
-                .clickable {
-                    if (messageText.isNotBlank()) onSend() else onVoice()
-                }
-            
-            Box(sendModifier, contentAlignment = Alignment.Center) {
+            // زر إرسال/صوت — هدف لمس 48dp مع تسمية لقارئ الشاشة وتموّج نظامي
+            val sendLabel = if (messageText.isNotBlank()) "إرسال" else "تسجيل"
+            val sendContainer = if (messageText.isNotBlank()) YounesPrimary
+            else if (isRecording) YounesRose
+            else YounesSurface2
+            IconButton(
+                onClick = { if (messageText.isNotBlank()) onSend() else onVoice() },
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(sendContainer)
+            ) {
                 Icon(
                     imageVector = if (messageText.isNotBlank()) Icons.Default.Send else Icons.Default.Mic,
-                    contentDescription = if (messageText.isNotBlank()) "إرسال" else "تسجيل",
+                    contentDescription = sendLabel,
                     tint = if (messageText.isNotBlank() || isRecording) YounesOnPrimary else YounesMuted,
                     modifier = Modifier.size(20.dp)
                 )
@@ -394,28 +394,53 @@ fun ModernCallBar(
             IconButton(
                 onClick = { onCall(false) },
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(YounesPrimary)
             ) {
-                Icon(Icons.Default.Call, "صوتي", tint = YounesOnPrimary, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Call, "مكالمة صوتية", tint = YounesOnPrimary, modifier = Modifier.size(20.dp))
             }
             IconButton(
                 onClick = { onCall(true) },
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(YounesCobalt)
             ) {
-                Icon(Icons.Default.Videocam, "فيديو", tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Videocam, "مكالمة فيديو", tint = Color.White, modifier = Modifier.size(20.dp))
             }
         }
     }
 }
 
-// مؤشر كتابة متحرك
+// مؤشر كتابة متحرك — يحترم reduceMotion (نقاط ثابتة) + وصف لقارئ الشاشة
 @Composable
 fun ModernTypingIndicator(modifier: Modifier = Modifier) {
+    if (com.red.sovereign.ui.theme.AppThemeState.reduceMotion) {
+        Card(
+            modifier = modifier.semantics(mergeDescendants = true) {
+                contentDescription = "يكتب الآن"
+            },
+            colors = CardDefaults.cardColors(containerColor = YounesSurface2),
+            shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
+        ) {
+            Row(
+                Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(3) {
+                    Box(
+                        Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(YounesMuted.copy(alpha = 0.8f))
+                    )
+                }
+            }
+        }
+        return
+    }
     val infiniteTransition = rememberInfiniteTransition(label = "typing")
     val dot1 by infiniteTransition.animateFloat(
         initialValue = 0f, targetValue = 1f,
@@ -440,7 +465,9 @@ fun ModernTypingIndicator(modifier: Modifier = Modifier) {
     )
     
     Card(
-        modifier = modifier,
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = "يكتب الآن"
+        },
         colors = CardDefaults.cardColors(containerColor = YounesSurface2),
         shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
     ) {
@@ -471,7 +498,8 @@ fun ModernTypingIndicator(modifier: Modifier = Modifier) {
     }
 }
 
-// شارة حالة الشبكة
+// شارة حالة الشبكة — النص أبيض عالي التباين (≥7:1) واللون في النقطة فقط
+// (السابق: نص ملوّن فاتح على خلفية 0.22 شفافة — تباين راسب على الداكن).
 @Composable
 fun NetworkStatusBadge(
     quality: String,
@@ -484,11 +512,17 @@ fun NetworkStatusBadge(
         "FAIR" -> Color(0xFFF0C674)
         else -> Color(0xFFF25C5C)
     }
+    val label = when (quality) {
+        "EXCELLENT" -> "ممتازة"
+        "GOOD" -> "جيدة"
+        "FAIR" -> "متوسطة"
+        else -> "ضعيفة"
+    }
     
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
-        color = color.copy(alpha = 0.15f)
+        color = color.copy(alpha = 0.22f)
     ) {
         Row(
             Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -502,9 +536,9 @@ fun NetworkStatusBadge(
                     .background(color)
             )
             Text(
-                text = if (isLan) "محلي $quality" else quality,
-                fontSize = 10.sp,
-                color = color,
+                text = if (isLan) "محلي $label" else label,
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.92f),
                 fontWeight = FontWeight.Bold
             )
         }

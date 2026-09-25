@@ -140,7 +140,9 @@ function authenticate(header) {
     throw new Error('Unauthorized');
   }
   // سماح انحراف الساعة 120s (LAN بلا NTP) — يطابق clockSkewSeconds في JwtService
-  if (!claims.sub || !claims.redId || !claims.exp || claims.exp * 1000 <= Date.now() - 120000) throw new Error('Expired or invalid token');
+  if (!claims.sub || !claims.redId || !claims.exp) throw new Error('Invalid token claims');
+  if (claims.exp * 1000 <= Date.now() - 120000) throw new Error('Expired or invalid token');
+  if (typeof claims.iat === 'number' && claims.iat * 1000 > Date.now() + 120000) throw new Error('Invalid token claims');
   return claims;
 }
 
@@ -250,7 +252,9 @@ async function createTransport(router) {
 
   transport.on('dtlsstatechange', state => {
     if (state === 'failed') console.warn(`DTLS state failed on transport ${transport.id}`);
-    if (state === 'closed') transport.close();
+    if (state === 'closed' && !transport.closed) {
+      try { transport.close(); } catch { /* already closed — ignore */ }
+    }
   });
   transport.on('iceselectedtuplechange', tuple => {
     console.debug(`ICE tuple selected for transport ${transport.id}: ${JSON.stringify(tuple)}`);
@@ -459,6 +463,7 @@ wss.on('connection', (ws, _req, claims) => {
       if (type === 'createTransport') {
         // Limit transports per peer (prevent resource exhaustion)
         if (peer.transports.size >= 4) throw new Error('Too many transports');
+        if (message.direction !== undefined && message.direction !== 'send' && message.direction !== 'recv') throw new Error('Invalid message format');
         const transport = await createTransport(context.room.router);
         peer.transports.set(transport.id, transport);
         transport.on('close', () => peer.transports.delete(transport.id));
@@ -473,6 +478,7 @@ wss.on('connection', (ws, _req, claims) => {
       if (type === 'connectTransport') {
         const transport = peer.transports.get(message.transportId);
         if (!transport) throw new Error('Transport not found');
+        if (!message.dtlsParameters || typeof message.dtlsParameters !== 'object') throw new Error('Invalid message format');
         await transport.connect({ dtlsParameters: message.dtlsParameters });
         return send(ws, requestId, { status: 'transportConnected', transportId: transport.id });
       }

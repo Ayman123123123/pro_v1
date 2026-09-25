@@ -44,6 +44,10 @@ class JwtService(
         }
     }
 
+    /** True when a dedicated SFU secret is configured (no secret shared with the access-token signer). */
+    val dedicatedSfuSecretInUse: Boolean
+        get() = configuredSfuSecret.isNotBlank() && configuredSfuSecret != configuredSecret
+
     private fun isProdEnvironment(): Boolean {
         val profiles = buildList {
             add(System.getProperty("spring.profiles.active", ""))
@@ -86,6 +90,7 @@ class JwtService(
         val now = Instant.now()
         val builder = Jwts.builder()
             .subject(user.id.toString())
+            .claim("typ", "access")
             .claim("redId", user.redId)
             .claim("username", user.username)
             .claim("role", user.role.name)
@@ -110,6 +115,7 @@ class JwtService(
         val now = Instant.now()
         val builder = Jwts.builder()
             .subject(user.id.toString())
+            .claim("typ", "sfu")
             .claim("redId", user.redId)
             .claim("username", user.username)
             .claim("role", user.role.name)
@@ -128,8 +134,12 @@ class JwtService(
 
     // سماح انحراف الساعة 120s (LAN بلا NTP: هاتف/PC قد ينحرف دقائق بعد sleep) —
     // بدونه أي انحراف >0 يرمي ExpiredJwtException ويُسقط الجلسة ظلماً.
+    // يفرض المُصدِر والجمهور المتوقعين حتى لا يُعاد استخدام رمز موقّع
+    // بالمفتاح نفسه خارج سياق تطبيق RED.
     fun parse(token: String): Claims = Jwts.parser()
         .verifyWith(key)
+        .requireIssuer(issuer)
+        .requireAudience(audience)
         .clockSkewSeconds(120)
         .build()
         .parseSignedClaims(token)
@@ -139,5 +149,50 @@ class JwtService(
 
     fun deviceId(token: String): UUID? = parse(token)["deviceId"]?.toString()?.let(UUID::fromString)
 
+    /**
+     * يتحقق من تذكرة SFU إعلامية بمفتاح SFU المخصص (لا المفتاح الرئيسي)،
+     * ويرفض رمز الوصول العادي الذي أُعيد استخدامه كتذكرة وسائط — حتى في
+     * وضع السقوط التلقائي (نفس المفتاح) يبقى التمييز عبر الادعاءات الإلزامية.
+     * الشكل بايت-متطابق مع SfuTicketSigner.issue (calls/) عمدًا.
+     *
+     * فصل النوع عبر `typ`: رمز الوصول الجديد يحمل `typ=access` فيُرفض هنا
+     * صراحةً حتى مع تطابق المفتاح (وضع dev). التذاكر القديمة بلا `typ`
+     * (مثل SfuTicketSigner في calls/ الذي لا يضع `typ`) تُقبل انتقاليًا
+     * ما دامت تحمل ادعاءات النطاق SFU الإلزامية أدناه.
+     */
+    fun parseSfuTicket(token: String): SfuTicketClaims {
+        val claims = runCatching {
+            Jwts.parser()
+                .verifyWith(sfuKey)
+                .requireIssuer(issuer)
+                .requireAudience(audience)
+                .clockSkewSeconds(120)
+                .build()
+                .parseSignedClaims(token)
+                .payload
+        }.getOrElse { throw IllegalArgumentException("INVALID_SFU_TICKET") }
+        if (claims["typ"]?.toString() == "access") throw IllegalArgumentException("INVALID_SFU_TICKET")
+        val userId = runCatching { UUID.fromString(claims.subject) }.getOrNull()
+            ?: throw IllegalArgumentException("INVALID_SFU_TICKET")
+        // deviceId إلزامي في تذاكر SFU — رمز بلا جهاز (أدمن) لا يصلح للوسائط.
+        val deviceId = runCatching { UUID.fromString(requireNotNull(claims["deviceId"]?.toString())) }.getOrNull()
+            ?: throw IllegalArgumentException("SFU_TICKET_DEVICE_REQUIRED")
+        val groupId = claims["sfuGroupId"]?.toString()?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("SFU_TICKET_NOT_SFU_SCOPED")
+        val groupRole = claims["sfuGroupRole"]?.toString()?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("SFU_TICKET_NOT_SFU_SCOPED")
+        val canProduce = claims["sfuCanProduce"] as? Boolean
+            ?: throw IllegalArgumentException("SFU_TICKET_NOT_SFU_SCOPED")
+        return SfuTicketClaims(userId, deviceId, groupId, groupRole, canProduce)
+    }
+
     fun expirationSeconds(): Long = expirationMs / 1000
 }
+
+data class SfuTicketClaims(
+    val userId: UUID,
+    val deviceId: UUID,
+    val groupId: String,
+    val groupRole: String,
+    val canProduce: Boolean
+)

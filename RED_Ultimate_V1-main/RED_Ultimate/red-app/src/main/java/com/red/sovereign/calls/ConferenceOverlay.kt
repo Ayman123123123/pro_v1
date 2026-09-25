@@ -116,6 +116,9 @@ fun YounesConferenceOverlay() {
     }
     // غرفة الانتظار: لوحة إدارة المنتظرين (مضيف/مضيف مشارك)
     var showLobbySheet by remember { mutableStateOf(false) }
+    // تأكيد الإجراءات المدمرة: كتم الكل والطرد — ضغطة واحدة كانت تكفي.
+    var showMuteAllConfirm by remember { mutableStateOf(false) }
+    var pendingKickTarget by remember { mutableStateOf<ConferenceParticipant?>(null) }
 
     val scheme = MaterialTheme.colorScheme
 
@@ -182,18 +185,19 @@ fun YounesConferenceOverlay() {
                                     tint = if (isSpeakerFocusMode) scheme.primary else scheme.onBackground
                                 )
                             }
-                            if (ConferenceRuntime.selfRole == "HOST") {
+                            // الأدوار: المضيف والمضيف المشارك يملكان قفل الغرفة وكتم الكل (مرآة لحارس ConferenceService).
+                            if (ConferenceRuntime.selfRole == "HOST" || ConferenceRuntime.selfRole == "CO_HOST") {
                                 IconButton(
                                     onClick = { ConferenceService.toggleLock(context) }
                                 ) {
                                     Icon(
                                         if (ConferenceRuntime.isRoomLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                                         contentDescription = if (ConferenceRuntime.isRoomLocked) "فتح الغرفة" else "قفل الغرفة",
-                                        tint = if (ConferenceRuntime.isRoomLocked) Color(0xFFE54343) else scheme.onBackground
+                                        tint = if (ConferenceRuntime.isRoomLocked) scheme.error else scheme.onBackground
                                     )
                                 }
                                 IconButton(
-                                    onClick = { ConferenceService.muteAll(context) }
+                                    onClick = { showMuteAllConfirm = true }
                                 ) {
                                     Icon(
                                         Icons.Default.MicOff,
@@ -213,7 +217,7 @@ fun YounesConferenceOverlay() {
                                         Icon(
                                             Icons.Default.HourglassTop,
                                             contentDescription = "غرفة الانتظار",
-                                            tint = if (ConferenceRuntime.lobbyEnabled) Color(0xFF14C79A) else scheme.onBackground
+                                            tint = if (ConferenceRuntime.lobbyEnabled) scheme.primary else scheme.onBackground
                                         )
                                     }
                                 }
@@ -231,7 +235,8 @@ fun YounesConferenceOverlay() {
                                     onClick = { showRaisedHandsSheet = true }
                                 ) {
                                     BadgedBox(badge = { Badge { Text(ConferenceRuntime.participants.count { it.raisedHand }.toString()) } }) {
-                                        Icon(Icons.Default.Handshake, contentDescription = "الأيدي المرفوعة", tint = Color(0xFFF5C842))
+                                        // تباين: ذهبي داكن بدل الأصفر الفاتح F5C842 غير المقروء على الخلفيات الفاتحة.
+                                        Icon(Icons.Default.Handshake, contentDescription = "الأيدي المرفوعة", tint = scheme.tertiary)
                                     }
                                 }
                             }
@@ -248,7 +253,7 @@ fun YounesConferenceOverlay() {
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.Pin, contentDescription = null, tint = Color(0xFFB8860B), modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Pin, contentDescription = null, tint = scheme.tertiary, modifier = Modifier.size(16.dp))
                                 Text("رسالة مثبتة: ${ConferenceRuntime.pinnedMessage}", color = scheme.onSurface, fontSize = 12.sp)
                             }
                         }
@@ -327,7 +332,7 @@ fun YounesConferenceOverlay() {
                                                     .background(scheme.surfaceVariant)
                                                     .border(
                                                         if (isPinned) 3.dp else 2.dp,
-                                                        if (isPinned) Color(0xFFB8860B) else if (isLocalSpeaking) speakingRing else scheme.outline,
+                                                        if (isPinned) scheme.tertiary else if (isLocalSpeaking) speakingRing else scheme.outline,
                                                         CircleShape
                                                     ),
                                                 contentAlignment = Alignment.Center
@@ -343,7 +348,8 @@ fun YounesConferenceOverlay() {
                                 items(speakers, key = { it.userId }) { speaker ->
                                     val isSpeaking = speaker.userId in speakingPeers || (speakingPeers.isEmpty() && speaker.isSpeaking)
                                     val isPinned = pinnedId == speaker.userId
-                                    val isHostOrCoHost = ConferenceRuntime.participants.any { it.userId == ConferenceRuntime.myUserId && it.role in setOf("HOST", "CO_HOST") }
+                                    // الأدوار من مرآة selfRole مباشرة — أدق من البحث في قائمة المشاركين (قد تتأخر ROOM_STATE).
+                                    val isHostOrCoHost = ConferenceRuntime.selfRole == "HOST" || ConferenceRuntime.selfRole == "CO_HOST"
                                     var anchorCoords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
 
                                     Column(
@@ -381,7 +387,7 @@ fun YounesConferenceOverlay() {
                                                     .background(scheme.surfaceVariant)
                                                     .border(
                                                         if (isPinned) 3.dp else 2.dp,
-                                                        if (isPinned) Color(0xFFB8860B) else if (isSpeaking) speakingRing else if (speaker.isHost) Color(0xFFB8860B) else scheme.outline,
+                                                        if (isPinned) scheme.tertiary else if (isSpeaking) speakingRing else if (speaker.isHost) scheme.tertiary else scheme.outline,
                                                         CircleShape
                                                     ),
                                                 contentAlignment = Alignment.Center
@@ -389,7 +395,7 @@ fun YounesConferenceOverlay() {
                                                 Text(speaker.userId.take(2).uppercase(), color = scheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                             }
                                         }
-                                        Text(speaker.userId.take(10), color = if (speaker.isHost) Color(0xFFB8860B) else scheme.onSurface, fontSize = 12.sp, fontWeight = if (speaker.isHost) FontWeight.Bold else FontWeight.Normal)
+                                        Text(speaker.userId.take(10), color = if (speaker.isHost) scheme.tertiary else scheme.onSurface, fontSize = 12.sp, fontWeight = if (speaker.isHost) FontWeight.Bold else FontWeight.Normal)
                                     }
                                 }
                             }
@@ -551,7 +557,8 @@ fun YounesConferenceOverlay() {
                                                     color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                                                     modifier = Modifier.align(Alignment.TopStart)
                                                         .padding(6.dp)
-                                                        .background(Color(0xFF00C98C).copy(alpha = 0.85f), RoundedCornerShape(8.dp))
+                                                        // تباين AA: أبيض على أخضر داكن (السابق فاتح 00C98C لا يقرأ).
+                                                        .background(Color(0xFF00694B).copy(alpha = 0.95f), RoundedCornerShape(8.dp))
                                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                                 )
                                             }
@@ -611,9 +618,9 @@ fun YounesConferenceOverlay() {
                         onClick = { ConferenceService.leave(context) },
                         modifier = Modifier
                             .size(52.dp)
-                            .background(Color(0xFFE54343), CircleShape)
+                            .background(scheme.error, CircleShape)
                     ) {
-                        Icon(Icons.Filled.CallEnd, contentDescription = "مغادرة", tint = Color.White)
+                        Icon(Icons.Filled.CallEnd, contentDescription = "مغادرة", tint = scheme.onError)
                     }
 
                     if (ConferenceRuntime.isSpeaker) {
@@ -643,7 +650,7 @@ fun YounesConferenceOverlay() {
                                 .size(64.dp)
                                 .background(Color(0xFFFFB020), CircleShape)
                         ) {
-                            Icon(Icons.Default.Handshake, contentDescription = "طلب التحدث", tint = Color.White, modifier = Modifier.size(28.dp))
+                            Icon(Icons.Default.Handshake, contentDescription = "طلب التحدث", tint = Color.Black, modifier = Modifier.size(28.dp))
                         }
                     }
 
@@ -711,14 +718,14 @@ fun YounesConferenceOverlay() {
                         modifier = Modifier
                             .size(52.dp)
                             .background(
-                                if (ConferenceRuntime.isRecording) Color(0xFFE54343).copy(alpha = 0.15f) else scheme.surfaceVariant,
+                                if (ConferenceRuntime.isRecording) scheme.error.copy(alpha = 0.15f) else scheme.surfaceVariant,
                                 CircleShape
                             )
                     ) {
                         Icon(
                             if (ConferenceRuntime.isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
                             contentDescription = "تسجيل",
-                            tint = if (ConferenceRuntime.isRecording) Color(0xFFE54343) else scheme.onSurfaceVariant
+                            tint = if (ConferenceRuntime.isRecording) scheme.error else scheme.onSurfaceVariant
                         )
                     }
 
@@ -765,20 +772,23 @@ fun YounesConferenceOverlay() {
                         showHostActionMenu = false
                     }
                 )
-                DropdownMenuItem(
-                    text = { Text("منح مضيف مشارك", color = scheme.onSurface) },
-                    onClick = {
-                        ConferenceService.grantCoHost(context, target.userId)
-                        showHostActionMenu = false
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("إلغاء مضيف مشارك", color = scheme.onSurface) },
-                    onClick = {
-                        ConferenceService.revokeCoHost(context, target.userId)
-                        showHostActionMenu = false
-                    }
-                )
+                // منح/سحب المضيف المشارك: HOST فقط — الخدمة ترفض غيره فلا تعرضهما للمشارك.
+                if (ConferenceRuntime.selfRole == "HOST") {
+                    DropdownMenuItem(
+                        text = { Text("منح مضيف مشارك", color = scheme.onSurface) },
+                        onClick = {
+                            ConferenceService.grantCoHost(context, target.userId)
+                            showHostActionMenu = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("إلغاء مضيف مشارك", color = scheme.onSurface) },
+                        onClick = {
+                            ConferenceService.revokeCoHost(context, target.userId)
+                            showHostActionMenu = false
+                        }
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("كتم صوت", color = scheme.onSurface) },
                     onClick = {
@@ -787,9 +797,9 @@ fun YounesConferenceOverlay() {
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("طرد من القاعة", color = Color(0xFFE54343)) },
+                    text = { Text("طرد من القاعة", color = scheme.error) },
                     onClick = {
-                        ConferenceService.kickUser(context, target.userId)
+                        pendingKickTarget = target
                         showHostActionMenu = false
                     }
                 )
@@ -799,6 +809,43 @@ fun YounesConferenceOverlay() {
                 )
             }
         }
+    }
+
+    // تأكيد كتم الكل — إجراء جماعي لا رجعة فيه بضغطة.
+    if (showMuteAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showMuteAllConfirm = false },
+            title = { Text("كتم الجميع؟", fontWeight = FontWeight.Bold) },
+            text = { Text("سيُكتم ميكروفون كل المشاركين عدا المضيفين. يمكن لأي مشارك فتح ميكروفونه بعدها بنفسه.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMuteAllConfirm = false
+                    ConferenceService.muteAll(context)
+                }) { Text("كتم الكل", color = scheme.error, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMuteAllConfirm = false }) { Text("تراجع") }
+            }
+        )
+    }
+
+    // تأكيد الطرد — إجراء مدمر يستحق وقفة.
+    pendingKickTarget?.let { kickTarget ->
+        AlertDialog(
+            onDismissRequest = { pendingKickTarget = null },
+            title = { Text("طرد من القاعة؟", fontWeight = FontWeight.Bold) },
+            text = { Text("سيُخرَج «${kickTarget.userId}» من القاعة فوراً ولن يستطيع العودة إلا بدعوة جديدة.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    ConferenceService.kickUser(context, kickTarget.userId)
+                    pendingKickTarget = null
+                    selectedParticipantForAction = null
+                }) { Text("طرد", color = scheme.error, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingKickTarget = null }) { Text("تراجع") }
+            }
+        )
     }
 
     // غرفة الانتظار: لوحة المضيف — تفعيل اللوبي + قائمة المنتظرين (قبول/رفض/قبول الكل)
@@ -832,19 +879,22 @@ fun YounesConferenceOverlay() {
                                     Text(waitingId, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         TextButton(onClick = { ConferenceService.approveWaiting(context, waitingId) }) {
-                                            Text("قبول ✓", color = Color(0xFF14C79A))
+                                            Text("قبول ✓", color = scheme.primary)
                                         }
                                         TextButton(onClick = { ConferenceService.denyWaiting(context, waitingId) }) {
-                                            Text("رفض ✕", color = Color(0xFFE54343))
+                                            Text("رفض ✕", color = scheme.error)
                                         }
                                     }
                                 }
                             }
-                            androidx.compose.material3.TextButton(
-                                onClick = { ConferenceService.approveAllWaiting(context) },
-                                modifier = Modifier.align(Alignment.CenterHorizontally)
-                            ) {
-                                Text("قبول الكل (${ConferenceRuntime.waitingUsers.size})", color = scheme.primary, fontWeight = FontWeight.Bold)
+                            // قبول الكل يظهر فقط عند وجود منتظرين — زر (0) بلا معنى.
+                            if (ConferenceRuntime.waitingUsers.isNotEmpty()) {
+                                androidx.compose.material3.TextButton(
+                                    onClick = { ConferenceService.approveAllWaiting(context) },
+                                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                                ) {
+                                    Text("قبول الكل (${ConferenceRuntime.waitingUsers.size})", color = scheme.primary, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }

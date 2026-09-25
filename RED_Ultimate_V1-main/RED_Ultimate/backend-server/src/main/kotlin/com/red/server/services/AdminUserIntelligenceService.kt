@@ -112,7 +112,8 @@ class AdminUserIntelligenceService(
     private fun pendingRemoteWipeCommand(user: UserAccount): String? {
         if (user.remoteWipeStatus != "REQUESTED") return null
         val requestedAt = user.remoteWipeRequestedAt ?: return null
-        return "wipe_${'$'}{user.id}_${'$'}{requestedAt.toEpochMilli()}"
+        // معرّف مستقر وفريد لكل مستخدم وطلب (يُسلَّم للجهاز ويُطابَق عند الإقرار).
+        return "wipe_${user.id}_${requestedAt.toEpochMilli()}"
     }
 
     @Transactional

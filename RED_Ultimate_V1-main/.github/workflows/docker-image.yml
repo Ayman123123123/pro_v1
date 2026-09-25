@@ -14,5 +14,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+    - name: Build the backend Docker image
+      # Context is RED_Ultimate/: backend-server/Dockerfile copies
+      # shared-proto/ + backend-server/ relative to that root.
+      run: docker build ./RED_Ultimate --file ./RED_Ultimate/backend-server/Dockerfile --tag red-backend:ci

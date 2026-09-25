@@ -3,6 +3,7 @@ package com.red.server.calls
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -42,6 +43,10 @@ class UnifiedCallDeliveryService(
         const val MAX_DELIVERY_ATTEMPTS = 3
         const val RINGING_TIMEOUT_MS = 45000L // 45 ثانية مثل واتساب
         const val DELIVERY_RETRY_MS = 5000L
+        /** سقف الصندوق داخل الذاكرة: بلا سقف كان pendingDeliveries ينمو بلا حد عند فشل المستلمين. */
+        const val MAX_PENDING_DELIVERIES = 1_000
+        /** حد المجموعة الوحيد: مرجع CallWebSocketHandler.MAX_GROUP_CALL_MEMBERS (إزالة التكرار — كان 32 مكرراً). */
+        val MAX_GROUP_MEMBERS = com.red.server.websocket.CallWebSocketHandler.MAX_GROUP_CALL_MEMBERS
     }
     
     /**
@@ -64,6 +69,10 @@ class UnifiedCallDeliveryService(
             targetId = targetId,
             type = type
         )
+        // سقف الصندوق: إسقاط الأقدم عند الامتلاء بدل النمو بلا حد.
+        while (pendingDeliveries.size >= MAX_PENDING_DELIVERIES) {
+            pendingDeliveries.keys.firstOrNull()?.let { pendingDeliveries.remove(it) } ?: break
+        }
         pendingDeliveries[callId] = attempt
         
         // 1. تسليم فوري عبر WebSocket إن كان متصلاً
@@ -98,10 +107,10 @@ class UnifiedCallDeliveryService(
         log.info("👥 Group call delivery: call=$callId host=$hostId members=${memberIds.size} video=$isVideo")
         
         val results = mutableMapOf<String, Boolean>()
-        val limitedMembers = memberIds.take(32) // حد واتساب
+        val limitedMembers = memberIds.take(MAX_GROUP_MEMBERS) // حد واتساب الموحد
         
-        if (memberIds.size > 32) {
-            log.warn("Group call exceeds WhatsApp limit: ${memberIds.size} > 32, truncating")
+        if (memberIds.size > MAX_GROUP_MEMBERS) {
+            log.warn("Group call exceeds WhatsApp limit: ${memberIds.size} > $MAX_GROUP_MEMBERS, truncating")
         }
         
         for (memberId in limitedMembers) {
@@ -254,7 +263,7 @@ class UnifiedCallDeliveryService(
         mode: String,
         payload: Map<String, Any?>
     ) {
-        // جدولة إعادة محاولة بعد 5 ثواني إذا لم يصل تأكيد رنين
+        // جدولة إعادة محاولة بعد 5 ثواني إذا لم يصل تأكيد رنين — خيط خلفي وحيد لا يمنع الإغلاق.
         Thread {
             try {
                 Thread.sleep(DELIVERY_RETRY_MS)
@@ -273,7 +282,7 @@ class UnifiedCallDeliveryService(
             } catch (e: Exception) {
                 log.warn("Retry scheduling failed: call=$callId - ${e.message}")
             }
-        }.start()
+        }.also { it.isDaemon = true; it.name = "call-retry-$callId" }.start()
     }
     
     fun onRingingConfirmed(callId: String, targetId: String) {
@@ -312,6 +321,8 @@ class UnifiedCallDeliveryService(
         }
     }
     
+    /** تنظيف دوري مجدول: كان يدوياً لا يُستدعى أبداً فيتسرب الصندوق — الآن كل 30s + سقف 1000. */
+    @Scheduled(fixedDelay = 30_000)
     fun cleanupStaleDeliveries() {
         val cutoff = Instant.now().minusSeconds(60)
         val stale = pendingDeliveries.filter { (_, attempt) ->

@@ -62,8 +62,10 @@ object SovereignPushCipher {
 
     /** v2 open with the per-device secret. Null on any failure. */
     fun openV2(endpoint: String, secret: String, sealedB64: String): String? {
+        // الإيقاظ معرّفات فقط (بلا أسماء/معاينات) — أي حمولة >1KB مزيفة حتماً.
+        if (sealedB64.length > 2048) return null
         val data = runCatching { Base64.decode(sealedB64, FLAGS) }.getOrNull() ?: return null
-        if (data.size <= NONCE_SIZE) return null
+        if (data.size <= NONCE_SIZE || data.size > 1024 + NONCE_SIZE + 16) return null
         return runCatching {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(
@@ -77,8 +79,10 @@ object SovereignPushCipher {
 
     /** v1 open with the endpoint only. Null on any failure. */
     fun openV1(endpoint: String, sealedB64: String): String? {
+        // حد الحجم مثل v2: الإيقاظ معرّفات فقط — الأكبر مزيف حتماً.
+        if (sealedB64.length > 2048) return null
         val data = runCatching { Base64.decode(sealedB64, FLAGS) }.getOrNull() ?: return null
-        if (data.size <= NONCE_SIZE) return null
+        if (data.size <= NONCE_SIZE || data.size > 1024 + NONCE_SIZE + 16) return null
         return runCatching {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(

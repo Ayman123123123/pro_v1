@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit
  * │ red:notify:queue:{userId}       │ إشعارات مؤقتة (≤100)       │ 30d     │
  * │ red:call:signaling:{callId}     │ إشارات WebRTC مؤقتة        │ 30m     │
  * │ red:media:grant:{key}:{grantee} │ صلاحية وسائط مؤقتة         │ 1h      │
+ * │ red:media:upload:{uploadId}   │ جلسة رفع مجزأ (hash)        │ 24h ثابت│
+ * │ red:media:transcode:{jobId}   │ حالة مهمة ترميز (hash)      │ 48h     │
  * │ red:search:recent:{userId}      │ آخر 20 بحثًا               │ 30d     │
  * │ red:metrics:realtime            │ مقاييس حية (hash)          │ 48h منزلق│
  * └─────────────────────────────────┴────────────────────────────┴─────────┘
@@ -178,7 +180,6 @@ class RedisManager(private val redis: StringRedisTemplate) {
     // ══════════════════════════════════════════
     // 🖼️ صلاحيات الوسائط المؤقتة
     // ══════════════════════════════════════════
-
     fun grantMediaAccess(objectKey: String, granteeId: String, expiresInSeconds: Long = 3600) {
         redis.opsForValue().set("red:media:grant:$objectKey:$granteeId", "1", expiresInSeconds, TimeUnit.SECONDS)
     }
@@ -227,6 +228,30 @@ class RedisManager(private val redis: StringRedisTemplate) {
     fun setMetric(metric: String, value: String) {
         redis.opsForHash<String, String>().put("red:metrics:realtime", metric, value)
         redis.expire("red:metrics:realtime", 48, TimeUnit.HOURS) // P9: TTL منزلق
+    }
+
+    // ══════════════════════════════════════════
+    // 🧩 جلسات الرفع المُجزأ وحالات الترميز (hash + TTL صريح)
+    // red:media:upload:{uploadId} → 24h ثابتة، red:media:transcode:{jobId} → 48h.
+    // تخزين hash عام (String/String) حتى لا يستورد database أي موديل وسائط.
+    // ══════════════════════════════════════════
+
+    fun saveHashWithTtl(key: String, entries: Map<String, String>, ttl: Duration) {
+        require(key.isNotBlank() && key.length <= 512) { "Invalid session key" }
+        require(!ttl.isNegative && !ttl.isZero) { "TTL must be positive" }
+        redis.opsForHash<String, String>().putAll(key, entries)
+        redis.expire(key, ttl.toMillis(), TimeUnit.MILLISECONDS)
+    }
+
+    fun readHash(key: String): Map<String, String> {
+        if (key.isBlank()) return emptyMap()
+        return try {
+            redis.opsForHash<String, String>().entries(key)
+        } catch (e: Exception) {
+            org.slf4j.LoggerFactory.getLogger(RedisManager::class.java)
+                .warn("Redis HGETALL failed for '{}': {}", key, e.message)
+            emptyMap()
+        }
     }
 
     // ══════════════════════════════════════════

@@ -107,11 +107,14 @@ class OutboxRetryWorker(
             return Result.success()
         }
 
+        // استعادة حالة القاطع عبر موت العملية (SharedPrefs) — وإلا فُتح/أُغلق عبثاً كل تشغيل.
+        OutboxRepository.loadPersisted(applicationContext)
         // فحص Circuit Breaker — لا نرسل إذا كان مفتوحاً
         if (repository.isCircuitBreakerOpen()) {
-            Log.i(TAG, "Circuit breaker open — deferring outbox retry")
-            // جدولة إعادة محاولة بعد مهلة إعادة الضبط
-            schedule(applicationContext, delayMs = repository.circuitBreakerResetTimeout)
+            val remainSec = repository.breakerRemainingSec().coerceAtLeast(1L)
+            Log.i(TAG, "Circuit breaker open — deferring outbox retry (${remainSec}s remain)")
+            // جدولة مسبار half-open واحد بعد المهلة المتبقية فعلاً (لا ثابتة)
+            schedule(applicationContext, delayMs = remainSec * 1000L)
             return Result.success()
         }
 
@@ -131,6 +134,8 @@ class OutboxRetryWorker(
             Log.d(TAG, "Outbox empty — nothing to retry")
             // تنظيف الرسائل المرسلة القديمة
             try { dao.cleanupSent(now - 24 * 60 * 60 * 1000L) } catch (e: Exception) { Log.w(TAG, "cleanupSent failed", e) }
+            // القاطع قد يكون half-open بعد المهلة — حدّث المرآة وإلا بقي مفتوحاً عبثاً.
+            try { repository.tryResetCircuitBreaker() } catch (_: Exception) {}
             return Result.success()
         }
 
@@ -150,8 +155,10 @@ class OutboxRetryWorker(
             }
             // المجموعات/التفاعلات لها مسار مخصص (red_group_outbox + redrive بذات clientId) —
             // لا تحرق retries هنا ولا DLQ زائف؛ فوّض لعامل الاستعادة.
-            if (isGroupOrReactionType(msg.type)) {
-                Log.d(TAG, "Skipping group/reaction outbox row (dedicated redrive): ${msg.id} type=${msg.type}")
+            // تغطية المجموعات: النوع وحده لا يكفي (RICH_TEXT/CHAT قد تكون مجموعة) —
+            // افحص conversationId بالprefix الصريح أيضاً.
+            if (isGroupOrReactionType(msg.type) || RedConnectionService.isGroupConversation(msg.conversationId)) {
+                Log.d(TAG, "Skipping group/reaction outbox row (dedicated redrive): ${msg.id} type=${msg.type} conv=${msg.conversationId}")
                 runCatching { com.red.sovereign.core.workers.MessageRecoveryWorker.enqueue(applicationContext) }
                 continue
             }
@@ -171,25 +178,22 @@ class OutboxRetryWorker(
                 // تنظيف بعد 24 ساعة — ستتم عبر cleanupSent بعد اكتمال SERVER_ACK
             } else {
                 anyRetry = true
-                repository.recordFailure()
                 _workerFailedCount.value++
-                val nextDelay = repository.computeBackoff(msg.retryCount)
-                val nextAttempt = now + nextDelay
-
-                if (msg.retryCount >= OutboxMessageEntity.DEAD_LETTER_THRESHOLD) {
-                    // نقل إلى Dead Letter Queue
-                    try {
-                        dao.updateStatus(msg.id, OutboxMessageEntity.STATUS_DEAD_LETTER, "max_retries_exceeded")
+                // الإرسال حتى الإقرار: المسار الموحد (backoff + DLQ + metrics + breaker)
+                // بدل التكرار اليدوي الذي كان يتجاوز عدّادات المستودع.
+                try {
+                    repository.scheduleRetry(msg.id, "send_failed")
+                    OutboxRepository.persist(applicationContext)
+                } catch (e: Exception) {
+                    Log.w(TAG, "scheduleRetry failed for ${msg.id}", e)
+                    repository.recordFailure()
+                    OutboxRepository.persist(applicationContext)
+                }
+                // عداد العامل: ميّز DLQ عن retry عادي عبر الحالة النهائية
+                runCatching {
+                    if (dao.getById(msg.id)?.status == OutboxMessageEntity.STATUS_DEAD_LETTER) {
                         _workerDeadLetterCount.value++
                         Log.w(TAG, "Message moved to Dead Letter Queue: ${msg.id}")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to move to DLQ: ${msg.id}", e)
-                    }
-                } else {
-                    try {
-                        dao.scheduleRetry(msg.id, nextAttempt, "send_failed")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to schedule retry for ${msg.id}", e)
                     }
                 }
             }

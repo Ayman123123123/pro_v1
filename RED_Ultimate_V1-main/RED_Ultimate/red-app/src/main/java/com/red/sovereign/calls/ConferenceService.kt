@@ -189,6 +189,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 roomId = resolveRoomIdForJoin(intent.getStringExtra(EXTRA_ROOM_ID))
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 ConferenceRuntime.myUserId = userId
+                leaving = false
+                reconnectAttempt = 0
                 val hasVideo = intent.getBooleanExtra(EXTRA_VIDEO, false)
                 val invitees = intent.getStringArrayExtra(EXTRA_INVITEES)?.toList().orEmpty()
                 val asHost = intent.getBooleanExtra(EXTRA_HOST, invitees.isNotEmpty())
@@ -219,6 +221,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 }
                 if (roomId.isNotBlank()) {
                     stopRingtone()
+                    leaving = false
+                    reconnectAttempt = 0
                     startedAsHost = false
                     ConferenceRuntime.isVideoEnabled = hasVideo
                     ConferenceRuntime.isSpeaker = hasVideo
@@ -287,14 +291,19 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 ConferenceRuntime.pinnedParticipantId = if (ConferenceRuntime.pinnedParticipantId == targetId) null else targetId
             }
             ACTION_RAISE_HAND -> signaling.raiseHand(roomId, userId)
+            // حارس أدوار: أوامر المضيف (قبول/إسقاط/كتم/طرد/لوبي) للمضيف والمشارك فقط — الخادم صاحب القرار.
             ACTION_APPROVE_SPEAKER -> {
                 val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (target.isNotBlank()) signaling.approveSpeaker(roomId, userId, target)
+                // لا إشارة زائدة: الترقية للـLISTENER فقط — المتحدث/المضيف أصلاً لا يحتاجها.
+                if (target.isNotBlank() && isHostOrCoHost() && targetRoleOf(target) in setOf("LISTENER", "")) signaling.approveSpeaker(roomId, userId, target)
             }
             ACTION_DEMOTE_LISTENER -> {
                 val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (target.isNotBlank()) signaling.demoteListener(roomId, userId, target)
+                // المضيف محمي من الإنزال — لا يعزل المضيفَ المشاركُ المضيفَ.
+                if (target.isNotBlank() && isHostOrCoHost() && canModerateTarget(target)) signaling.demoteListener(roomId, userId, target)
             }
+            // مسح الأيدي المرفوعة (مضيف) — كان النوع مدعوماً إشارةً بلا زر/أمر.
+            ACTION_CLEAR_HANDS -> if (isHostOrCoHost()) signaling.clearAllHands(roomId, userId)
             ACTION_SEND_REACTION -> {
                 val emoji = intent?.getStringExtra(EXTRA_EMOJI) ?: "👏"
                 signaling.sendReaction(roomId, userId, emoji)
@@ -308,32 +317,52 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             }
             ACTION_GRANT_COHOST -> {
                 val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (target.isNotBlank()) signaling.grantCoHost(roomId, userId, target)
+                if (target.isNotBlank() && ConferenceRuntime.selfRole == "HOST") signaling.grantCoHost(roomId, userId, target)
             }
             ACTION_REVOKE_COHOST -> {
                 val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (target.isNotBlank()) signaling.revokeCoHost(roomId, userId, target)
+                if (target.isNotBlank() && ConferenceRuntime.selfRole == "HOST") signaling.revokeCoHost(roomId, userId, target)
             }
             ACTION_KICK_USER -> {
                 val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (target.isNotBlank()) signaling.kickUser(roomId, userId, target)
+                // الطرد: المضيف محمي (لا يُطرَد) ولا طرد للنفس — الخادم صاحب القرار النهائي.
+                if (target.isNotBlank() && isHostOrCoHost() && canModerateTarget(target)) signaling.kickUser(roomId, userId, target)
             }
             ACTION_MUTE_USER -> {
                 val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (target.isNotBlank()) signaling.muteUser(roomId, userId, target)
+                if (target.isNotBlank() && isHostOrCoHost() && canModerateTarget(target)) signaling.muteUser(roomId, userId, target)
             }
-            ACTION_MUTE_ALL -> signaling.muteAll(roomId, userId)
-            // ─────────── غرفة الانتظار (Lobby) ───────────
-            ACTION_LOBBY_SET -> signaling.setLobby(roomId, userId, intent?.getBooleanExtra(EXTRA_LOBBY_ENABLED, false) == true)
+            ACTION_MUTE_ALL -> if (isHostOrCoHost()) signaling.muteAll(roomId, userId)
+            // ─────────── غرفة الانتظار (Lobby): مرآة تفاؤلية + إشارة ───────────
+            ACTION_LOBBY_SET -> {
+                val enabled = intent?.getBooleanExtra(EXTRA_LOBBY_ENABLED, false) == true
+                if (!isHostOrCoHost()) return START_STICKY
+                // تفاؤلي: حدّث المرآة فوراً — تأكيد الخادم يصل عبر LOBBY_STATE،
+                // والإيقاف يُدخل المنتظرين تلقائياً فيصفّر القائمة محلياً.
+                ConferenceRuntime.lobbyEnabled = enabled
+                if (!enabled) ConferenceRuntime.waitingUsers = emptyList()
+                signaling.setLobby(roomId, userId, enabled)
+            }
             ACTION_LOBBY_APPROVE -> {
                 val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (target.isNotBlank()) signaling.approveLobby(roomId, userId, target)
+                if (target.isNotBlank() && isHostOrCoHost()) {
+                    ConferenceRuntime.waitingUsers = ConferenceRuntime.waitingUsers - target
+                    signaling.approveLobby(roomId, userId, target)
+                }
             }
             ACTION_LOBBY_DENY -> {
                 val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
-                if (target.isNotBlank()) signaling.denyLobby(roomId, userId, target)
+                if (target.isNotBlank() && isHostOrCoHost()) {
+                    ConferenceRuntime.waitingUsers = ConferenceRuntime.waitingUsers - target
+                    signaling.denyLobby(roomId, userId, target)
+                }
             }
-            ACTION_LOBBY_APPROVE_ALL -> signaling.approveAllLobby(roomId, userId)
+            ACTION_LOBBY_APPROVE_ALL -> {
+                if (isHostOrCoHost()) {
+                    ConferenceRuntime.waitingUsers = emptyList()
+                    signaling.approveAllLobby(roomId, userId)
+                }
+            }
             ACTION_SET_QUALITY -> {
                 val quality = intent.getStringExtra(EXTRA_QUALITY) ?: "AUTO"
                 if (quality == "AUDIO") {
@@ -477,8 +506,13 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                     ConferenceRuntime.selfRole = "HOST"
                     ConferenceRuntime.isSpeaker = true
                 }
+                // لا مضيفين اثنين: من كان HOST سابقاً يعود SPEAKER (الأدوار حصرية).
                 ConferenceRuntime.participants = ConferenceRuntime.participants.map { p ->
-                    if (p.userId == next) p.copy(role = "HOST", isHost = true) else p
+                    when {
+                        p.userId == next -> p.copy(role = "HOST", isHost = true)
+                        p.role == "HOST" || p.isHost -> p.copy(role = "SPEAKER", isHost = false)
+                        else -> p
+                    }
                 }
             }
             "APPROVE_SPEAKER" -> {
@@ -565,10 +599,20 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             "KICK_USER" -> {
                 val target = signal.payload["targetUserId"].orEmpty()
                 if (target == userId) {
-                    leave()
-                } else {
+                    // سبب مرئي بدل خروج صامت — ثم مغادرة فعلية بعد مهلة قصيرة.
+                    ConferenceRuntime.state = ConferenceUiState.Error("أخرجك المضيف من القاعة")
+                    scope.launch {
+                        kotlinx.coroutines.delay(2000)
+                        leave()
+                    }
+                } else if (target.isNotBlank()) {
                     ConferenceRuntime.participants = ConferenceRuntime.participants.filter { it.userId != target }
                     ConferenceRuntime.remoteVideos.remove(target)
+                    ConferenceRuntime.speakingPeers = ConferenceRuntime.speakingPeers - target
+                    ConferenceRuntime.waitingUsers = ConferenceRuntime.waitingUsers - target
+                    if (ConferenceRuntime.pinnedParticipantId == target) {
+                        ConferenceRuntime.pinnedParticipantId = null
+                    }
                     mesh?.detachPeer(target)
                 }
             }
@@ -580,13 +624,24 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                     // LEGENDARY Phase 7: كان المتكلم على SFU يبقى حياً بعد كتم المضيف.
                     sfu?.setMicrophoneEnabled(false)
                 }
+                // مرآة القائمة: علّم الهدف مكتوماً — feedback فوري في الواجهة.
+                if (target.isNotBlank()) {
+                    ConferenceRuntime.participants = ConferenceRuntime.participants.map { p ->
+                        if (p.userId == target) p.copy(isMuted = true) else p
+                    }
+                }
             }
             "MUTE_ALL" -> {
-                // الخادم يستثني المرسل من roomMuted لكن يبثّ للجميع بمن فيهم هو.
-                if (ConferenceRuntime.selfRole != "HOST") {
+                // الخادم يستثني المرسل من roomMuted لكن يبثّ للجميع بمن فيهم هو —
+                // المضيف والمضيف المشارك لا يُكتم microphonesهما بأمرهما نفسه.
+                if (ConferenceRuntime.selfRole != "HOST" && ConferenceRuntime.selfRole != "CO_HOST") {
                     ConferenceRuntime.isMuted = true
                     mesh?.setMicrophoneEnabled(false)
                     sfu?.setMicrophoneEnabled(false)
+                }
+                // مرآة القائمة: علّم الجميع مكتوماً عدا المضيف/المشارك — feedback فوري.
+                ConferenceRuntime.participants = ConferenceRuntime.participants.map { p ->
+                    if (p.role == "HOST" || p.role == "CO_HOST" || p.isHost) p else p.copy(isMuted = true)
                 }
             }
             "REACTION" -> {
@@ -696,6 +751,18 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         if (!speaker) applyListenerMute()
     }
 
+    private fun isHostOrCoHost(): Boolean =
+        ConferenceRuntime.selfRole == "HOST" || ConferenceRuntime.selfRole == "CO_HOST"
+
+    private fun targetRoleOf(targetId: String): String =
+        ConferenceRuntime.participants.firstOrNull { it.userId == targetId }?.role.orEmpty()
+
+    /** حارس أدوار: المضيف محمي من الكتم/الطرد/الإنزال — ولا إجراء ضد النفس. */
+    private fun canModerateTarget(targetId: String): Boolean {
+        if (targetId.isBlank() || targetId == userId) return false
+        return targetRoleOf(targetId) != "HOST"
+    }
+
     override fun onLobbyState(enabled: Boolean, waiting: List<String>) {
         ConferenceRuntime.lobbyEnabled = enabled
         ConferenceRuntime.waitingUsers = waiting
@@ -780,12 +847,15 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
             while (reconnectAttempt < 5 &&
-                (ConferenceRuntime.state is ConferenceUiState.Active || ConferenceRuntime.state is ConferenceUiState.Connecting)) {
+                (ConferenceRuntime.state is ConferenceUiState.Active ||
+                    ConferenceRuntime.state is ConferenceUiState.Connecting ||
+                    ConferenceRuntime.state is ConferenceUiState.WaitingApproval)) {
                 val base = (1000L * (1 shl reconnectAttempt.coerceAtMost(5))).coerceAtMost(30_000L)
                 reconnectAttempt++
                 kotlinx.coroutines.delay((Math.random() * base).toLong().coerceAtLeast(300L))
                 if (ConferenceRuntime.state !is ConferenceUiState.Active &&
-                    ConferenceRuntime.state !is ConferenceUiState.Connecting) break
+                    ConferenceRuntime.state !is ConferenceUiState.Connecting &&
+                    ConferenceRuntime.state !is ConferenceUiState.WaitingApproval) break
                 runCatching { signaling.reconnect(roomId) }
                 kotlinx.coroutines.delay(4_000)
             }
@@ -906,6 +976,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         if (leaving) return
         leaving = true
         statsJob?.cancel(); statsJob = null
+        reconnectJob?.cancel(); reconnectJob = null
+        reconnectAttempt = 0
         stopNetworkWatcher()
         val closingRoomId = roomId
         val closingUserId = userId
@@ -936,6 +1008,14 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         ConferenceRuntime.isRecording = false
         ConferenceRuntime.selfRole = "LISTENER"
         ConferenceRuntime.isMinimized = false
+        // اللوبي/القفل مرآة لغرفة واحدة — صفّرها حتى لا تتسرب لغرفة تالية.
+        ConferenceRuntime.lobbyEnabled = false
+        ConferenceRuntime.waitingUsers = emptyList()
+        ConferenceRuntime.lobbyState = ""
+        ConferenceRuntime.lobbyWaiting = 0
+        ConferenceRuntime.isRoomLocked = false
+        ConferenceRuntime.mutedByDefault = false
+        ConferenceRuntime.screenShareAllowed = true
 
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         if (closingRoomId.isNotBlank()) {
@@ -1075,6 +1155,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         const val ACTION_PIN_PARTICIPANT = "com.red.sovereign.conference.PIN_PARTICIPANT"
         const val ACTION_SET_QUALITY = "com.red.sovereign.conference.SET_QUALITY"
         const val ACTION_RAISE_HAND = "com.red.sovereign.conference.RAISE_HAND"
+        const val ACTION_CLEAR_HANDS = "com.red.sovereign.conference.CLEAR_HANDS"
         const val ACTION_APPROVE_SPEAKER = "com.red.sovereign.conference.APPROVE_SPEAKER"
         const val ACTION_DEMOTE_LISTENER = "com.red.sovereign.conference.DEMOTE_LISTENER"
         const val ACTION_GRANT_COHOST = "com.red.sovereign.conference.GRANT_COHOST"
@@ -1198,8 +1279,12 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         }
 
         fun raiseHand(context: Context) {
-            val intent = Intent(context, ConferenceService::class.java).setAction(ACTION_RAISE_HAND)
-            ContextCompat.startForegroundService(context, intent)
+            ContextCompat.startForegroundService(context, Intent(context, ConferenceService::class.java).setAction(ACTION_RAISE_HAND))
+        }
+
+        /** مسح كل الأيدي المرفوعة (مضيف/مشارك) — يُبثّ CLEAR_ALL_HANDS. */
+        fun clearAllHands(context: Context) {
+            ContextCompat.startForegroundService(context, Intent(context, ConferenceService::class.java).setAction(ACTION_CLEAR_HANDS))
         }
 
         fun approveSpeaker(context: Context, targetUserId: String) {

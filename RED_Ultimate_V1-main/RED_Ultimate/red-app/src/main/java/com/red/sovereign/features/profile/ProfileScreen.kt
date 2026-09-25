@@ -102,6 +102,12 @@ fun ProfileScreen(
             editingName = viewModel.displayName
         }
     }
+    // تبديل الحساب بلا تصفير تحرير جارٍ: displayName القادم من AuthState قد يتأخر عن التركيب الأول.
+    LaunchedEffect(displayName) {
+        if (!nameTouched && displayName.isNotBlank() && editingName.isBlank()) {
+            editingName = displayName
+        }
+    }
     LaunchedEffect(viewModel.bio) {
         if (!bioTouched && viewModel.bio.isNotEmpty() && editingBio.isEmpty()) {
             editingBio = viewModel.bio
@@ -109,34 +115,6 @@ fun ProfileScreen(
     }
     var showQr by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
-
-    // حالة الخطأ عند فشل تحميل البروفايل
-    if (viewModel.loadError != null) {
-        Column(
-            Modifier.fillMaxSize().padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(Icons.Default.ErrorOutline, "خطأ التحميل", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(56.dp))
-            Spacer(Modifier.height(16.dp))
-            Text("تعذّر تحميل البروفايل", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-            Spacer(Modifier.height(8.dp))
-            Text(viewModel.loadError ?: "", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(20.dp))
-            Button(onClick = { viewModel.clearLoadError(); viewModel.load(redId, username, displayName) }) {
-                Icon(Icons.Default.Refresh, "إعادة المحاولة", Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("إعادة المحاولة")
-            }
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("رجوع")
-            }
-        }
-        return
-    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -147,6 +125,26 @@ fun ProfileScreen(
             IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
             Text("البروفايل", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             IconButton({ showQr = !showQr }) { Icon(Icons.Default.QrCode, "رمز الهوية", tint = AqyalGold) }
+        }
+
+        // خطأ التحميل شريط غير حاجب: التحرير المحلي يبقى متاحاً حتى مع فشل الشبكة.
+        viewModel.loadError?.let { err ->
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.ErrorOutline, "خطأ التحميل", tint = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "تعذّر تحميل البروفايل من الخادم: $err — يمكنك التحرير محلياً وستُحفظ القيم عند نجاح الشبكة.",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 13.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(onClick = { viewModel.clearLoadError(); viewModel.load(redId, username, displayName) }) {
+                        Icon(Icons.Default.Refresh, "إعادة المحاولة", Modifier.size(16.dp))
+                        Text(" إعادة")
+                    }
+                }
+            }
         }
 
         // الصورة + زر التغيير
@@ -234,16 +232,16 @@ fun ProfileScreen(
             supportingText = { Text("${editingBio.length}/280") }
         )
 
-        // زر الحفظ
+        // زر الحفظ — المقارنة بعد trim حتى لا يوحي بوجود تغيير وهمي (مسافات فقط).
         Button(
             {
-                viewModel.updateProfile(editingName, editingBio) {
+                viewModel.updateProfile(editingName.trim(), editingBio.trim()) {
                     // عند النجاح: تحديث الاسم المحلي
                 }
             },
             Modifier.fillMaxWidth(),
-            enabled = !viewModel.isSaving && editingName.isNotBlank() &&
-                (editingName != viewModel.displayName.ifBlank { displayName } || editingBio != viewModel.bio)
+            enabled = !viewModel.isSaving && editingName.trim().isNotBlank() &&
+                (editingName.trim() != viewModel.displayName.ifBlank { displayName }.trim() || editingBio.trim() != viewModel.bio.trim())
         ) {
             if (viewModel.isSaving) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
             else { Icon(Icons.Default.Check, "حفظ"); Text(" حفظ التغييرات") }

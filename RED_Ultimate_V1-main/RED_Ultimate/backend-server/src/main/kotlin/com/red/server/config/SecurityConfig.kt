@@ -84,6 +84,11 @@ class SecurityConfig(
                     .requestMatchers("/api/groups/v2/**").authenticated()
                     .requestMatchers("/api/calls/v2/**").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/identity/directory/**").authenticated()
+                    // SFU والدليل والهوية: مصادَقة دائمًا والهوية من Authentication
+                    // حصرًا (قواعد صريحة قبل /api/** حتى لا يُعيد permitAll لاحق الانحدار).
+                    .requestMatchers("/api/sfu/**").authenticated()
+                    .requestMatchers("/api/identity/**").authenticated()
+                    .requestMatchers("/api/directory/**").authenticated()
                     // التفاصيل الكاملة لقواعد البيانات والمضيف للمسؤولين فقط؛
                     // المساران العامان أدناه يُبقيان الحالة وحدها.
                     .requestMatchers("/health/detailed").hasRole("ADMIN")

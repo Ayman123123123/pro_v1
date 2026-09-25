@@ -29,22 +29,22 @@ object SovereignColors {
     /** ذهب يونس الأساسي — مرادف [YounesAccent] (#E0B551). */
     val Gold = YounesAccent
     val GoldLight = YounesAccentSoft
-    val GoldDark = Color(0xFFD97706)
+    val GoldDark = Color(0xFF8A6A0A)
     val GoldNeon = Color(0xFFFFD700)
 
     // ── الزمرد السيبراني والأمان / التشفير التام E2EE ───────────────────────
     /** زمرد يونس الأساسي — مرادف [YounesPrimary] (#14C79A). */
     val Emerald = YounesPrimary
-    val EmeraldDark = Color(0xFF059669)
+    val EmeraldDark = Color(0xFF0A7A5E)
     val EmeraldNeon = Color(0xFF00E676)
     val Success = YounesPrimary
 
     // ── السماوي الكهربائي وإشارات WebRTC Mesh ───────────────────────────────
     /** أزرق يونس الملكي — مرادف [YounesCobalt] (#4D9FE8). */
     val Cyan = YounesCobalt
-    val CyanDark = Color(0xFF0284C7)
+    val CyanDark = Color(0xFF2E7DA8)
     val CyanNeon = Color(0xFF00E5FF)
-    val VoipBlue = Color(0xFF1E88E5)
+    val VoipBlue = Color(0xFF1565C0)
 
     // ── أسماء legacy للتوافق الرجعي: القيم السابقة قبل التوحيد ─────────────
     /** @deprecated استعمل [Gold] (= YounesAccent). باقٍ للتوافق فقط. */
@@ -84,11 +84,19 @@ object SovereignColors {
     val SurfaceDarkVariant = SurfaceNavy
 
     // ── وهج الياقوت والتنبيهات / إنهاء المكالمة / البث المباشر ──────────────
-    val Danger = Color(0xFFEF4444)
+    // حاويات الأزرار داكنة تحمل أبيض AA (Danger ‏4.98:1)؛ Warning يُقرن
+    // بنص داكن YounesOnBrand (‏9.28:1) لا أبيض. النيون للتوهج على الداكن فقط.
+    val Danger = Color(0xFFD32F2F)
     val DangerDark = Color(0xFFB91C1C)
     val RubyNeon = Color(0xFFFF1744)
-    val LiveRed = Color(0xFFE53935)
-    val Warning = Color(0xFFF59E0B)
+    // مرادف Danger (مقياس واحد): كان نسخة #D32F2F مستقلة تنحرف مع الوقت.
+    val LiveRed = Danger
+    // ذهب Younes الموحد (مقياس واحد مع yns_warning): كان #F59E0B المستقل
+    // يحمل أبيض 2.14:1 راسبًا؛ YounesAccent يحمل نصًا داكنًا 10.34:1.
+    // ممنوع نص أبيض على Warning — استعمل WarningOn دائمًا.
+    val Warning = YounesAccent
+    val WarningOn = YounesOnBrand
+    val WarningDark = GoldDark
 
     // ── بنفسج الفضاء ومؤتمرات SFU ───────────────────────────────────────────
     // YounesPurple B07CE8 = 6.30:1 على الخلفية (AA). SpaceAccent للعلامات،

@@ -32,7 +32,9 @@ RUN wget -q https://dl.google.com/android/repository/commandlinetools-linux-1107
     && mv /tmp/sdk-tools/* cmdline-tools/latest/ \
     && rm -rf /tmp/sdk-tools
 
-# NOTE 2026-09-04: API 37 platform not yet published publicly — build against 36.
+# NOTE 2026-09: CI installs platforms;android-37.0 (minor-suffixed id — the bare
+# android-37 id fails with "Failed to find package"). The container still builds
+# against 36 locally until the 37 platform stabilises in offline mirrors.
 RUN yes | sdkmanager --licenses >/dev/null \
     && sdkmanager "platform-tools" "platforms;android-36" "platforms;android-35" "build-tools;36.0.0"
 

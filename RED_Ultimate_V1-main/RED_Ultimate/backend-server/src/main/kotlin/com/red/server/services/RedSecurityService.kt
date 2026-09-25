@@ -3,6 +3,7 @@ package com.red.server.services
 import com.red.server.auth.model.AccountRole
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.websocket.RedMasterHandler
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import java.util.UUID
 
@@ -35,19 +36,28 @@ class RedSecurityService(
      * Emergency application kill switch. It intentionally excludes administrators
      * and creates a durable per-user command rather than publishing to an empty
      * Redis topic.
+     *
+     * Users are streamed in fixed-size pages: the previous `findAll()` loaded
+     * the entire accounts table into memory on every activation.
      */
     fun activateKillSwitch(reason: String, actorId: UUID): Map<String, Any> {
         val cleanReason = reason.trim()
         require(cleanReason.length in 8..200) { "Kill-switch reason must contain 8-200 characters" }
-        val targets = users.findAll().filter { it.role != AccountRole.ADMIN }
         var requested = 0
-        targets.forEach { user ->
-            runCatching {
-                val updated = intelligence.requestRemoteAppWipe(user.id, actorId)
-                val commandId = requireNotNull(intelligence.pendingRemoteWipeCommand(updated.id))
-                messaging.sendRemoteWipe(updated.redId, commandId, "KILL_SWITCH: ${cleanReason.take(160)}")
-                requested++
+        var page = 0
+        while (true) {
+            val slice = users.findAll(PageRequest.of(page, BATCH_SIZE))
+            if (slice.isEmpty) break
+            slice.content.filter { it.role != AccountRole.ADMIN }.forEach { user ->
+                runCatching {
+                    val updated = intelligence.requestRemoteAppWipe(user.id, actorId)
+                    val commandId = requireNotNull(intelligence.pendingRemoteWipeCommand(updated.id))
+                    messaging.sendRemoteWipe(updated.redId, commandId, "KILL_SWITCH: ${cleanReason.take(160)}")
+                    requested++
+                }
             }
+            if (!slice.hasNext()) break
+            page++
         }
         return mapOf(
             "status" to "ACTIVATED",
@@ -63,4 +73,6 @@ class RedSecurityService(
             ?.let { users.findById(it).orElse(null) }
             ?: users.findByRedId(reference)
             ?: throw NoSuchElementException("User not found")
+
+    private companion object { const val BATCH_SIZE = 200 }
 }

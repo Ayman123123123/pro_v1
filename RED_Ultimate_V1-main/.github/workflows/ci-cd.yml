@@ -92,8 +92,9 @@ jobs:
             ${{ runner.os }}-gradle-android-
 
       - name: 🧹 Lint Android
-        working-directory: RED_Ultimate/red-app
-        run: ./gradlew lintDebug --no-daemon || true
+        # gradlew lives at the RED_Ultimate root; :app maps to red-app/.
+        working-directory: RED_Ultimate
+        run: ./gradlew :app:lintDebug --no-daemon --stacktrace
 
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   # Admin Dashboard (React 19 / TypeScript 5.9 / AntD 6.1)

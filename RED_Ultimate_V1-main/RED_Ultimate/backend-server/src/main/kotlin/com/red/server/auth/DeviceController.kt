@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -26,15 +27,22 @@ class DeviceController(
     private val refreshTokens: RefreshTokenService,
     private val pushTokens: DevicePushTokenService,
     private val preKeys: OneTimePreKeyService,
-    private val jwt: JwtService
+    private val jwt: JwtService,
+    // nullable افتراضيًا حتى لا ينكسر البناء اليدوي في اختبارات الوحدة
+    // (Phase9DataContractsTest) — في الإنتاج يحقن Spring الحزمة دائمًا.
+    private val limits: RateLimitService? = null
 ) {
     @GetMapping
     fun list(authentication: Authentication) =
-        devices.findAllByUserIdOrderByCreatedAtAsc(UUID.fromString(authentication.name)).map { it.toResponse() }
+        // قراءة خفيفة متكررة — حد سخي بهوية المتصل يمنع الحلقات فقط.
+        applyLimit("devices-list", authentication, 120L, Duration.ofMinutes(10)).let {
+            devices.findAllByUserIdOrderByCreatedAtAsc(UUID.fromString(authentication.name)).map { it.toResponse() }
+        }
 
     /** LEGENDARY: حالة مفاتيح كل أجهزة المستخدم — الهاتف الثاني يعرف متى يعيد التعبئة قبل النفاد */
     @GetMapping("/prekeys/status")
     fun prekeyStatus(authentication: Authentication): List<Map<String, Any>> {
+        applyLimit("devices-prekey-status", authentication, 60L, Duration.ofMinutes(10))
         val userId = UUID.fromString(authentication.name)
         return devices.findAllByUserIdOrderByCreatedAtAsc(userId)
             .filter { it.status == DeviceStatus.APPROVED }
@@ -56,6 +64,8 @@ class DeviceController(
         @PathVariable deviceId: UUID,
         authentication: Authentication
     ): ResponseEntity<Any> {
+        // كتابة حساسة: 10/ساعة بهوية المتصل تمنع قصف الاعتماد الذاتي.
+        applyLimit("devices-approve-self", authentication, 10L, Duration.ofHours(1))
         val userId = UUID.fromString(authentication.name)
         val device = devices.findByIdAndUserId(deviceId, userId)
             ?: throw NoSuchElementException("Device not found")
@@ -78,6 +88,7 @@ class DeviceController(
         @RequestBody request: PushTokenRequest,
         authentication: Authentication
     ): ResponseEntity<Any> {
+        applyLimit("devices-push-token", authentication, 30L, Duration.ofHours(1))
         val redId = users.findById(UUID.fromString(authentication.name)).orElseThrow { NoSuchElementException("User not found") }.redId
         if (request.token.isBlank()) return ResponseEntity.badRequest().body(mapOf("error" to "token is required"))
         val registered = pushTokens.register(redId, request.token, request.platform)
@@ -90,6 +101,8 @@ class DeviceController(
         @PathVariable deviceId: UUID,
         authentication: Authentication
     ): ResponseEntity<Void> {
+        // إبطال جهاز = إنهاء جلسات: 20/ساعة بهوية المتصل ضد القصف.
+        applyLimit("devices-revoke", authentication, 20L, Duration.ofHours(1))
         val device = devices.findByIdAndUserId(deviceId, UUID.fromString(authentication.name))
             ?: throw NoSuchElementException("Device not found")
         device.status = DeviceStatus.REVOKED
@@ -101,15 +114,22 @@ class DeviceController(
 
     /**
      * P9: "تسجيل الخروج من كل الأجهزة الأخرى" — يُبطل كل جلسات Refresh ما عدا جلسات
-     * جهاز الطلب الحالي (يُستخرج من deviceId في الـ Access Token الذي يضعه
-     * JwtAuthenticationFilter في authentication.credentials).
+     * جهاز الطلب الحالي (يضعه JwtAuthenticationFilter في authentication.details،
+     * وقبله في credentials كرمز خام للتوافق).
      * بلا deviceId (رمز أدمن بلا جهاز) تُبطل الكل — موثّق في العقد.
      */
     @PostMapping("/revoke-others")
     fun revokeOthers(authentication: Authentication): ResponseEntity<Any> {
+        // إبطال جماعي للجلسات: 10/ساعة — الأشد حساسية في هذا المتحكم.
+        applyLimit("devices-revoke-others", authentication, 10L, Duration.ofHours(1))
         val userId = UUID.fromString(authentication.name)
-        val currentDevice = (authentication.credentials as? String)
-            ?.let { runCatching { jwt.deviceId(it) }.getOrNull() }
+        // الهوية من المصادقة حصرًا: الجهاز الحالي من details التي وضعها
+        // JwtAuthenticationFilter (بلا إعادة تحليل)، والسقوط على تحليل
+        // credentials انتقاليًا للتوافق مع الرموز القديمة والاختبارات.
+        val currentDevice = (authentication.details as? String)
+            ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            ?: (authentication.credentials as? String)
+                ?.let { runCatching { jwt.deviceId(it) }.getOrNull() }
         val revoked = refreshTokens.revokeOthers(userId, currentDevice)
         return ResponseEntity.ok(
             mapOf(
@@ -117,6 +137,11 @@ class DeviceController(
                 "currentDeviceKept" to currentDevice?.toString()
             )
         )
+    }
+
+    /** حد بهوية المتصل (authentication.name) — لا IP ولا ترويسات. null-safe للاختبارات. */
+    private fun applyLimit(namespace: String, authentication: Authentication, maximum: Long, window: Duration) {
+        limits?.check(namespace, authentication.name, maximum, window)
     }
 }
 

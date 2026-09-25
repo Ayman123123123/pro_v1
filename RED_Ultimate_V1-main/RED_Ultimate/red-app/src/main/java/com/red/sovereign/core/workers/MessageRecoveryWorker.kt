@@ -47,6 +47,14 @@ class MessageRecoveryWorker(
         val outboxDao = db.outboxDao()
         val now = System.currentTimeMillis()
 
+        // القاطع المشترك: إن كان مفتوحاً أجّل (الدوري سيعود بعد المهلة) — لا عاصفة redrive.
+        com.red.sovereign.core.outbox.OutboxRepository.loadPersisted(app)
+        if (com.red.sovereign.core.outbox.OutboxRepository.globalIsOpen()) {
+            val remain = com.red.sovereign.core.outbox.OutboxRepository.globalRemainingSec()
+            Log.i(TAG, "Circuit breaker open — deferring recovery (${remain}s remain, half-open probe next)")
+            return@runCatching Result.success()
+        }
+
         // إحصائيات عبر openHelper (بلا DAO جديد) — لا حذف، فقط رصد
         fun countTable(table: String): Int = runCatching {
             val c = db.openHelper.readableDatabase.query("SELECT COUNT(*) FROM $table", null)
@@ -65,16 +73,35 @@ class MessageRecoveryWorker(
         runCatching { outboxDao.resetStuckSending(now) }
 
         // فحص الرسائل العالقة في SENDING (موت العملية أثناء الإرسال) — فردي + مجموعات
-        val stuck = try { dao.getUnsentOutgoing() } catch (e: Exception) { emptyList() }
+        // الإرسال حتى الإقرار: SENDING + QUEUED (بلا SERVER_ACK) — DAO يجلب SENDING فقط
+        // فيُدمج مع QUEUED خاماً (نفس نهج الخدمة) وإلا ضاع QUEUED بعد الموت.
+        val stuckSending = try { dao.getUnsentOutgoing() } catch (e: Exception) { emptyList() }
+        val queuedExtra = runCatching {
+            val c = db.openHelper.readableDatabase.query(
+                "SELECT id FROM local_history WHERE outgoing = 1 AND status = 'QUEUED' ORDER BY createdAt ASC LIMIT 100", null
+            )
+            val ids = c.use {
+                val out = ArrayList<String>()
+                val idx = it.getColumnIndexOrThrow("id")
+                while (it.moveToNext()) out.add(it.getString(idx))
+                out
+            }
+            val known = stuckSending.map { it.id }.toSet()
+            ids.filterNot { known.contains(it) }.mapNotNull { id ->
+                runCatching { dao.getLocalHistoryEntry(id) }.getOrNull()
+            }
+        }.getOrDefault(emptyList())
+        val stuck = (stuckSending + queuedExtra).sortedBy { it.createdAt }.take(100)
         var redrivenGroups = 0
         var redrivenP2P = 0
         if (stuck.isNotEmpty()) {
-            Log.i(TAG, "Found ${stuck.size} stuck SENDING (1:1 + groups) — redriving idempotently")
+            Log.i(TAG, "Found ${stuck.size} stuck unacked (SENDING=${stuckSending.size} QUEUED=${queuedExtra.size}) — redriving idempotently")
             val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; explicitNulls = false }
             val dir = java.io.File(app.filesDir, "red_group_outbox")
             for (row in stuck) {
-                // نضج 60s حتى لا نسبق إرسالاً حياً (SENDING→QUEUED→SERVER_ACK)
-                if (now - row.createdAt < 60_000L) continue
+                // نضج: SENDING دقيقة، QUEUED دقيقة ونصف (دورة ACK الحية أطول للـ QUEUED المبطّن)
+                val maturity = if (row.status == "QUEUED") 90_000L else 60_000L
+                if (now - row.createdAt < maturity) continue
                 val isGroup = com.red.sovereign.core.RedConnectionService.isGroupConversation(row.conversationId)
                 if (!isGroup) {
                     redrivenP2P++
@@ -115,9 +142,10 @@ class MessageRecoveryWorker(
                 } catch (e: Exception) { Log.w(TAG, "group redrive failed for ${row.id}", e) }
             }
             if (redrivenP2P > 0) {
-                // الفردي يُعاد عبر OutboxRetryWorker (نفس uuid) + إيقاظ الخدمة
+                // الفردي: redrive الخدمة (SENDING+QUEUED بذات uuid) + outbox — بدء الخدمة
+                // وحده لا يدفع (redrive فقط في onCreate/ACTION_REDRIVE_STUCK) فاطلبها صراحةً.
                 runCatching { com.red.sovereign.core.outbox.OutboxRetryWorker.schedule(app) }
-                runCatching { com.red.sovereign.core.RedConnectionService.start(app) }
+                requestServiceRedrive(app)
             }
             if (redrivenGroups > 0) Log.i(TAG, "Redrove $redrivenGroups group message(s) with same clientId (idempotent)")
         }
@@ -148,6 +176,17 @@ class MessageRecoveryWorker(
         private const val UNIQUE_NAME = "message-recovery"
         private const val ONCE_NAME = "message-recovery-once"
         private const val INTERVAL_MINUTES = 30L
+
+        /** يوقظ الدفع الفعلي (redrive SENDING+QUEUED) — بدء الخدمة وحده لا يدفع. */
+        private fun requestServiceRedrive(context: Context) {
+            runCatching {
+                val intent = android.content.Intent(context, com.red.sovereign.core.RedConnectionService::class.java)
+                    .setAction(com.red.sovereign.core.RedConnectionService.ACTION_REDRIVE_STUCK)
+                context.startForegroundService(intent)
+            }.onFailure {
+                runCatching { com.red.sovereign.core.RedConnectionService.start(context) }
+            }
+        }
 
         fun enqueue(context: Context) {
             val constraints = Constraints.Builder()

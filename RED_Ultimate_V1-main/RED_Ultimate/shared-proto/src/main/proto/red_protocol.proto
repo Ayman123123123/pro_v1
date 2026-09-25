@@ -7,6 +7,7 @@ option java_outer_classname = "RedProtos";
 
 // الرسالة الموحدة لكافة العمليات
 message RedRED {
+    reserved 9; // كان call_signal — محذوف 2026-09-15، لا يُعاد استخدام الرقم أبداً.
     oneof signal {
         ChatMessage message = 1;
         MessageAck ack = 2;

@@ -26,15 +26,22 @@ class MessageCleanupWorker(
         val now = System.currentTimeMillis()
         val all = dao.allRichHistory()
         var removed = 0
+        var skippedUnacked = 0
         for (entity in all) {
             val expiresAt = runCatching { RichMessage.decode(entity.encryptedPlaintext)?.expiresAt }.getOrNull()
             if (expiresAt != null && expiresAt <= now) {
+                // الإرسال حتى الإقرار: لا تحذف صادراً بلا SERVER_ACK (SENDING/QUEUED/FAILED) —
+                // الحذف قبل الإقرار = فقدان نهائي بلا redrive. FAILED تُبقيها للـ retry اليدوي.
+                if (entity.outgoing && (entity.status == "SENDING" || entity.status == "QUEUED" || entity.status == "FAILED")) {
+                    skippedUnacked++
+                    continue
+                }
                 runCatching { dao.deleteLocalHistory(entity.id) }.onSuccess { removed++ }
             }
             // حماية البطارية: حد 500 فحص لكل دورة
             if (removed >= 500) break
         }
-        if (removed > 0) Log.i(TAG, "حُذفت $removed رسالة مؤقتة منتهية")
+        if (removed > 0) Log.i(TAG, "حُذفت $removed رسالة مؤقتة منتهية (تُجاوز $skippedUnacked بلا إقرار)")
         Result.success()
     }.getOrElse { error ->
         Log.w(TAG, "فشل تنظيف المؤقتة — ستُعاد المحاولة", error)

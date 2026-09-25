@@ -1,3 +1,7 @@
+# Local-only runtime image — consumes the pre-compiled bootJar.
+# Prerequisite: cd backend-server && ./gradlew bootJar -x test
+# Build context MUST be backend-server/ itself (unlike Dockerfile.fast whose
+# context is the project root): the COPY below is relative to backend-server/.
 FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app

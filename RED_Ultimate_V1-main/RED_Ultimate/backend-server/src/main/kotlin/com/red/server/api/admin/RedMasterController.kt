@@ -61,11 +61,17 @@ class RedMasterController(
     ): ResponseEntity<Any> {
         val safeLimit = limit.coerceIn(1, 500)
         val safeOffset = offset.coerceAtLeast(0)
-        val where = status?.takeIf { it.isNotBlank() }?.let { " WHERE status = ?" } ?: ""
+        // Canonical CallStatus values (see calls/CallHistoryModels): unknown
+        // values are client errors (400), not silent full-table scans.
+        val cleanStatus = status?.takeIf { it.isNotBlank() }?.uppercase()
+        if (cleanStatus != null && cleanStatus !in KNOWN_CALL_STATUSES) {
+            return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "INVALID_STATUS"))
+        }
+        val where = cleanStatus?.let { " WHERE status = ?" } ?: ""
         val total = jdbc.queryForObject(
             "SELECT count(*) FROM call_history$where",
             Int::class.java,
-            *if (where.isBlank()) arrayOf() else arrayOf(status!!)
+            *if (cleanStatus == null) arrayOf() else arrayOf(cleanStatus)
         ) ?: 0
         val rows = jdbc.queryForList(
             """
@@ -75,8 +81,15 @@ class RedMasterController(
             ORDER BY started_at DESC
             LIMIT ? OFFSET ?
             """.trimIndent(),
-            *if (where.isBlank()) arrayOf<Any>(safeLimit, safeOffset) else arrayOf<Any>(status!!, safeLimit, safeOffset)
+            *if (cleanStatus == null) arrayOf<Any>(safeLimit, safeOffset) else arrayOf<Any>(cleanStatus, safeLimit, safeOffset)
         )
         return ResponseEntity.ok(mapOf("total" to total, "calls" to rows))
+    }
+
+    private companion object {
+        val KNOWN_CALL_STATUSES = setOf(
+            "INITIATED", "RINGING", "RINGING_CONFIRMED", "ACTIVE",
+            "ENDED", "MISSED", "REJECTED", "BUSY", "FAILED"
+        )
     }
 }

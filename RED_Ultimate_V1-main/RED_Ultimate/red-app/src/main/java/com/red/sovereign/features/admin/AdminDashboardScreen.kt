@@ -70,7 +70,7 @@ fun AdminDashboardScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
             Icon(Icons.Default.Security, contentDescription = null, tint = AqyalGold, modifier = Modifier.size(28.dp))
             Spacer(Modifier.width(8.dp))
             Text("لوحة التحكم السيادية", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { viewModel.refreshDashboard(q.ifBlank { null }) }) {
+            IconButton(onClick = { viewModel.refreshDashboard(q.trim().takeIf { it.length >= 2 } ?: "") }) {
                 Icon(Icons.Default.Refresh, contentDescription = "تحديث", tint = AqyalGold)
             }
         }
@@ -81,7 +81,16 @@ fun AdminDashboardScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             singleLine = true,
             label = { Text("بحث: اسم / username / معرّف / حالة") },
-            trailingIcon = { if (search.isNotEmpty()) TextButton({ search = "" }) { Text("مسح") } }
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onSearch = { viewModel.refreshDashboard(search.trim().takeIf { it.length >= 2 }) }
+            ),
+            trailingIcon = {
+                if (search.isNotEmpty()) TextButton({
+                    search = ""
+                    viewModel.refreshDashboard("")
+                }) { Text("مسح") }
+            }
         )
         Spacer(Modifier.height(8.dp))
 

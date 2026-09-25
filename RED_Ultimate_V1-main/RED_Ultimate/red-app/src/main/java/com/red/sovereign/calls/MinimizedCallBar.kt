@@ -78,12 +78,13 @@ fun MinimizedCallBar() {
                 ZoomGroupCallService.end(context)
             }
         )
-        // 3) جماعية
+        // 3) جماعية — يعرض السقف 32 بجانب العدد
         GroupCallRuntime.isMinimized && groupState is GroupCallUiState.Active -> {
-            val joined = groupState.members.count { it.status == GroupCallMemberStatus.JOINED } + 1
+            val joined = (groupState.members.count { it.status == GroupCallMemberStatus.JOINED } + 1).coerceIn(1, CallLimits.GROUP_CALL_MAX)
+            val baseName = GroupCallRuntime.activeGroupName.ifBlank { groupState.groupCallId.ifBlank { "مجموعة يونس" } }
             MinimizedInfo(
                 typeLabel = if (groupState.isVideo) "فيديو جماعي" else "صوت جماعي",
-                title = GroupCallRuntime.activeGroupName.ifBlank { groupState.groupCallId } + " · $joined",
+                title = baseName + " · " + CallLimits.groupCountLabel(joined),
                 startedAt = groupState.startedAt,
                 onReturn = { GroupCallRuntime.isMinimized = false },
                 onEnd = {
@@ -148,12 +149,12 @@ fun MinimizedCallBar() {
                     Text(info.typeLabel, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Text(
                         info.title,
-                        color = Color.White.copy(0.75f),
+                        color = Color.White.copy(0.88f),
                         fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (info.startedAt > 0L) CallElapsedTimer(info.startedAt, Color.White.copy(0.7f))
+                    if (info.startedAt > 0L) CallElapsedTimer(info.startedAt, Color.White.copy(0.85f))
                 }
                 Box(
                     Modifier
@@ -260,7 +261,7 @@ fun SecondIncomingBanner() {
                     Text("مكالمة واردة ثانية · ${second.first}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Text(
                         second.second,
-                        color = Color.White.copy(0.8f),
+                        color = Color.White.copy(0.88f),
                         fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis

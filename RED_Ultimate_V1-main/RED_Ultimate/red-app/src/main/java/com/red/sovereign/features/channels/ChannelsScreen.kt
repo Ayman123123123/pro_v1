@@ -96,7 +96,7 @@ class ChannelsViewModel(private val api: ChannelsApi) : ViewModel() {
     }
 
     private suspend fun loadChannels(query: String) {
-        val q = query.trim()
+        val q = query.trim().take(64)
         if (q.isEmpty()) {
             // القائمة العامة — عضوية الخادم (isJoined) تُدمج مع المحلي
             when (val result = api.list(search = null, limit = 30)) {
@@ -211,11 +211,17 @@ class ChannelsViewModel(private val api: ChannelsApi) : ViewModel() {
             _state.update { it.copy(error = "اسم القناة يجب أن يكون حرفين على الأقل") }
             return
         }
+        val cleanUsername = username?.takeIf { it.isNotBlank() }?.trim()?.removePrefix("@")
+        // تحقق محلي قبل الشبكة: الخادم يرفض المعرّف المخالف (400) بلا رسالة عربية.
+        if (cleanUsername != null && !Regex("^[A-Za-z0-9_]{3,32}$").matches(cleanUsername)) {
+            _state.update { it.copy(error = "معرّف القناة: 3-32 حرف (أحرف/أرقام/_ فقط)") }
+            return
+        }
         viewModelScope.launch {
             val body = CreateChannelBody(
                 name = name.trim(),
-                username = username?.takeIf { it.isNotBlank() }?.trim()?.removePrefix("@"),
-                description = description?.takeIf { it.isNotBlank() }?.trim(),
+                username = cleanUsername,
+                description = description?.takeIf { it.isNotBlank() }?.trim()?.take(500),
                 isPublic = isPublic,
                 isBroadcast = isBroadcast
             )

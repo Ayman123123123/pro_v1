@@ -354,11 +354,18 @@ class BackupManager(private val context: Context) {
     fun listBackups(): List<BackupInfo> {
         return backupsDir.listFiles()?.filter { it.name.endsWith(".enc") }?.mapNotNull { file ->
             try {
+                // البصمة من meta.json المجاور أولاً (فوري) — تجنّب sha256 ملف كامل
+                // على خيط الواجهة لكل عنصر عند كل recomposition. الفارغ = غير محسوبة
+                // بعد (تُحسب عند الفحص/الاستعادة عبر verifyAgainstMeta) لا قيمة وهمية.
+                val metaChecksum = runCatching {
+                    val metaFile = java.io.File(file.parent ?: backupsDir.absolutePath, file.name.removeSuffix(".enc") + ".meta.json")
+                    if (metaFile.exists()) JSONObject(metaFile.readText()).optString("sha256").takeIf { it.isNotBlank() } else null
+                }.getOrNull()
                 BackupInfo(
                     fileName = file.name,
                     absolutePath = file.absolutePath,
                     sizeBytes = file.length(),
-                    checksum = sha256(file),
+                    checksum = metaChecksum.orEmpty(),
                     createdAt = file.lastModified()
                 )
             } catch (_: Exception) { null }

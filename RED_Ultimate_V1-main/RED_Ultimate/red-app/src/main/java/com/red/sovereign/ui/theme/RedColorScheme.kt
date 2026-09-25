@@ -251,14 +251,16 @@ object RedSemanticColors {
     val FailedMessageBackground = Color(0xFF3A1216)
     val FailedMessageText = Color(0xFFFFB3B8)
 
-    // رسالة نظام — رمادي محايد
-    val SystemMessage = Color(0xFF757575)
+    // رسالة نظام — رمادي محايد (نص #5A6B7D على #F5F5F5 ‏5.02:1 AA)
+    val SystemMessage = Color(0xFF5A6B7D)
     val SystemMessageBackground = Color(0xFFF5F5F5)
     val SystemMessageText = Color(0xFF212121)
 
-    // مؤشرات الحالة
+    // مؤشرات الحالة — Sent أيقونة UI (حد 3:1 لا 4.5): #868686 يحقق 3.68
+    // على الفقاعة الصادرة #14304F و3.64 على الأبيض و5.27 على #0A0F18.
+    // كان #757575 ‏2.91 على الصادرة (راسب حتى لحد الأيقونة) و4.16 على الخلفية.
     val Sending = YounesAccent
-    val Sent = Color(0xFF757575)
+    val Sent = Color(0xFF868686)
     val Delivered = YounesCobalt
     val Read = YounesCobalt
 

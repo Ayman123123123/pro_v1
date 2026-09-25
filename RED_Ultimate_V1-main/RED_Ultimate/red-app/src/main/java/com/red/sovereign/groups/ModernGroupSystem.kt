@@ -124,7 +124,9 @@ object ModernGroupSystem {
             "START_CALL" -> true // يمكن للجميع بدء مكالمة إلا إذا onlyAdminsCanCall
             "PIN_MESSAGE" -> memberRole in listOf(GroupRoleModern.OWNER, GroupRoleModern.ADMIN, GroupRoleModern.MODERATOR)
             "DELETE_ANY_MESSAGE" -> memberRole in listOf(GroupRoleModern.OWNER, GroupRoleModern.ADMIN, GroupRoleModern.MODERATOR)
-            else -> memberRole == GroupRoleModern.MEMBER
+            // إجراء غير معروف = رفض آمن (كان `memberRole == MEMBER` فيعطي العضو
+            // صلاحية وهمية ويحرم الإدارة — عكس مبدأ أقل صلاحية).
+            else -> false
         }
     }
     

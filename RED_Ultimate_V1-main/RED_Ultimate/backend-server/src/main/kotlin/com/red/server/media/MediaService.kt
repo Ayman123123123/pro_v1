@@ -13,17 +13,27 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
 import java.awt.image.BufferedImage
+import com.red.server.database.RedisManager
+import com.red.server.media.v1.TranscodeJobStatus
+import com.red.server.media.v1.UploadMetadata
 import java.io.File
+import java.io.InputStream
 import java.io.OutputStream
+import java.security.MessageDigest
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 @Service
 class MediaService(
     private val minio: MinioClient,
     @Value("\${red.minio.bucket}") private val bucket: String,
-    private val scanner: MediaSecurityScanner? = null
+    private val scanner: MediaSecurityScanner? = null,
+    /** اختياري: جلسات الرفع في Redis (TTL 24h) مع مرآة ذاكرة عند غيابه. */
+    private val redis: RedisManager? = null,
+    /** اختياري: تفويض الوصول لكائنات غير المالك (منح/قصص/مجموعات). */
+    private val access: MediaAccessService? = null
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     @Synchronized
@@ -349,14 +359,266 @@ class MediaService(
         require(ok) { "Invalid media key" }
     }
 
+    // ══════════════════════════════════════════
+    // 📦 الرفع المُجزأ + النطاق + الترميز (يُستخدم عبر media/v1)
+    // الجلسات في Redis (red:media:upload:{id} 24h) مع مرآة ذاكرة محدودة (5000)
+    // عند غياب Redis — انتهاء الصلاحية fail-closed في كلتا الحالتين.
+    // ══════════════════════════════════════════
+
+    private val uploadSessions = ConcurrentHashMap<String, UploadMetadata>()
+    private val transcodeJobs = ConcurrentHashMap<String, TranscodeJobStatus>()
+
+    fun storeUploadMetadata(uploadId: String, meta: UploadMetadata) {
+        require(uploadId.isNotBlank() && uploadId.length <= 128) { "Invalid upload id" }
+        evictExpiredSessions()
+        uploadSessions[uploadId] = meta
+        runCatching {
+            redis?.saveHashWithTtl(
+                "red:media:upload:$uploadId", uploadMetaToMap(meta),
+                Duration.ofSeconds(UPLOAD_SESSION_TTL_SECONDS)
+            )
+        }
+    }
+
+    fun getUploadMetadata(uploadId: String): UploadMetadata? {
+        if (uploadId.isBlank()) return null
+        runCatching { redis?.readHash("red:media:upload:$uploadId") }
+            .getOrNull()?.takeIf { it.isNotEmpty() }?.let { return uploadMetaFromMap(uploadId, it) }
+        val mem = uploadSessions[uploadId] ?: return null
+        if (mem.isExpired) {
+            uploadSessions.remove(uploadId)
+            runCatching { redis?.deleteKey("red:media:upload:$uploadId") }
+            return null
+        }
+        return mem
+    }
+
+    fun updateUploadMetadata(uploadId: String, meta: UploadMetadata) = storeUploadMetadata(uploadId, meta)
+
+    fun deleteUploadMetadata(uploadId: String) {
+        uploadSessions.remove(uploadId)
+        runCatching { redis?.deleteKey("red:media:upload:$uploadId") }
+    }
+
+    fun storeChunk(chunkKey: String, input: InputStream, size: Long, mimeType: String) {
+        validateChunkKey(chunkKey)
+        require(size in 1..MAX_CHUNK_SIZE) { "Invalid chunk size" }
+        ensureBucket()
+        input.use {
+            minio.putObject(
+                PutObjectArgs.builder().bucket(bucket).`object`(chunkKey)
+                    .stream(it, size, -1).contentType(mimeType).build()
+            )
+        }
+    }
+
+    fun deleteChunk(chunkKey: String) {
+        validateChunkKey(chunkKey)
+        runCatching {
+            minio.removeObject(RemoveObjectArgs.builder().bucket(bucket).`object`(chunkKey).build())
+        }
+    }
+
+    /**
+     * تجميع الشظايا في الكائن النهائي مع تحقق SHA-256 fail-closed:
+     * عدم التطابق = رفض بلا كائن نهائي (تُحذف البقايا الجزئية).
+     */
+    fun composeChunks(objectKey: String, totalChunks: Int, mimeType: String, expectedHash: String) {
+        validateKey(objectKey)
+        require(totalChunks in 1..MAX_TOTAL_CHUNKS) { "Invalid total chunks" }
+        val expected = expectedHash.trim().lowercase()
+        require(expected.matches(Regex("^[0-9a-f]{64}$"))) { "FILE_HASH_REQUIRED" }
+        ensureBucket()
+        val tmp = File.createTempFile("compose-", ".bin")
+        try {
+            // تمريرة واحدة: تجميع + هضم SHA-256 على البايتات المخزنة فعلًا.
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buf = ByteArray(8192)
+            tmp.outputStream().use { out ->
+                for (i in 0 until totalChunks) {
+                    val partKey = "$objectKey.part$i"
+                    validateChunkKey(partKey)
+                    minio.getObject(GetObjectArgs.builder().bucket(bucket).`object`(partKey).build()).use { input ->
+                        var n: Int
+                        while (input.read(buf).also { n = it } != -1) {
+                            digest.update(buf, 0, n)
+                            out.write(buf, 0, n)
+                        }
+                    }
+                }
+            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            if (actual != expected) {
+                runCatching { tmp.delete() }
+                throw IllegalArgumentException("FILE_HASH_MISMATCH")
+            }
+            require(tmp.length() > 0) { "Composed object is empty" }
+            tmp.inputStream().use { composed ->
+                minio.putObject(
+                    PutObjectArgs.builder().bucket(bucket).`object`(objectKey)
+                        .stream(composed, tmp.length(), -1).contentType(mimeType).build()
+                )
+            }
+        } finally {
+            runCatching { tmp.delete() }
+        }
+    }
+
+    /**
+     * وصول v1: المالك المباشر (users/{id}/ أو sovereign-backups/{id}/ أو
+     * مصغّراتهما) يُقبل فورًا، وغيره يُفوَّض لسياسة MediaAccessService —
+     * وغياب المفوَّض أو أي فشل = رفض (fail-closed).
+     */
+    fun canAccess(userId: UUID, objectKey: String): Boolean = runCatching {
+        val uid = userId.toString()
+        val base = objectKey.removePrefix("thumbs/")
+        if (base.startsWith("users/$uid/") || base.startsWith("sovereign-backups/$uid/")) return true
+        val svc = access ?: return false
+        svc.requireDownloadAllowed(userId, objectKey)
+        true
+    }.getOrDefault(false)
+
+    /** بثّ نطاق بايتات مُقيَّد (start/end مُثبَّتان مسبقًا من المتحكم). */
+    fun streamRange(key: String, output: OutputStream, start: Long, end: Long) {
+        validateKey(key); ensureBucket()
+        val size = metadata(key).size
+        require(size > 0) { "Empty media object" }
+        val s = start.coerceIn(0, size - 1)
+        val e = end.coerceIn(s, size - 1)
+        minio.getObject(
+            GetObjectArgs.builder().bucket(bucket).`object`(key).offset(s).length(e - s + 1).build()
+        ).use { it.copyTo(output) }
+    }
+
+    /**
+     * بدء ترميز: يُسجَّل QUEUED فقط (لا ادعاء اكتمال) — العامل الخلفي
+     * هو من ينتقل إلى PROCESSING/COMPLETED. سياسة Redis: 48h.
+     */
+    fun startTranscode(objectKey: String, outputFormat: String, qualityProfiles: List<String>): String {
+        validateKey(objectKey)
+        val format = outputFormat.trim().uppercase()
+        require(format == "HLS" || format == "DASH") { "UNSUPPORTED_TRANSCODE_FORMAT" }
+        val allowedProfiles = setOf("1080p", "720p", "480p", "360p")
+        require(qualityProfiles.isNotEmpty() && qualityProfiles.size <= 4 &&
+            qualityProfiles.all { it in allowedProfiles }) { "INVALID_QUALITY_PROFILES" }
+        metadata(objectKey) // يرمي إن غاب الكائن
+        val jobId = "transcode_" + UUID.randomUUID().toString().replace("-", "").take(12)
+        val job = TranscodeJobStatus(jobId = jobId)
+        transcodeJobs[jobId] = job
+        runCatching {
+            redis?.saveHashWithTtl(
+                "red:media:transcode:$jobId",
+                mapOf("status" to job.status, "progress" to "0", "updatedAt" to Instant.now().toString()),
+                Duration.ofHours(48)
+            )
+        }
+        log.info("Transcode queued: job={} key={} format={}", jobId, objectKey, format)
+        return jobId
+    }
+
+    fun getTranscodeStatus(jobId: String): TranscodeJobStatus? {
+        if (!jobId.matches(Regex("^transcode_[0-9a-f]{12}$"))) return null
+        transcodeJobs[jobId]?.let { return it }
+        val stored = runCatching { redis?.readHash("red:media:transcode:$jobId") }.getOrNull()
+        if (stored.isNullOrEmpty()) return null
+        return TranscodeJobStatus(
+            jobId = jobId,
+            status = stored["status"] ?: "QUEUED",
+            progress = stored["progress"]?.toIntOrNull()?.coerceIn(0, 100) ?: 0
+        )
+    }
+
+    /**
+     * رفع نسخة سيادية مشفرة (.enc) تحت sovereign-backups/{userId}/{uuid}.enc.
+     * مسار مخصص (لا MediaService.upload): الماسح يرفض امتداد .enc مقابل
+     * octet-stream، والبادئة users/ تكسر SovereignBackupController.verify.
+     */
+    fun uploadBackup(userId: UUID, file: org.springframework.web.multipart.MultipartFile): MediaObject {
+        require(!file.isEmpty && file.size in 1..MAX_SIZE) { "Backup file must contain 1 byte to 100 MiB" }
+        val original = (file.originalFilename ?: "").trim()
+        require(original.lowercase().endsWith(".enc")) { "Backup must be encrypted (.enc)" }
+        require(!original.contains("..") && !original.contains("/") && !original.contains("\\")) { "Invalid backup filename" }
+        ensureBucket()
+        val key = "sovereign-backups/$userId/${UuidV7.next()}.enc"
+        file.inputStream.use { input ->
+            minio.putObject(
+                PutObjectArgs.builder().bucket(bucket).`object`(key)
+                    .stream(input, file.size, -1).contentType("application/octet-stream").build()
+            )
+        }
+        return MediaObject(key, "application/octet-stream", file.size, "/api/media/$key")
+    }
+
+    private fun validateChunkKey(key: String) {
+        val idx = key.lastIndexOf(".part")
+        require(idx > 0 && key.length <= 512) { "Invalid chunk key" }
+        val base = key.substring(0, idx)
+        val suffix = key.substring(idx + 5)
+        require((suffix.toIntOrNull() ?: -1) in 0 until MAX_TOTAL_CHUNKS) { "Invalid chunk key" }
+        validateKey(base)
+    }
+
+    private fun evictExpiredSessions() {
+        if (uploadSessions.size < MAX_SESSIONS) return
+        val now = Instant.now()
+        uploadSessions.entries.removeIf { it.value.expiresAt.isBefore(now) }
+        if (uploadSessions.size >= MAX_SESSIONS) {
+            uploadSessions.entries.sortedBy { it.value.createdAt }.take(500)
+                .forEach { uploadSessions.remove(it.key) }
+        }
+    }
+
+    private fun uploadMetaToMap(meta: UploadMetadata): Map<String, String> = mapOf(
+        "objectKey" to meta.objectKey,
+        "userId" to meta.userId,
+        "fileName" to meta.fileName,
+        "mimeType" to meta.mimeType,
+        "totalSize" to meta.totalSize.toString(),
+        "chunkSize" to meta.chunkSize.toString(),
+        "totalChunks" to meta.totalChunks.toString(),
+        "uploadedChunks" to meta.uploadedChunks.sorted().joinToString(","),
+        "createdAt" to meta.createdAt.toEpochMilli().toString(),
+        "expiresAt" to meta.expiresAt.toEpochMilli().toString()
+    )
+
+    private fun uploadMetaFromMap(uploadId: String, map: Map<String, String>): UploadMetadata? = runCatching {
+        val expiresAt = Instant.ofEpochMilli(map["expiresAt"]?.toLongOrNull() ?: return null)
+        if (Instant.now().isAfter(expiresAt)) {
+            runCatching { redis?.deleteKey("red:media:upload:$uploadId") }
+            return null
+        }
+        UploadMetadata(
+            uploadId = uploadId,
+            objectKey = map["objectKey"] ?: return null,
+            userId = map["userId"] ?: return null,
+            fileName = map["fileName"] ?: "",
+            mimeType = map["mimeType"] ?: "",
+            totalSize = map["totalSize"]?.toLongOrNull() ?: 0L,
+            chunkSize = map["chunkSize"]?.toLongOrNull() ?: 0L,
+            totalChunks = map["totalChunks"]?.toIntOrNull() ?: 0,
+            uploadedChunks = map["uploadedChunks"]?.split(",")?.mapNotNull { it.toIntOrNull() }?.toMutableSet()
+                ?: mutableSetOf(),
+            createdAt = Instant.ofEpochMilli(map["createdAt"]?.toLongOrNull() ?: System.currentTimeMillis()),
+            expiresAt = expiresAt
+        )
+    }.getOrNull()
+
     companion object {
         const val MAX_SIZE = 100L * 1024 * 1024
+        /** أكبر شظية رفع مجزأ (100MB) — يطابق حد multipart للخادم. */
+        const val MAX_CHUNK_SIZE = 100L * 1024 * 1024
+        /** سقف شظايا الجلسة الواحدة — يمنع إغراق MinIO بآلاف الكائنات. */
+        const val MAX_TOTAL_CHUNKS = 5000
+        /** سقف جلسات الذاكرة الاحتياطية (Redis هو الأساس، TTL 24h). */
+        const val MAX_SESSIONS = 5000
+        /** TTL جلسة الرفع المُجزأ (ثوانٍ) — red:media:upload:{id}. */
+        const val UPLOAD_SESSION_TTL_SECONDS = 24 * 3600L
         /** فترة السماح الافتراضية قبل اعتبار كائن يتيم قابلًا للحذف (أيام). */
         const val DEFAULT_ORPHAN_GRACE_DAYS = 7L
         /** المهلة الافتراضية لدورة التنظيف (ثوانٍ) — توقف مبكر بلا حذف لاحق. */
         const val DEFAULT_ORPHAN_TIMEOUT_SECONDS = 300L
-        val ALLOWED = setOf("image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "application/pdf", "application/octet-stream")
-        val EXTENSIONS = mapOf("image/jpeg" to "jpg", "image/png" to "png", "image/webp" to "webp", "image/gif" to "gif", "video/mp4" to "mp4", "video/webm" to "webm", "audio/ogg" to "ogg", "audio/mp4" to "m4a", "audio/mpeg" to "mp3", "application/pdf" to "pdf", "application/octet-stream" to "bin")
+        val ALLOWED = setOf("image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "application/pdf", "application/octet-stream")
+        val EXTENSIONS = mapOf("image/jpeg" to "jpg", "image/png" to "png", "image/webp" to "webp", "image/gif" to "gif", "video/mp4" to "mp4", "video/webm" to "webm", "video/quicktime" to "mov", "audio/ogg" to "ogg", "audio/mp4" to "m4a", "audio/mpeg" to "mp3", "audio/wav" to "wav", "application/pdf" to "pdf", "application/octet-stream" to "bin")
     }
 }
 

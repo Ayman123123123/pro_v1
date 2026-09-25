@@ -133,7 +133,14 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
     }
 
     private suspend fun loadList(query: String) {
-        when (val result = api.list(query.takeIf { it.isNotBlank() })) {
+        // الاكتشاف من الخادم: حرف واحد لا يُرسل للشبكة (ضجيج + رفض محتمل) —
+        // يُعرض الحالي حتى يستقر المدخل، والقصّ 64 يطابق حد الخادم.
+        val q = query.trim().take(64)
+        if (q.length == 1) {
+            _state.update { it.copy(loading = false) }
+            return
+        }
+        when (val result = api.list(q.takeIf { it.isNotBlank() })) {
             is ApiResult.Success -> _state.update {
                 it.copy(loading = false, communities = result.value, error = null)
             }
@@ -164,9 +171,9 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
     }
 
     fun delete(community: Community) = viewModelScope.launch {
-        when (api.delete(community.id)) {
+        when (val r = api.delete(community.id)) {
             is ApiResult.Success -> refresh()
-            is ApiResult.Error -> _state.update { it.copy(error = "فشل الحذف") }
+            is ApiResult.Error -> _state.update { it.copy(error = r.message) }
         }
     }
 
@@ -183,7 +190,7 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
         avatarColor: String? = null,
         onSuccess: () -> Unit
     ) {
-        if (name.length < 2) {
+        if (name.trim().length < 2) {
             _state.update { it.copy(error = "الاسم يجب أن يكون حرفين على الأقل") }
             return
         }
@@ -374,7 +381,10 @@ private fun CommunityCard(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val avatarColor = parseColorOrDefault(community.avatarColor)
-    val isAdmin = community.myRole == "ADMIN"
+    // الصلاحيات: ADMIN/OWNER (بأي حالة أحرف) — كان ADMIN فقط فيحجب مالك
+    // دوره OWNER من التعديل/الحذف رغم أنه أعلى صلاحية.
+    val normalizedRole = community.myRole?.trim()?.uppercase()
+    val isAdmin = normalizedRole == "ADMIN" || normalizedRole == "OWNER"
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onOpen() },
@@ -471,6 +481,15 @@ private fun CommunityCard(
                             Icon(Icons.Default.MoreVert, null)
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            // الصلاحيات: ADMIN فقط يرى التعديل/الحذف — العضو يرى انضم/غادر فقط.
+                            DropdownMenuItem(
+                                text = { Text("تعديل المجتمع") },
+                                onClick = {
+                                    menuOpen = false
+                                    onEdit()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Edit, null) }
+                            )
                             DropdownMenuItem(
                                 text = { Text("حذف المجتمع") },
                                 onClick = {
@@ -499,12 +518,15 @@ private fun CommunityCard(
 @Composable
 private fun CreateCommunityDialog(
     onDismiss: () -> Unit,
-    onSubmit: (name: String, description: String, category: String, isPublic: Boolean) -> Unit
+    onSubmit: (name: String, description: String, category: String, isPublic: Boolean, tags: List<String>, rules: String?, avatarColor: String?) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("GENERAL") }
     var isPublic by remember { mutableStateOf(true) }
+    var tagsInput by remember { mutableStateOf("") }
+    var rules by remember { mutableStateOf("") }
+    var avatarColor by remember { mutableStateOf(CommunityAvatarColors.first()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -527,6 +549,23 @@ private fun CreateCommunityDialog(
                     minLines = 2,
                     maxLines = 4
                 )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = tagsInput,
+                    onValueChange = { tagsInput = it },
+                    label = { Text("وسوم (افصل بفاصلة، ≤10)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = rules,
+                    onValueChange = { rules = it },
+                    label = { Text("القواعد (اختياري)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 1,
+                    maxLines = 3
+                )
                 Spacer(Modifier.height(12.dp))
                 Text("التصنيف", fontSize = 13.sp)
                 Row(
@@ -541,6 +580,20 @@ private fun CreateCommunityDialog(
                         )
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                Text("لون الأفاتار", fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CommunityAvatarColors.forEach { hex ->
+                        val selected = avatarColor == hex
+                        Box(
+                            modifier = Modifier
+                                .size(if (selected) 32.dp else 26.dp)
+                                .clip(CircleShape)
+                                .background(parseColorOrDefault(hex))
+                                .clickable { avatarColor = hex }
+                        )
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(checked = isPublic, onCheckedChange = { isPublic = it })
@@ -551,13 +604,100 @@ private fun CreateCommunityDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSubmit(name, description, category, isPublic) },
+                onClick = {
+                    onSubmit(
+                        name, description, category, isPublic,
+                        parseTagsInput(tagsInput),
+                        rules.trim().takeIf { it.isNotEmpty() },
+                        avatarColor
+                    )
+                },
                 enabled = name.trim().length >= 2
             ) { Text("إنشاء", color = YounesEmerald, fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("إلغاء") }
         }
+    )
+}
+
+/**
+ * حوار تعديل المجتمع — كان مستدعى بلا تعريف (كسر بناء). حقول مملوءة مسبقًا
+ * من الكائن الحالي، والحفظ عبر PUT المحقون doPut (ADMIN/OWNER فقط).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditCommunityDialog(
+    community: Community,
+    onDismiss: () -> Unit,
+    onSave: (name: String?, description: String?, category: String?, isPublic: Boolean?, tags: List<String>?, rules: String?, avatarColor: String?) -> Unit
+) {
+    var name by remember(community.id) { mutableStateOf(community.name) }
+    var description by remember(community.id) { mutableStateOf(community.description.orEmpty()) }
+    var category by remember(community.id) { mutableStateOf(community.category) }
+    var isPublic by remember(community.id) { mutableStateOf(community.isPublic) }
+    var tagsInput by remember(community.id) { mutableStateOf(community.tags.joinToString(", ")) }
+    var rules by remember(community.id) { mutableStateOf(community.rules.orEmpty()) }
+    var avatarColor by remember(community.id) { mutableStateOf(community.avatarColor) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تعديل المجتمع") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("اسم المجتمع") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("الوصف") }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = tagsInput, onValueChange = { tagsInput = it }, label = { Text("وسوم (افصل بفاصلة، ≤10)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = rules, onValueChange = { rules = it }, label = { Text("القواعد") }, modifier = Modifier.fillMaxWidth(), minLines = 1, maxLines = 3)
+                Spacer(Modifier.height(12.dp))
+                Text("التصنيف", fontSize = 13.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("GENERAL", "TECH", "BUSINESS", "EDUCATION", "CULTURE").forEach { cat ->
+                        FilterChip(selected = category == cat, onClick = { category = cat }, label = { Text(categoryLabel(cat), fontSize = 11.sp) })
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("لون الأفاتار", fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CommunityAvatarColors.forEach { hex ->
+                        val selected = avatarColor == hex
+                        Box(
+                            modifier = Modifier
+                                .size(if (selected) 32.dp else 26.dp)
+                                .clip(CircleShape)
+                                .background(parseColorOrDefault(hex))
+                                .clickable { avatarColor = hex }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = isPublic, onCheckedChange = { isPublic = it })
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isPublic) "عام (الانضمام تلقائي)" else "خاص (يتطلب موافقة)")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(
+                        name.trim().takeIf { it.length >= 2 },
+                        description.trim().takeIf { it.isNotEmpty() },
+                        category,
+                        isPublic,
+                        parseTagsInput(tagsInput),
+                        rules.trim().takeIf { it.isNotEmpty() },
+                        avatarColor
+                    )
+                },
+                enabled = name.trim().length >= 2
+            ) { Text("حفظ", color = YounesEmerald, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
 }
 
@@ -594,8 +734,9 @@ private fun categoryLabel(c: String): String = when (c) {
     else -> c
 }
 
-private fun roleLabel(r: String): String = when (r) {
+private fun roleLabel(r: String): String = when (r.trim().uppercase()) {
     "ADMIN" -> "مشرف"
+    "OWNER" -> "مالك"
     "MODERATOR" -> "وسيط"
     "MEMBER" -> "عضو"
     else -> r

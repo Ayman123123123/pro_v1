@@ -50,8 +50,14 @@ class JwtHandshakeInterceptor(
     }
 
     private fun authenticateBearer(token: String): AuthenticatedSocket? = runCatching {
-        val user = users.findById(jwtService.userId(token)).orElse(null) ?: return@runCatching null
-        val deviceId = jwtService.deviceId(token)
+        // تحليل واحد: نفس الادعاءات للمعرّف والجهاز (انظر JwtAuthenticationFilter).
+        val claims = jwtService.parse(token)
+        // فصل SFU: تذكرة الوسائط لا تفتح WebSocket — مرفوضة كرمز API هنا أيضًا.
+        if (claims["typ"]?.toString() == "sfu" ||
+            claims["sfuGroupId"] != null || claims["sfuGroupRole"] != null || claims["sfuCanProduce"] != null
+        ) return@runCatching null
+        val user = users.findById(java.util.UUID.fromString(claims.subject)).orElse(null) ?: return@runCatching null
+        val deviceId = claims["deviceId"]?.toString()?.let(java.util.UUID::fromString)
         val device = deviceId?.let { devices.findByIdAndUserId(it, user.id) }
         val deviceAllowed = if (deviceId != null) device?.status == DeviceStatus.APPROVED else user.role == AccountRole.ADMIN
         if (user.status != AccountStatus.APPROVED || !deviceAllowed) null else AuthenticatedSocket(user, deviceId, device)

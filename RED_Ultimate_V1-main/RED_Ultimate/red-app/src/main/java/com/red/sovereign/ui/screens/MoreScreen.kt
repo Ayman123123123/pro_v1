@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -45,6 +46,11 @@ import com.red.sovereign.ui.theme.YounesGold
 
 /**
  * 🏛️ YOUNES Sovereign — More Screen (مساحة يونس)
+ *
+ * ملاحظة معمارية: المسار الحي في RedDashboard هو MoreScreen الخاصة
+ * (نفس الاسم، نفس الحزمة ui). هذه النسخة في ui.screens بديل مستقل
+ * أُبقيت وحُسّنت بدل حذفها — وحّد عليها عند إحياء المسار.
+ *
  * الهوية والخدمات السيادية في مكان واحد:
  * - الإدارة السيادية، الخصوصية والأمان
  * - النسخ الاحتياطي، الأجهزة المتصلة، الإعدادات العامة
@@ -74,9 +80,9 @@ fun MoreScreen(
     ) {
         Text("مساحة يونس", style = MaterialTheme.typography.headlineMedium)
         Text("الهوية والخدمات السيادية في مكان واحد", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(Modifier.fillMaxWidth().clickable { onProfile() }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Card(Modifier.fillMaxWidth().clickable(onClickLabel = "البروفايل") { onProfile() }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                SovereignAvatar(account.username.take(1))
+                SovereignAvatar(account.username.take(1), contentDescription = "الصورة الشخصية لـ ${account.username}")
                 Column(Modifier.padding(horizontal = 12.dp)) {
                     Text(account.username, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text("البروفايل · الصورة والبايو والهوية", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -97,10 +103,15 @@ fun MoreScreen(
 
 @Composable
 fun MoreOption(icon: ImageVector, title: String, detail: String, color: Color, enabled: Boolean = true, click: () -> Unit) =
-    Card(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .clickable(enabled = enabled, onClickLabel = title, onClick = click)
+    ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(color.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = color)
+                Icon(icon, contentDescription = title, tint = color)
             }
             Column(Modifier.padding(horizontal = 14.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)

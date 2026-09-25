@@ -25,13 +25,16 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-backend-${{ hashFiles('**/*.gradle*', '**/libs.versions.toml') }}
       - name: Run backend tests
-        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        # backend-server is an independent Spring build (own settings.gradle.kts
+        # + wrapper; excluded from the Android settings on purpose). It has no
+        # :backend-server project inside the Android graph — run its wrapper.
+        working-directory: RED_Ultimate/backend-server
         run: |
           chmod +x ./gradlew
-          ./gradlew :backend-server:test --no-daemon --stacktrace
+          ./gradlew test --no-daemon --stacktrace
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-test-results
-          path: '**/build/test-results/**/*.xml'
+          path: 'RED_Ultimate/backend-server/build/test-results/**/*.xml'

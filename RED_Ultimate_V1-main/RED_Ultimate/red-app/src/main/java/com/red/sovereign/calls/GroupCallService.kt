@@ -303,8 +303,30 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 val invitees = intent.getStringArrayListExtra(EXTRA_INVITEE_IDS) ?: arrayListOf()
                 val names = intent.getStringArrayListExtra(EXTRA_INVITEE_NAMES) ?: arrayListOf()
 
+                // طبّع القائمة: تجاهل الفراغات والتكرارات وذات المضيف — السقف والحارس يُحسبان عليها فقط.
+                val nameById = invitees.mapIndexed { i, id -> id.trim() to names.getOrElse(i) { id.trim() } }
+                    .filter { it.first.isNotBlank() }.toMap()
+                val effective = nameById.keys.filter { it != myUserId }.distinct()
+
+                // حارس الطبقة الثانية (مسار Intent المباشر قد يتجاوز companion): فارغ = لا مكالمة.
+                if (effective.isEmpty()) {
+                    runCatching {
+                        android.widget.Toast.makeText(this, "لا يوجد أعضاء لدعوتهم", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    GroupCallRuntime.state = GroupCallUiState.Ended
+                    stopGroupCall()
+                    return START_STICKY
+                }
+                // حارس العضو الواحد→1:1 (طبقة ثانية): عضو واحد = مكالمة فردية لا غرفة جماعية.
+                if (effective.size == 1) {
+                    runCatching { YounesCallService.start(this, effective.first(), isVideo) }
+                    GroupCallRuntime.state = GroupCallUiState.Ended
+                    stopGroupCall()
+                    return START_STICKY
+                }
+
                 // تحقق مسبق موحد من السقف (32) — قبل أي حالة/رنين، مع رسالة للمضيف.
-                CallLimits.checkGroupCall(invitees.size + 1)?.let { msg ->
+                CallLimits.checkGroupCall(effective.size + 1)?.let { msg ->
                     android.util.Log.w("GroupCallService", "limit exceeded: $msg")
                     runCatching {
                         android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
@@ -320,8 +342,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 GroupCallRuntime.isVideoEnabled = isVideo
                 GroupCallRuntime.isMuted = false
 
-                val members = invitees.mapIndexed { i, id ->
-                    GroupCallMember(userId = id, displayName = names.getOrElse(i) { id }, status = GroupCallMemberStatus.RINGING)
+                val members = effective.map { id ->
+                    GroupCallMember(userId = id, displayName = nameById[id]?.ifBlank { id } ?: id, status = GroupCallMemberStatus.RINGING)
                 }
                 GroupCallRuntime.state = GroupCallUiState.Ringing(groupCallId, isVideo, members)
 
@@ -391,10 +413,36 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 ringTimeout?.cancel()
                 incomingRingTimeout?.cancel()
                 val gId = resolveGroupCallIdForJoin(intent.getStringExtra(EXTRA_GROUP_CALL_ID) ?: groupCallId.ifBlank { null })
+                // الانضمام بلا معرف غرفة = حالة عالقة — أجهض بدل شاشة نشطة فارغة.
+                if (gId.isBlank()) {
+                    android.util.Log.w("GroupCallService", "accept with blank groupCallId — abort")
+                    stopGroupCall()
+                    return START_STICKY
+                }
+                // سقف الانضمام: إن كانت الحالة الحالية ممتلئة (32) امنع تجاوزها برسالة.
+                val curMembers = when (val s = GroupCallRuntime.state) {
+                    is GroupCallUiState.Ringing -> s.members.size + 1
+                    is GroupCallUiState.Active -> s.members.size + 1
+                    is GroupCallUiState.IncomingGroup -> s.otherMembers.size + 2
+                    else -> 1
+                }
+                CallLimits.checkGroupCall(curMembers)?.let { msg ->
+                    android.util.Log.w("GroupCallService", "accept blocked at cap: $msg")
+                    runCatching {
+                        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    scope.launch {
+                        runCatching { signaling.connect() }
+                        signaling.sendGroupCallResponse(gId, accepted = false)
+                    }
+                    stopGroupCall()
+                    return START_STICKY
+                }
                 myUserId = intent.getStringExtra(EXTRA_MY_USER_ID) ?: myUserId
                 isVideo = intent.getBooleanExtra(EXTRA_IS_VIDEO, isVideo)
                 groupCallId = gId
                 GroupCallRuntime.isVideoEnabled = isVideo
+                GroupCallRuntime.isMinimized = false
                 // لا تبقَ واجهة "الدعوة الواردة" معلّقة — انتقل فوراً للواجهة النشطة
                 // (المضيف سيرى انضمامنا، والوسائط تبدأ عبر onConnected بعد connect)
                 GroupCallRuntime.state = GroupCallUiState.Active(
@@ -418,10 +466,20 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 ringTimeout?.cancel()
                 incomingRingTimeout?.cancel()
                 stopRingtone()
+                stopRingback()
                 val gId = intent.getStringExtra(EXTRA_GROUP_CALL_ID) ?: groupCallId
-                scope.launch {
-                    runCatching { signaling.connect() }
-                    signaling.sendGroupCallResponse(gId, accepted = false)
+                if (gId.isNotBlank()) {
+                    scope.launch {
+                        runCatching { signaling.connect() }
+                        signaling.sendGroupCallResponse(gId, accepted = false)
+                    }
+                }
+                // الرفض يخفي الوارد فوراً (الإنهاء الكامل يتم في stopGroupCall/finishStop).
+                GroupCallRuntime.isMinimized = false
+                scope.launch(Dispatchers.Main.immediate) {
+                    if (GroupCallRuntime.state is GroupCallUiState.IncomingGroup) {
+                        GroupCallRuntime.state = GroupCallUiState.Ended
+                    }
                 }
                 stopGroupCall()
             }
@@ -567,28 +625,29 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                     is GroupCallUiState.Active -> cur.members.map { it.userId } + myUserId
                     else -> emptyList()
                 }
-                val fresh = newIds.filterIndexed { i, id -> id.isNotBlank() && id !in existingIds && id != myUserId }
+                val fresh = newIds.map { it.trim() }.filter { it.isNotBlank() && it !in existingIds && it != myUserId }.distinct()
                 if (fresh.isEmpty()) return START_STICKY
                 // تحقق مسبق موحد: الإجمالي بعد الإضافة يجب ألا يتجاوز 32.
-                val totalAfterAdd = existingIds.size + fresh.size
-                CallLimits.checkGroupCall(totalAfterAdd)?.let { msg ->
+                CallLimits.checkGroupCallAdd(existingIds.size, fresh.size)?.let { msg ->
                     android.util.Log.w("GroupCallService", "add blocked: $msg")
                     runCatching {
                         android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
                     }
                     return START_STICKY
                 }
+                val nameByNewId = newIds.mapIndexed { i, id -> id.trim() to newNames.getOrElse(i) { id.trim() } }
+                    .filter { it.first.isNotBlank() }.toMap()
                 // أضفهم للحالة كـ RINGING فوراً (واجهة)
                 scope.launch(Dispatchers.Main.immediate) {
                     when (val s = GroupCallRuntime.state) {
                         is GroupCallUiState.Ringing -> GroupCallRuntime.state = s.copy(
-                            members = s.members + fresh.mapIndexed { i, id ->
-                                GroupCallMember(id, newNames.getOrElse(i) { id }, GroupCallMemberStatus.RINGING)
+                            members = s.members + fresh.map { id ->
+                                GroupCallMember(id, nameByNewId[id]?.ifBlank { id } ?: id, GroupCallMemberStatus.RINGING)
                             }
                         )
                         is GroupCallUiState.Active -> GroupCallRuntime.state = s.copy(
-                            members = s.members + fresh.mapIndexed { i, id ->
-                                GroupCallMember(id, newNames.getOrElse(i) { id }, GroupCallMemberStatus.RINGING)
+                            members = s.members + fresh.map { id ->
+                                GroupCallMember(id, nameByNewId[id]?.ifBlank { id } ?: id, GroupCallMemberStatus.RINGING)
                             }
                         )
                         else -> {}
@@ -617,11 +676,13 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                             if (m.status == GroupCallMemberStatus.RINGING && m.userId in freshSnapshot) m.copy(status = GroupCallMemberStatus.NO_ANSWER) else m
                         }
                         withContext(Dispatchers.Main.immediate) { GroupCallRuntime.state = st.copy(members = updated) }
+                        checkIfAllDone()
                     } else if (st is GroupCallUiState.Ringing) {
                         val updated = st.members.map { m ->
                             if (m.status == GroupCallMemberStatus.RINGING && m.userId in freshSnapshot) m.copy(status = GroupCallMemberStatus.NO_ANSWER) else m
                         }
                         withContext(Dispatchers.Main.immediate) { GroupCallRuntime.state = st.copy(members = updated) }
+                        checkIfAllDone()
                     }
                 }
             }
@@ -955,7 +1016,12 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             "PARTICIPANT_LEFT" -> {
                 val leftId = signal.sourceUserId.orEmpty()
                 updateMemberStatus(leftId, GroupCallMemberStatus.LEFT)
-                if (leftId.isNotBlank()) mesh?.detachPeer(leftId)
+                if (leftId.isNotBlank()) {
+                    mesh?.detachPeer(leftId)
+                    GroupCallRuntime.remoteVideos = GroupCallRuntime.remoteVideos - leftId
+                    GroupCallRuntime.speakingPeers = GroupCallRuntime.speakingPeers - leftId
+                    GroupCallRuntime.raisedHands = GroupCallRuntime.raisedHands - leftId
+                }
                 checkIfAllDone()
             }
         }
@@ -1159,17 +1225,37 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
 
     /** Marks a kicked/left member LEFT in the visible roster (host + peers). */
     private fun markMemberLeft(memberId: String) {
-        val cur = GroupCallRuntime.state as? GroupCallUiState.Active ?: return
-        if (cur.members.none { it.userId == memberId }) return
-        GroupCallRuntime.state = cur.copy(members = cur.members.map {
-            if (it.userId == memberId) it.copy(status = GroupCallMemberStatus.LEFT) else it
-        })
+        if (memberId.isNotBlank()) {
+            mesh?.detachPeer(memberId)
+            GroupCallRuntime.remoteVideos = GroupCallRuntime.remoteVideos - memberId
+            GroupCallRuntime.speakingPeers = GroupCallRuntime.speakingPeers - memberId
+            GroupCallRuntime.raisedHands = GroupCallRuntime.raisedHands - memberId
+        }
+        when (val cur = GroupCallRuntime.state) {
+            is GroupCallUiState.Active -> {
+                if (cur.members.none { it.userId == memberId }) return
+                GroupCallRuntime.state = cur.copy(members = cur.members.map {
+                    if (it.userId == memberId) it.copy(status = GroupCallMemberStatus.LEFT) else it
+                })
+            }
+            is GroupCallUiState.Ringing -> {
+                if (cur.members.none { it.userId == memberId }) return
+                GroupCallRuntime.state = cur.copy(members = cur.members.map {
+                    if (it.userId == memberId) it.copy(status = GroupCallMemberStatus.LEFT) else it
+                })
+                checkIfAllDone()
+            }
+            else -> Unit
+        }
     }
 
     private fun stopGroupCall() {
         if (stopping) return
         stopping = true
         ringTimeout?.cancel()
+        incomingRingTimeout?.cancel()
+        stopRingback()
+        stopRingtone()
         stopNetworkWatcher()
         saveGroupCallLogLocally()
         // P0: إبلاغ الغرفة بمغادرة غير المضيف (كانت تغادر بصمت فتخلد zombie)
@@ -1365,11 +1451,24 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         ) {
             // حارس العضو الواحد: الاتصال بشخص واحد = مكالمة 1:1 — لا غرفة جماعية
             // (يوقف عرض عدة وجهات لنفس الشخص من أي مدخل).
-            if (inviteeIds.size == 1) {
-                YounesCallService.start(context, inviteeIds.first(), isVideo)
+            // طبّع أولاً: فراغات/تكرارات/ذات المتصل لا تُحتسب.
+            val effective = inviteeIds.map { it.trim() }.filter { it.isNotBlank() && it != myUserId }.distinct()
+            if (effective.isEmpty()) return
+            if (effective.size == 1) {
+                YounesCallService.start(context, effective.first(), isVideo)
+                return
+            }
+            // سقف مسبق قبل تشغيل الخدمة: وفّر رنيناً مرفوضاً سلفاً مع رسالة للمضيف.
+            CallLimits.checkGroupCall(effective.size + 1)?.let { msg ->
+                runCatching {
+                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                }
                 return
             }
             val safeId = if (groupCallId.isBlank()) RoomSeparationPolicy.normalizeGroupCallId(null) else RoomSeparationPolicy.normalizeGroupCallId(groupCallId)
+            val nameById = inviteeIds.mapIndexed { i, id -> id.trim() to inviteeNames.getOrElse(i) { id.trim() } }
+                .filter { it.first.isNotBlank() }.toMap()
+            val effectiveNames = effective.map { nameById[it]?.ifBlank { it } ?: it }
             ContextCompat.startForegroundService(context,
                 Intent(context, GroupCallService::class.java).apply {
                     action = ACTION_START_GROUP_CALL
@@ -1379,8 +1478,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                     putExtra(EXTRA_MY_USER_ID, myUserId)
                     putExtra(EXTRA_HOST_NAME, hostName)
                     putExtra(EXTRA_IS_VIDEO, isVideo)
-                    putStringArrayListExtra(EXTRA_INVITEE_IDS, ArrayList(inviteeIds))
-                    putStringArrayListExtra(EXTRA_INVITEE_NAMES, ArrayList(inviteeNames))
+                    putStringArrayListExtra(EXTRA_INVITEE_IDS, ArrayList(effective))
+                    putStringArrayListExtra(EXTRA_INVITEE_NAMES, ArrayList(effectiveNames))
                 })
         }
 

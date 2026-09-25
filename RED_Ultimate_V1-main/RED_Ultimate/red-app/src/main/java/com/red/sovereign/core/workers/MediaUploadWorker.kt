@@ -53,6 +53,22 @@ class MediaUploadWorker(
             runCatching { dao.byId(id) }.getOrNull()?.let { ordered[it.messageId] = it }
         }
         runCatching { dao.due(now) }.getOrDefault(emptyList()).forEach { ordered.putIfAbsent(it.messageId, it) }
+        // الإرسال حتى الإقرار: صفوف SENT (سُلّمت للخدمة بلا ACK بعد) تُفحص هنا —
+        // dao.due يجلب PENDING/FAILED فقط فيُدمج مع SENT المستحقة خاماً.
+        runCatching {
+            val c = db.openHelper.readableDatabase.query(
+                "SELECT messageId FROM media_uploads WHERE status = 'SENT' AND nextAttemptAt <= $now LIMIT 10", null
+            )
+            val ids = c.use {
+                val out = ArrayList<String>()
+                val idx = it.getColumnIndexOrThrow("messageId")
+                while (it.moveToNext()) out.add(it.getString(idx))
+                out
+            }
+            ids.forEach { id ->
+                if (!ordered.containsKey(id)) runCatching { dao.byId(id) }.getOrNull()?.let { ordered[it.messageId] = it }
+            }
+        }
         if (ordered.isEmpty()) return@withContext Result.success()
 
         var needsRetry = false
@@ -69,6 +85,28 @@ class MediaUploadWorker(
     private suspend fun processOne(entity: MediaUploadEntity): Outcome {
         val db = RedDatabase.getInstance(applicationContext)
         val dao = db.mediaUploadDao()
+        // الإرسال حتى الإقرار: صف SENT = سُلّم للخدمة وينتظر SERVER_ACK — لا تحذف الملف.
+        if (entity.status == "SENT") {
+            val ack = runCatching { db.redDao().getLocalHistoryEntry(entity.messageId)?.status?.uppercase() }.getOrNull().orEmpty()
+            if (ack in setOf("SERVER_ACK", "SENT", "DELIVERED", "READ")) {
+                runCatching { File(entity.localPath).delete() }
+                runCatching { dao.delete(entity.messageId) }
+                Log.i(TAG, "acked ${entity.messageId} ($ack) — cleaned staged file")
+                return Outcome.DONE
+            }
+            // لا إقرار بعد: أعد التسليم إن نضجت المهلة، وإلا انتظر الفحص القادم.
+            if (System.currentTimeMillis() >= entity.nextAttemptAt) {
+                val tgt = entity.targetRedId
+                if (!tgt.isNullOrBlank() && File(entity.localPath).isFile) {
+                    Log.i(TAG, "re-handoff unacked ${entity.messageId} (still $ack)")
+                    runCatching {
+                        dao.mark(entity.messageId, "SENT", entity.retryCount, System.currentTimeMillis() + 300_000L, entity.objectKey, entity.url)
+                    }
+                    return Outcome.RETRY_LATER
+                }
+            }
+            return Outcome.DONE
+        }
         val target = entity.targetRedId
         if (target.isNullOrBlank()) {
             // مسار المجموعات مباشر — لا يجب أن يصل هنا؛ احذف لمنع الانسداد مع سجل
@@ -100,14 +138,18 @@ class MediaUploadWorker(
                         else -> "FILE"
                     }
                     // الإرسال عبر الخدمة (طابور WS + outbox نصي للحمولة) بمفتاح عدم التكرار نفسه
+                    // الإرسال حتى الإقرار: handoff فقط — يُعلَّم SENT ويبقى الملف المرحلي
+                    // حتى SERVER_ACK (يُنظَّف في فحص SENT أعلاه) — الحذف الفوري كان يفقد
+                    // الوسائط عند موت العملية بين التسليم والإقرار.
                     RedConnectionService.sendPayload(
                         applicationContext, target, entity.conversationId, type,
                         prepared.value.manifestJson.toByteArray(Charsets.UTF_8),
                         entity.messageId
                     )
-                    runCatching { dao.delete(entity.messageId) }
-                    runCatching { staged.delete() }
-                    Log.i(TAG, "uploaded ${entity.messageId} ($type)")
+                    runCatching {
+                        dao.mark(entity.messageId, "SENT", entity.retryCount, System.currentTimeMillis() + 300_000L, entity.objectKey, entity.url)
+                    }
+                    Log.i(TAG, "handed off ${entity.messageId} ($type) — awaiting SERVER_ACK")
                     Outcome.DONE
                 }
             }

@@ -44,6 +44,8 @@ class LiveStreamWebSocketHandler(
     /** حدّ معدل الشات/الهدايا لكل مستخدم — كان التعليق يعد بـ 1msg/sec ولا شيء مطبق. */
     private val lastChatAt = ConcurrentHashMap<String, Long>()
     private val lastGiftAt = ConcurrentHashMap<String, Long>()
+    /** المعدل: حارس نافذة ثابتة مشترك (120 إطار/دقيقة لكل جلسة) — إزالة التكرار مع Call/RedMaster. */
+    private val frameLimiter = WebSocketRateLimiter(maxMessages = 120, windowMillis = 60_000)
 
     enum class Role { BROADCASTER, VIEWER }
 
@@ -92,6 +94,11 @@ class LiveStreamWebSocketHandler(
     }
 
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+        // المعدل أولاً (رخيص، في الذاكرة): تجاوز الحد = خطأ بلا إغلاق — الجلسة الحية لا تُسقط للضغط.
+        if (!frameLimiter.tryAcquire(session.id)) {
+            sendError(session, "", "RATE_LIMITED", "Slow down")
+            return
+        }
         // Revalidate device approval on every frame
         if (!accessGuard.isStillAuthorized(
                 session.attributes["accountId"] as? String,
@@ -101,10 +108,20 @@ class LiveStreamWebSocketHandler(
             session.close(CloseStatus.POLICY_VIOLATION)
             return
         }
-        val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
+        // بلا إغلاق: مصادقة/تحليل فاشل = إطار ERROR فقط — كانت error() ترمي فتُغلق سوكت البث الحي.
+        val userId = session.attributes["userId"] as? String
+        if (userId.isNullOrBlank()) {
+            sendError(session, "", "UNAUTHENTICATED", "Authenticated RED ID is missing")
+            return
+        }
         val accountId = session.attributes["accountId"] as? String
         val redId = session.attributes["redId"] as? String ?: userId
-        val incoming = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
+        val incoming: IncomingConferenceSignal = try {
+            objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
+        } catch (_: Exception) {
+            sendError(session, "", "INVALID_PAYLOAD", "Invalid live frame")
+            return
+        }
         // G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام.
         val resolvedRoomId = resolveRoom(incoming.roomId)
         val signal = if (resolvedRoomId == incoming.roomId) incoming else incoming.copy(roomId = resolvedRoomId)
@@ -594,9 +611,34 @@ class LiveStreamWebSocketHandler(
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: org.springframework.web.socket.CloseStatus) {
-        val streamId = sessionToStream.remove(session.id) ?: return
+        // إغلاق: تنظيف كل حالة الجلسة بلا رمي — الجلسة الميتة لا تُبقي مشاهداً ولا معدلاً.
+        runCatching { frameLimiter.remove(session.id) }
+        val streamId = sessionToStream.remove(session.id)
+        sendLocks.remove(session.id)
+        if (streamId == null) {
+            sessionRole.remove(session.id)
+            sessionUser.remove(session.id)
+            return
+        }
         val userId = session.attributes["userId"] as? String ?: return
         removeSession(session, streamId, userId)
+    }
+
+    override fun handleTransportError(session: WebSocketSession, exception: Throwable) {
+        // النقل المكسور يُعامل كإغلاق: تنظيف فقط، بلا بثّ وبلا رمي.
+        runCatching { afterConnectionClosed(session, org.springframework.web.socket.CloseStatus.SERVER_ERROR) }
+    }
+
+    /** خطأ موحد بلا إغلاق: الجلسة الحية تبقى مفتوحة لأخطاء الأعمال (نمط Call/Conference). */
+    private fun sendError(session: WebSocketSession, roomId: String, code: String, message: String) {
+        val err = runCatching {
+            objectMapper.writeValueAsString(mapOf(
+                "type" to "ERROR",
+                "roomId" to roomId,
+                "payload" to mapOf("code" to code, "message" to message)
+            ))
+        }.getOrNull() ?: return
+        sendSafe(session, TextMessage(err))
     }
 
     private fun resolveBroadcasterId(streamId: String, fallbackUserId: String): String {
@@ -710,7 +752,8 @@ class LiveStreamWebSocketHandler(
     }
 
     companion object {
-        private val STREAM_ID = Regex("^[A-Za-z0-9_-]{8,128}$")
+        /** إزالة التكرار: النمط الموحد الوحيد RoomSeparationPolicy.ROOM_ID (كان 8..128 فيفشل الغرف القصيرة). */
+        private val STREAM_ID = com.red.server.calls.RoomSeparationPolicy.ROOM_ID
         const val CHAT_MIN_INTERVAL_MS = 1200L
         const val REACTION_MIN_INTERVAL_MS = 800L
         const val GIFT_MIN_INTERVAL_MS = 3000L

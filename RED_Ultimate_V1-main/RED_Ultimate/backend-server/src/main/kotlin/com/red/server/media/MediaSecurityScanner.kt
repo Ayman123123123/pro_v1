@@ -31,7 +31,7 @@ class MediaSecurityScanner {
         // 3. الامتداد يطابق النوع
         val ext = name.substringAfterLast('.', "")
         val expectedExt = MediaService.EXTENSIONS[mime]
-        if (expectedExt != null && ext != expectedExt && ext !in setOf("jpg", "jpeg", "png", "webp", "gif", "mp4", "webm", "ogg", "m4a", "mp3", "pdf")) {
+        if (expectedExt != null && ext != expectedExt && ext !in setOf("jpg", "jpeg", "png", "webp", "gif", "mp4", "webm", "mov", "ogg", "m4a", "mp3", "wav", "pdf")) {
             if (!((ext == "jpg" && expectedExt == "jpg") || (ext == "jpeg" && expectedExt == "jpg"))) {
                 return ScanResult(false, "Extension .$ext does not match mime $mime")
             }
@@ -58,11 +58,13 @@ class MediaSecurityScanner {
                 "video/mp4" -> validateMp4(header, bytesRead)
                 "video/webm" -> header[0] == 0x1A.toByte() && header[1] == 0x45.toByte() &&
                     header[2] == 0xDF.toByte() && header[3] == 0xA3.toByte()
+                "video/quicktime" -> validateMp4(header, bytesRead) // MOV حاوية ftyp-qt مثل MP4
 
                 // === صوت ===
                 "audio/ogg" -> validateOgg(header)
                 "audio/mp4" -> validateMp4(header, bytesRead)  // M4A is MP4 container with audio-only
                 "audio/mpeg" -> validateMp3(header)
+                "audio/wav" -> validateWav(header, bytesRead)
 
                 // === مستندات ===
                 "application/pdf" -> header[0] == 0x25.toByte() && header[1] == 0x50.toByte() &&
@@ -151,6 +153,17 @@ class MediaSecurityScanner {
             return layer in 1..3 && (second and 0x18) != 0x08
         }
         return false
+    }
+
+    /**
+     * يتحقق من WAV — RIFF في 0..3 وWAVE في 8..11 (يتطلب 12 بايتًا على الأقل).
+     */
+    private fun validateWav(header: ByteArray, bytesRead: Int): Boolean {
+        if (bytesRead < 12) return false
+        return header[0] == 0x52.toByte() && header[1] == 0x49.toByte() &&
+            header[2] == 0x46.toByte() && header[3] == 0x46.toByte() &&
+            header[8] == 0x57.toByte() && header[9] == 0x41.toByte() &&
+            header[10] == 0x56.toByte() && header[11] == 0x45.toByte()
     }
 
     data class ScanResult(val allowed: Boolean, val reason: String)

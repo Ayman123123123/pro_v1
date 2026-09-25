@@ -305,6 +305,12 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 
 private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, ADMIN, DEVICE_SETTINGS, OFFLINE_QUEUE, RECOVERY_HUB, SMART_SERVER, STARRED, SCHEDULED }
 
+// توحيد onChat: تطبيع + تحقق — يمنع فتح محادثة بمعرف فاسد من جهات الاتصال/البحث/النجمة/عضو المجموعة.
+private fun resolveChatTarget(raw: String?): String? {
+    val clean = raw?.let { com.red.sovereign.core.YounesId.normalizeInput(it) }?.trim().orEmpty()
+    return if (clean.isNotBlank() && com.red.sovereign.core.YounesId.isValid(clean)) clean else null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, deepLinkSender: String? = null, deepLinkConversation: String? = null) {
@@ -365,7 +371,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val cameraGranted = !pendingDialerVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val redId = pendingDialerTarget
-        if (audioGranted && cameraGranted && redId != null && redId.matches(RED_ID_PATTERN)) {
+        // توحيد onChat: بوابة YounesId الموحدة (تطبيع عند الإدخال + تحقق هنا) — لا Regex متفرق.
+        if (audioGranted && cameraGranted && redId != null && com.red.sovereign.core.YounesId.isValid(redId)) {
             YounesCallService.start(context, redId, pendingDialerVideo)
             section = MainSection.CALLS
         }
@@ -428,7 +435,14 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     avatarUri = createScreenAvatarUri,
                     onPickAvatar = { createScreenAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) },
                     onCreate = { name, description, privacy, memberRedIds, avatarUri ->
-                        groups.create(name, description, privacy, memberRedIds, avatarUri) { currentScreen = SovereignScreen.DASHBOARD; section = MainSection.GROUPS; createScreenAvatarUri = null }
+                        // حارس العضو الواحد: اسم غير فارغ + عضو واحد على الأقل (موحد مع ModernCreateGroupDialog).
+                        if (name.isBlank()) {
+                            android.widget.Toast.makeText(context, "أدخل اسمًا للمجموعة", android.widget.Toast.LENGTH_SHORT).show()
+                        } else if (memberRedIds.isEmpty()) {
+                            android.widget.Toast.makeText(context, "اختر عضوًا واحدًا على الأقل لإنشاء المجموعة", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            groups.create(name, description, privacy, memberRedIds, avatarUri) { currentScreen = SovereignScreen.DASHBOARD; section = MainSection.GROUPS; createScreenAvatarUri = null }
+                        }
                     },
                     isSaving = groups.state == com.red.sovereign.groups.GroupState.Saving,
                     externalError = (groups.state as? com.red.sovereign.groups.GroupState.Error)?.message
@@ -458,9 +472,11 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     ownRedId = account.redId,
                     onBack = { currentScreen = SovereignScreen.DASHBOARD },
                     onMessage = { redId ->
-                        pendingChatTarget = redId
-                        section = MainSection.CHATS
-                        currentScreen = SovereignScreen.DASHBOARD
+                        resolveChatTarget(redId)?.let {
+                            pendingChatTarget = it
+                            section = MainSection.CHATS
+                            currentScreen = SovereignScreen.DASHBOARD
+                        }
                     }
                 )
             }
@@ -523,8 +539,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onMessageClick = { _, conversationId ->
                         val peer = directory.contacts.firstOrNull { conversationId(account.redId, it.redId) == conversationId }
                         if (peer != null) {
-                            pendingChatTarget = peer.redId
-                            section = MainSection.CHATS
+                            resolveChatTarget(peer.redId)?.let {
+                                pendingChatTarget = it
+                                section = MainSection.CHATS
+                            }
                         } else if (groups.groups.any { it.id == conversationId }) {
                             selectedGroupId = conversationId
                             section = MainSection.GROUPS
@@ -542,7 +560,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onDeleteMessage = { }
                 )
             }
-            SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> pendingChatTarget = person.redId; currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
+            SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> resolveChatTarget(person.redId)?.let { pendingChatTarget = it; currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS } }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
             else -> currentScreen = SovereignScreen.DASHBOARD
         }
         // Still show call overlays even when not on dashboard — unified
@@ -676,7 +694,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                         Checkbox(checked = dialerVideo, onCheckedChange = { dialerVideo = it })
                         Text("مكالمة فيديو", fontSize = 14.sp)
                     }
-                    val valid = dialerRedId.matches(RED_ID_PATTERN)
+                    val valid = YounesId.isValid(dialerRedId)
                     if (dialerRedId.isNotBlank() && !valid) {
                         Text(YounesId.ERROR_MESSAGE, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
@@ -688,7 +706,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     if (dialerVideo) add(Manifest.permission.CAMERA)
                 }.toTypedArray()
                 Button(
-                    enabled = dialerRedId.matches(RED_ID_PATTERN),
+                    enabled = YounesId.isValid(dialerRedId),
                     onClick = {
                         val redId = dialerRedId
                         val video = dialerVideo
@@ -718,7 +736,9 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     return@rememberLauncherForActivityResult
                 }
                 showLiveCreateDialog = false
-                LiveStreamService.start(context, "stream-${account.redId}-${System.currentTimeMillis()}", account.redId, true, titleFinal, liveIsPrivate, pw)
+                // توحيد المسار الحي: نفس تطبيع RoomSeparationPolicy مثل LiveStreamHubDialog (3202) — لا معرف خام.
+                val liveRawId = "stream-${account.redId}-${System.currentTimeMillis()}"
+                LiveStreamService.start(context, com.red.sovereign.calls.RoomSeparationPolicy.normalizeStreamId(liveRawId), account.redId, true, titleFinal, liveIsPrivate, pw)
                 livePassword = ""
             }
         }
@@ -779,7 +799,24 @@ private fun RedTopBar(redId: String, username: String, compact: Boolean, onSetti
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("يونس • @$username", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(redId, color = AqyalCyanGlow, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // مؤشر السيرفر الحي (موحد مع ModernTopBar): حالة المقبس لا الشبكة — أخضر=متصل، ذهبي=جارٍ، أحمر=طافي مع العد.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            val serverStatus by com.red.sovereign.core.ConnectionStatusRepository.status.collectAsState()
+            val (serverDot, serverLabel, serverColor) = when (serverStatus.state) {
+                com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.ONLINE ->
+                    Triple(Color(0xFF00C98C), redId, AqyalCyanGlow)
+                com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.CONNECTING ->
+                    Triple(Color(0xFFE0B551), "جارٍ الاتصال بالسيرفر…", Color(0xFFE0B551))
+                com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.OFFLINE ->
+                    Triple(
+                        Color(0xFFF25C5C),
+                        if (serverStatus.retryInSec > 0) "السيرفر طافي — إعادة خلال ${serverStatus.retryInSec}ث" else "السيرفر طافي",
+                        Color(0xFFF25C5C)
+                    )
+            }
+            Box(Modifier.size(6.dp).clip(CircleShape).background(serverDot))
+            Text(serverLabel, color = serverColor, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
     IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل") }
     IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
@@ -829,9 +866,9 @@ private fun ChatHubScreen(
     }
     val tab = if (showGroups) 1 else 0
     var target by remember { mutableStateOf("") }
-    // فتح محادثة من إشعار رسالة
+    // فتح محادثة من إشعار رسالة — موحد عبر resolveChatTarget (تطبيع + تحقق مثل onChat).
     LaunchedEffect(deepLinkSender, deepLinkConversation) {
-        if (!showGroups && deepLinkSender != null && deepLinkSender.matches(RED_ID_PATTERN)) target = deepLinkSender
+        if (!showGroups) resolveChatTarget(deepLinkSender)?.let { target = it }
     }
     var showDirectory by remember { mutableStateOf(false) }
     var showMessageSearch by remember { mutableStateOf(false) }
@@ -1122,7 +1159,8 @@ private fun ChatHubScreen(
             .debounce(500)
             .distinctUntilChanged()
             .collect { text ->
-                if (target.matches(RED_ID_PATTERN) && SettingsRuntime.current.typingIndicators) {
+                // توحيد onChat: تحقق YounesId الموحد (كان matches(RED_ID_PATTERN) المتفرق).
+                if (YounesId.isValid(target) && SettingsRuntime.current.typingIndicators) {
                     val typingConversation = conversationId(account.redId, target)
                     val intent = Intent(context, com.red.sovereign.core.RedConnectionService::class.java).apply {
                         action = com.red.sovereign.core.RedConnectionService.ACTION_SEND_TYPING
@@ -1795,7 +1833,8 @@ private fun ChatHubScreen(
             }
             if (target.isNotBlank()) {
                 if (showEmoji) EmojiPicker(onEmoji = { emoji: String -> messageText += emoji })
-                if (showStickers && target.matches(RED_ID_PATTERN)) {
+                // توحيد onChat: الملصقات تتطلب هدفًا صالحًا عبر YounesId (لا Regex متفرق).
+                if (showStickers && YounesId.isValid(target)) {
                     val stickerTokens = rememberDashboardTokenStore()
                     val stickerExceptionHandler = kotlinx.coroutines.CoroutineExceptionHandler { _, exception ->
                         android.util.Log.e("RedDashboard", "Sticker send failed", exception)
@@ -2654,7 +2693,8 @@ private fun ChatHubScreen(
                     if (canManage) {
                         OutlinedButton({ groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) }, Modifier.fillMaxWidth()) { Text("تغيير صورة المجموعة") }
                         OutlinedTextField(memberRedId, { memberRedId = YounesId.normalizeInput(it) }, Modifier.fillMaxWidth(), label = { Text("إضافة عضو بواسطة معرّف يونس") }, placeholder = { Text(YounesId.PLACEHOLDER) }, singleLine = true)
-                        Button({ groups.addMember(selectedGroup, memberRedId) { memberRedId = "" } }, Modifier.fillMaxWidth(), enabled = memberRedId.matches(RED_ID_PATTERN) && groups.state != GroupState.Saving) { Text("إضافة عضو") }
+                        // توحيد onChat: تحقق YounesId الموحد (تطبيع عند الإدخال أعلاه).
+                        Button({ groups.addMember(selectedGroup, memberRedId) { memberRedId = "" } }, Modifier.fillMaxWidth(), enabled = YounesId.isValid(memberRedId) && groups.state != GroupState.Saving) { Text("إضافة عضو") }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton({ groups.createInvite(selectedGroup) }, Modifier.weight(1f)) { Text("رابط دعوة") }
                             OutlinedButton({ groups.loadJoinRequests(selectedGroup) }, Modifier.weight(1f)) { Text("طلبات الانضمام") }
@@ -3005,11 +3045,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             }
         }
         Spacer(Modifier.height(12.dp))
-        val callLauncher = rememberCallPermissionLauncher(
-            needCamera = true,
-            onGranted = { /* will be handled per action */ },
-            onDenied = { android.widget.Toast.makeText(context, "الصلاحيات مطلوبة للاتصال", android.widget.Toast.LENGTH_SHORT).show() }
-        )
+        // (إزالة الميت: callLauncher العام بلا منادين — كل إجراء له بوابته الخاصة أدناه.)
         val privateCallLauncher = rememberCallPermissionLauncher(
             needCamera = true,
             onGranted = { showNewCallDialog = true },
@@ -3135,17 +3171,22 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onDismiss = { showGroupCallPicker = false },
             onStartCall = { selectedIds, isVideo ->
                 showGroupCallPicker = false
-                val selectedNames = selectedIds.map { id ->
-                    contacts.find { it.redId == id }?.displayName ?: id
+                // حارس العضو الواحد: مكالمة جماعية بلا مدعوين = مكالمة مع النفس — امنع بتفسير.
+                if (selectedIds.isEmpty()) {
+                    android.widget.Toast.makeText(context, "اختر عضوًا واحدًا على الأقل للمكالمة الجماعية", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    val selectedNames = selectedIds.map { id ->
+                        contacts.find { it.redId == id }?.displayName ?: id
+                    }
+                    GroupCallService.startGroupCall(
+                        context = context,
+                        myUserId = ownUserId,
+                        inviteeIds = selectedIds,
+                        inviteeNames = selectedNames,
+                        isVideo = isVideo,
+                        hostName = myDisplayName
+                    )
                 }
-                GroupCallService.startGroupCall(
-                    context = context,
-                    myUserId = ownUserId,
-                    inviteeIds = selectedIds,
-                    inviteeNames = selectedNames,
-                    isVideo = isVideo,
-                    hostName = myDisplayName
-                )
             }
         )
     }
@@ -3310,11 +3351,15 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                     Text("أدخل معرّف يونس أو اختر من جهات اتصالك للاتصال الفوري:", color = Color.Gray, fontSize = 13.sp)
                     OutlinedTextField(
                         value = newCallTargetInput,
-                        onValueChange = { newCallTargetInput = it },
+                        onValueChange = { newCallTargetInput = com.red.sovereign.core.YounesId.normalizeInput(it) },
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("معرّف يونس (مثال: 10001)") },
                         singleLine = true
                     )
+                    // توحيد onChat: تلميح فوري عند معرف غير صالح (تطبيع عند الإدخال أعلاه).
+                    if (newCallTargetInput.trim().isNotBlank() && !com.red.sovereign.core.YounesId.isValid(newCallTargetInput)) {
+                        Text(com.red.sovereign.core.YounesId.ERROR_MESSAGE, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                    }
                     if (contacts.isNotEmpty()) {
                         Text("جهات الاتصال السريعة:", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         LazyColumn(modifier = Modifier.fillMaxWidth().height(160.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3360,13 +3405,19 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 }
             },
             confirmButton = {
+                // توحيد onChat: تطبيع + تحقق YounesId قبل بدء المكالمة — يمنع الاتصال بمعرف فاسد.
+                val cleanNewCallTarget = com.red.sovereign.core.YounesId.normalizeInput(newCallTargetInput)
+                val canDialNewCall = com.red.sovereign.core.YounesId.isValid(cleanNewCallTarget)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            val clean = com.red.sovereign.core.YounesId.normalizeInput(newCallTargetInput).ifBlank { newCallTargetInput.trim() }
-                            showNewCallDialog = false
-                            YounesCallService.start(context, clean, video = false)
-                            newCallTargetInput = ""
+                            if (!canDialNewCall) {
+                                android.widget.Toast.makeText(context, com.red.sovereign.core.YounesId.ERROR_MESSAGE, android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                showNewCallDialog = false
+                                YounesCallService.start(context, cleanNewCallTarget, video = false)
+                                newCallTargetInput = ""
+                            }
                         },
                         enabled = newCallTargetInput.trim().isNotBlank()
                     ) {
@@ -3374,10 +3425,13 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                     }
                     Button(
                         onClick = {
-                            val clean = com.red.sovereign.core.YounesId.normalizeInput(newCallTargetInput).ifBlank { newCallTargetInput.trim() }
-                            showNewCallDialog = false
-                            YounesCallService.start(context, clean, video = true)
-                            newCallTargetInput = ""
+                            if (!canDialNewCall) {
+                                android.widget.Toast.makeText(context, com.red.sovereign.core.YounesId.ERROR_MESSAGE, android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                showNewCallDialog = false
+                                YounesCallService.start(context, cleanNewCallTarget, video = true)
+                                newCallTargetInput = ""
+                            }
                         },
                         enabled = newCallTargetInput.trim().isNotBlank()
                     ) {
@@ -3414,7 +3468,8 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                     onClick = {
                         showPublicStreamsSearchDialog = false
                         val finalStreamId = publicStreamSearchQuery.trim().ifBlank { "public-stream-1" }
-                        LiveStreamService.start(context, finalStreamId, ownUserId, false)
+                        // توحيد المسار الحي: المشاهد عبر watch (لا start ببث=false) — نفس مسار LiveStreamHubDialog.
+                        LiveStreamService.watch(context, finalStreamId, ownUserId)
                         publicStreamSearchQuery = ""
                     }
                 ) {
@@ -3454,9 +3509,12 @@ private fun CallHistoryRow(call: CallHistoryItem) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable {
+                // توحيد المسار الحي: userId هو مالك الجهاز (لا peerId) — موحد مع Modern/البحث العام.
+                val myIdForHistory = TokenStore(context).redId.orEmpty().ifBlank { call.peerId }
                 when (call.type) {
-                    "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
-                    "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
+                    // توحيد المسار الحي: إعادة مشاهدة البث عبر watch — لا start.
+                    "LIVE" -> LiveStreamService.watch(context, call.id, myIdForHistory)
+                    "SPACE" -> ConferenceService.join(context, call.id, myIdForHistory, false, asHost = false)
                     "GROUP" -> {
                         val myId = TokenStore(context).redId.orEmpty()
                         GroupCallService.startGroupCall(
@@ -3470,7 +3528,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                             groupName = call.peerLabel
                         )
                     }
-                    else -> if (call.peerId.matches(RED_ID_PATTERN)) {
+                    else -> if (com.red.sovereign.core.YounesId.isValid(call.peerId)) {
                         YounesCallService.start(context, call.peerId, call.type == "VIDEO")
                     }
                 }
@@ -3552,12 +3610,14 @@ private fun CallHistoryRow(call: CallHistoryItem) {
 
         Spacer(Modifier.width(8.dp))
 
-        // زر الاتصال السريع
+        // زر الاتصال السريع — نفس توحيد المسار الحي أعلاه (userId للمالك).
         IconButton(
             onClick = {
+                val myIdForQuick = TokenStore(context).redId.orEmpty().ifBlank { call.peerId }
                 when (call.type) {
-                    "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
-                    "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
+                    // توحيد المسار الحي: إعادة مشاهدة البث عبر watch — لا start.
+                    "LIVE" -> LiveStreamService.watch(context, call.id, myIdForQuick)
+                    "SPACE" -> ConferenceService.join(context, call.id, myIdForQuick, false, asHost = false)
                     "GROUP" -> {
                         val myId = TokenStore(context).redId.orEmpty()
                         GroupCallService.startGroupCall(
@@ -3571,7 +3631,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                             groupName = call.peerLabel
                         )
                     }
-                    else -> if (call.peerId.matches(RED_ID_PATTERN)) {
+                    else -> if (com.red.sovereign.core.YounesId.isValid(call.peerId)) {
                         YounesCallService.start(context, call.peerId, call.type == "VIDEO")
                     }
                 }

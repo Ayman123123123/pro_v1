@@ -1,6 +1,9 @@
 # RED Sovereign — Docker Compose Staging Override
 # Usage: docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
 #
+# Config paths are canonical: infrastructure/observability/** (single source of
+# truth). The legacy monitoring/** copies are kept for reference only.
+#
 # Phase 10 (2026-09-15): the old prometheus/grafana stanzas were dangling
 # (command/env-only overrides of services that exist only in prod, so
 # base+staging failed to render) — staging now defines its own pair with
@@ -8,7 +11,7 @@
 
 services:
   prometheus:
-    image: prom/prometheus:v2.52.0
+    image: prom/prometheus:v3.1.0
     container_name: red-prometheus-staging
     restart: unless-stopped
     mem_limit: 1g
@@ -18,7 +21,8 @@ services:
       - '--storage.tsdb.retention.time=7d'
       - '--web.enable-lifecycle'
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     networks:
       - red-net
@@ -29,16 +33,16 @@ services:
       retries: 3
 
   grafana:
-    image: grafana/grafana:10.4.0
+    image: grafana/grafana:11.4.0
     container_name: red-grafana-staging
     restart: unless-stopped
     mem_limit: 256m
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
     volumes:
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infrastructure/observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./infrastructure/observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - grafana-data:/var/lib/grafana
     networks:
       - red-net

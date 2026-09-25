@@ -44,6 +44,9 @@ export function createGrpcService(deps: GrpcDependencies): UntypedServiceImpleme
     CreateRoom: async (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>) => {
       try {
         const { room_id, created_by, config: roomConfig } = call.request;
+        if (!/^[A-Za-z0-9_-]{4,128}$/.test(String(room_id || ''))) {
+          return callback(new Error('Invalid roomId'), null);
+        }
         const room = await routerManager.createRoom(room_id, created_by, {
           enableRecording: roomConfig?.enable_recording,
           enableLiveStream: roomConfig?.enable_live_stream,
@@ -68,6 +71,13 @@ export function createGrpcService(deps: GrpcDependencies): UntypedServiceImpleme
       try {
         const { room_id, peer_id, display_name, can_produce, can_consume, metadata, ticket, token } = call.request;
 
+        if (!/^[A-Za-z0-9_-]{4,128}$/.test(String(room_id || ''))) {
+          return callback(new Error('Invalid roomId'), null);
+        }
+        if (!peer_id || typeof peer_id !== 'string' || peer_id.length > 128) {
+          return callback(new Error('Invalid message format'), null);
+        }
+
         let claims;
         try {
           claims = authManager.authenticate(ticket || token || '');
@@ -75,7 +85,12 @@ export function createGrpcService(deps: GrpcDependencies): UntypedServiceImpleme
           return callback(new Error('Unauthorized'), null);
         }
 
-        const room = await routerManager.getOrCreateRoom(room_id, created_by, {});
+        // التذكرة مربوطة بغرفة محددة — نفس قيد مسار WebSocket (validateRoomAccess).
+        if (!authManager.validateRoomAccess(claims, room_id)) {
+          return callback(new Error('Ticket not bound to this room'), null);
+        }
+
+        const room = await routerManager.getOrCreateRoom(room_id, peer_id, {});
 
         // Check if peer already exists
         if (room.peers.has(peer_id)) {

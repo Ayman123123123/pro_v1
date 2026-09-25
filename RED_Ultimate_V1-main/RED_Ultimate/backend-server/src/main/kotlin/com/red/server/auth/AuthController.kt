@@ -60,6 +60,9 @@ class AuthController(
 
     @PostMapping("/refresh")
     fun refresh(@RequestBody request: RefreshRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<RefreshResponse> {
+        // دوران الـ refresh بلا حد يتيح قصف DB بجلسات مُخترعة؛ الرمز 48 بايت
+        // يستحيل تخمينه لكن الإغراق وحده مكلف (hash + SELECT + UPDATE).
+        limits.check("refresh", clientIp(servlet), 60, Duration.ofMinutes(15))
         val browserToken = servlet.cookies?.firstOrNull { it.name == ADMIN_REFRESH_COOKIE }?.value
         val usingCookie = CsrfTokenValidator.requiresValidation(browserToken)
         if (usingCookie) requireValidCsrf(servlet)
@@ -76,6 +79,8 @@ class AuthController(
         servlet: HttpServletRequest,
         httpResponse: HttpServletResponse
     ): ResponseEntity<Void> {
+        // خامل (204 دائمًا) لكنه يكتب في DB (إبطال) ويمسح الكوكيز — حد خفيف ضد القصف.
+        limits.check("logout", clientIp(servlet), 120, Duration.ofMinutes(15))
         // Logout must ALWAYS revoke + clear cookies (idempotent 204).
         // Cookie-only admin sessions carry no body token: the HttpOnly
         // red_admin_refresh cookie is the session, guarded by double-submit
@@ -110,6 +115,8 @@ class AuthController(
         @RequestBody request: UpdateUsernameRequest,
         authentication: Authentication,
     ): ResponseEntity<Map<String, String>> {
+        // كتابة نادرة بهوية المتصل نفسه (authentication.name) — لا ترويسة X-RED-ID أبدًا.
+        limits.check("username-change", authentication.name, 10, Duration.ofHours(1))
         val trimmed = request.username.trim()
         require(trimmed.length in 3..20) { "USERNAME_LENGTH_INVALID" }
         require(trimmed.matches(USERNAME_PATTERN)) { "USERNAME_CHARSET_INVALID" }
@@ -142,6 +149,7 @@ class AuthController(
         @RequestBody request: UpdateProfileRequest,
         authentication: Authentication,
     ): ResponseEntity<Map<String, String?>> {
+        limits.check("profile-change", authentication.name, 20, Duration.ofHours(1))
         val trimmed = request.displayName.trim()
         require(trimmed.isNotBlank() && trimmed.length <= 50) { "DISPLAY_NAME_LENGTH_INVALID" }
         val bio = request.bio?.trim()?.takeIf { it.isNotEmpty() }
@@ -176,6 +184,8 @@ class AuthController(
      */
     @GetMapping("/me")
     fun me(authentication: Authentication): ResponseEntity<UserAccountResponse> {
+        // قراءة خفيفة تُستدعى عند كل استئناف — حد سخي يمنع الحلقات المجنونة فقط.
+        limits.check("me", authentication.name, 300, Duration.ofMinutes(10))
         val caller = UUID.fromString(authentication.name)
         val user = users.findById(caller).orElseThrow { NoSuchElementException("USER_NOT_FOUND") }
         return ResponseEntity.ok(user.toResponse())

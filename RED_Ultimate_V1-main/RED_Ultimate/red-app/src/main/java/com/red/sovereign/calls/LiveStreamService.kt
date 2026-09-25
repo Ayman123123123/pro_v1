@@ -352,8 +352,9 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 }
             }
             ACTION_SEND_CHAT -> {
-                val text = intent.getStringExtra(EXTRA_CHAT_TEXT).orEmpty()
-                val senderName = intent.getStringExtra(EXTRA_SENDER_NAME).orEmpty()
+                // حدود البث: قصّ + سقف 500 حرف يمنع حمولات ضخمة تُثقل الشات/الإشارة.
+                val text = intent.getStringExtra(EXTRA_CHAT_TEXT).orEmpty().trim().take(500)
+                val senderName = intent.getStringExtra(EXTRA_SENDER_NAME).orEmpty().trim().take(64)
                 val replyToId = intent.getStringExtra(EXTRA_REPLY_TO_ID)?.takeIf { it.isNotBlank() }
                 if (text.isNotBlank()) {
                     signaling.sendChatMessage(streamId, userId, senderName, text, replyToId)
@@ -362,7 +363,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 }
             }
             ACTION_SEND_REACTION -> {
-                val emoji = intent.getStringExtra(EXTRA_REACTION_EMOJI) ?: "❤️"
+                // حدود التباين/الأمان: إيموجي واحد قصير فقط (≤8 أحرف) بدل سلسلة تعسفية.
+                val emoji = (intent.getStringExtra(EXTRA_REACTION_EMOJI) ?: "❤️").trim().take(8).ifBlank { "❤️" }
                 signaling.sendReaction(streamId, userId, emoji)
                 val localReaction = LiveStreamReaction(emoji = emoji)
                 LiveStreamRuntime.reactions = (LiveStreamRuntime.reactions + localReaction).takeLast(LIVE_REACTIONS_MAX)
@@ -414,6 +416,18 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             ACTION_APPROVE_COHOST -> {
                 val targetUserId = intent.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
                 if (targetUserId.isNotBlank()) {
+                    // حدود البث: سقف المضيفين الموحد (4) — رفض مبكر برسالة بدل تجاوز صامت.
+                    CallLimits.checkLiveCohost(LiveStreamRuntime.coHostVideos.size + 1)?.let { msg ->
+                        android.util.Log.w("LiveStream", "cohost limit: $msg")
+                        scope.launch {
+                            withContext(Dispatchers.Main.immediate) {
+                                runCatching {
+                                    android.widget.Toast.makeText(this@LiveStreamService, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                        return@onStartCommand START_STICKY
+                    }
                     signaling.approveCoHost(streamId, userId, targetUserId)
                     // نتذكر المعتمدين: عرضهم اللاحق يُقبل حتماً (بلا glare) في mesh المذيع.
                     approvedCohostIds.add(targetUserId)
@@ -639,14 +653,15 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                         val items = mutableListOf<LiveChatMessage>()
                         for (i in 0 until arr.length()) {
                             val o = arr.optJSONObject(i) ?: continue
-                            val text = o.optString("text").takeIf { it.isNotBlank() } ?: continue
+                            // حدود السجل: نفس سقوف الوارد الحي (نص ≤500، اسم ≤64) تمنع رسالة أرشيف ضخمة.
+                            val text = o.optString("text").trim().take(500).takeIf { it.isNotBlank() } ?: continue
                             items.add(
                                 LiveChatMessage(
-                                    id = o.optString("id").takeIf { it.isNotBlank() } ?: java.util.UUID.randomUUID().toString(),
-                                    senderId = o.optString("senderId"),
-                                    senderName = o.optString("senderName").takeIf { it.isNotBlank() } ?: o.optString("senderId"),
+                                    id = o.optString("id").trim().take(64).takeIf { it.isNotBlank() } ?: java.util.UUID.randomUUID().toString(),
+                                    senderId = o.optString("senderId").trim().take(64),
+                                    senderName = o.optString("senderName").trim().take(64).takeIf { it.isNotBlank() } ?: o.optString("senderId").trim().take(64),
                                     text = text,
-                                    replyToId = o.optString("replyToId").takeIf { it.isNotBlank() },
+                                    replyToId = o.optString("replyToId").trim().take(64).takeIf { it.isNotBlank() },
                                     timestamp = o.optLong("createdAt", System.currentTimeMillis())
                                 )
                             )
@@ -799,8 +814,9 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             }
             "CHAT" -> {
                 val senderId = signal.userId
-                val senderName = signal.payload["senderName"].orEmpty()
-                val text = signal.payload["text"].orEmpty()
+                // حدود الوارد: قصّ الاسم (64) والنص (500) قبل العرض — يمنع تجميد الشات.
+                val senderName = signal.payload["senderName"].orEmpty().trim().take(64)
+                val text = signal.payload["text"].orEmpty().trim().take(500)
                 val replyToId = signal.payload["replyToId"]?.takeIf { it.isNotBlank() }
                 if (senderName.isNotBlank() && senderId.isNotBlank()) {
                     LiveStreamRuntime.viewerNames = LiveStreamRuntime.viewerNames + (senderId to senderName)
@@ -817,18 +833,20 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 // توافق مع نسخ قديمة: حدث GIFT مدفوع لم يعد يُبث من أي عميل
                 // حديث (الخادم يحوّله لـ REACTION)، ومن يصل يُعرض كتفاعل مجاني
                 // بلا أي ذكر للعملات أو المحفظة.
-                val giftEmoji = signal.payload["giftEmoji"]?.takeIf { it.isNotBlank() } ?: "❤️"
+                val giftEmoji = signal.payload["giftEmoji"]?.trim()?.take(8)?.takeIf { it.isNotBlank() } ?: "❤️"
                 LiveStreamRuntime.reactions = (LiveStreamRuntime.reactions + LiveStreamReaction(emoji = giftEmoji)).takeLast(LIVE_REACTIONS_MAX)
             }
             "REACTION" -> {
-                val emoji = signal.payload["emoji"] ?: "❤️"
+                // حدود/تباين الوارد: نفس سقف الإرسال (إيموجي واحد ≤8) يمنع سلاسل ضخمة تُثقل الأنيميشن.
+                val emoji = signal.payload["emoji"]?.trim()?.take(8)?.takeIf { it.isNotBlank() } ?: "❤️"
                 val reaction = LiveStreamReaction(emoji = emoji)
                 LiveStreamRuntime.reactions = (LiveStreamRuntime.reactions + reaction).takeLast(LIVE_REACTIONS_MAX)
             }
             "PIN_MESSAGE" -> {
-                val messageId = signal.payload["messageId"].orEmpty()
-                val senderName = signal.payload["senderName"].orEmpty().ifBlank { signal.userId }
-                val text = signal.payload["text"].orEmpty()
+                // حدود الوارد: نفس سقوف الإرسال (معرف ≤64، اسم ≤64، نص ≤500) تمنع بطاقة مثبّتة ضخمة.
+                val messageId = signal.payload["messageId"].orEmpty().trim().take(64)
+                val senderName = signal.payload["senderName"].orEmpty().trim().take(64).ifBlank { signal.userId }
+                val text = signal.payload["text"].orEmpty().trim().take(500)
                 if (messageId.isNotBlank() && text.isNotBlank()) {
                     LiveStreamRuntime.pinnedMessage = PinnedLiveMessage(messageId, senderName, text)
                 }
@@ -909,11 +927,12 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             "COHOST_LIST" -> {
                 // مزامنة المذيع العائد: coHosts مفصولة بفاصلة + raisedHands بصيغة uid=name;uid=name
                 signal.payload["raisedHands"]?.takeIf { it.isNotBlank() }?.let { raw ->
-                    val hands = raw.split(";").mapNotNull { part ->
+                    // حدود الوارد: سقف 20 طلباً + قصّ المعرف/الاسم يمنع قائمة أيادٍ ضخمة تُثقل الشيت.
+                    val hands = raw.split(";").take(20).mapNotNull { part ->
                         val idx = part.indexOf("=")
                         if (idx > 0) {
-                            val uid = part.substring(0, idx).trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                            val uname = part.substring(idx + 1).trim().ifBlank { uid }
+                            val uid = part.substring(0, idx).trim().take(64).takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                            val uname = part.substring(idx + 1).trim().take(64).ifBlank { uid }
                             RaisedHandUser(uid, uname)
                         } else null
                     }
@@ -1192,10 +1211,10 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             LiveStreamRuntime.remoteVideo = track
             if (sfuLive && LiveStreamRuntime.state is LiveStreamUiState.Connecting) markViewerSfuActive()
         } else {
-            // شبكة مضيفين حتى 4 — الأحدث أولاً، الأقدم يُستبدل عند الامتلاء
+            // شبكة مضيفين بسقف موحد — الأحدث أولاً، الأقدم يُستبدل عند الامتلاء
             val current = LiveStreamRuntime.coHostVideos.toMutableMap()
             current[peerId] = track
-            while (current.size > 4) {
+            while (current.size > CallLimits.LIVE_COHOST_MAX) {
                 current.remove(current.keys.first())
             }
             LiveStreamRuntime.coHostVideos = current

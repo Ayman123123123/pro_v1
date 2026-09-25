@@ -213,6 +213,16 @@ class AdminService(
         else userReports.findAll(pageable).let { PageImpl(it.content, pageable, it.totalElements) }
     }
 
+    /** Combined status+category filter; either side may be null (falls back to the single-filter paths). */
+    fun getReportsFiltered(status: String?, category: String?, pageable: Pageable): Page<UserReport> {
+        return when {
+            status != null && category != null ->
+                userReports.findByStatusAndCategoryOrderByCreatedAtDesc(status, category, pageable)
+            category != null -> userReports.findByCategoryOrderByCreatedAtDesc(category, pageable)
+            else -> getReports(status, pageable)
+        }
+    }
+
     fun getPendingReports(pageable: Pageable): Page<UserReport> =
         userReports.findByStatusOrderByCreatedAtDesc("PENDING", pageable)
 

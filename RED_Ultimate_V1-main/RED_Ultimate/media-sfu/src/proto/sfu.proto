@@ -462,6 +462,14 @@ message LiveStreamOptions {
   bool include_audio = 10;
   // Required when layout == RECORDING_LAYOUT_CUSTOM.
   CustomLayout custom_layout = 11;
+  // Multi-target outputs — mirrors LiveStreamManager (rtmpOutputs + srtUrl).
+  repeated RtmpOutput rtmp_outputs = 12;
+  string srt_url = 13;
+}
+
+message RtmpOutput {
+  string url = 1;
+  string stream_key = 2;
 }
 
 message CustomRegion {

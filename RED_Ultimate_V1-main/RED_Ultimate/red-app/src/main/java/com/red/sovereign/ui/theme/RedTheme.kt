@@ -32,19 +32,15 @@ import com.red.sovereign.R
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // الخط الموحّد — IBM Plex Sans Arabic ثنائي النص (SIL OFL 1.1)
-// مضمّن في الحزمة لا مجلوب من الشبكة: 4 أوزان محلية في res/font
-// plex_arabic.xml (400/500/600/700). ينهي ارتداد خطوط Google الشبكية
-// ويوحّد هوية التطبيق مع admin_dashboard (IBM Plex) ويضمن ثبات مقاسات
-// الأسطر حتى على شبكات اليمن الضعيفة.
+// مضمّن في الحزمة لا مجلوب من الشبكة: 4 أوزان حقيقية فقط في res/font
+// plex_arabic.xml (400/500/600/700). ممنوع ربط Light/Black/ExtraBold
+// (كانت تُصنّع صناعيًا وتكسر أوزان العربية) — Bold هو الحد الأقصى.
 // ═══════════════════════════════════════════════════════════════════════════════
 val PlexArabicFamily = FontFamily(
     Font(R.font.plex_arabic_regular, FontWeight.Normal),
-    Font(R.font.plex_arabic_regular, FontWeight.Light),
     Font(R.font.plex_arabic_medium, FontWeight.Medium),
     Font(R.font.plex_arabic_semibold, FontWeight.SemiBold),
     Font(R.font.plex_arabic_bold, FontWeight.Bold),
-    Font(R.font.plex_arabic_bold, FontWeight.ExtraBold),
-    Font(R.font.plex_arabic_bold, FontWeight.Black),
 )
 
 // أسماء مستعارة للتوافق — كلها Plex Arabic فعليًا.
@@ -237,29 +233,12 @@ val GradientNavBar      = Brush.verticalGradient(
 )
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// نظام الطباعة — عائلة واحدة ثنائية النص (Plex Arabic)
-// Material 3 Type Scale كامل — 15 نمطًا تغطي كل الاستعمالات
+// نظام الطباعة — مقياس واحد: RedTypography من Type.kt هو المصدر الوحيد.
+// (حُذف التعريف الموازي redTypography: كان يحمل letterSpacing=-0.25sp
+// يكسر اتصال العربية، وlabelSmall=11sp دون الحد، وأوزان Black/ExtraBold
+// مصنّعة، وقيمًا منحرفة عن المقياس: 30/25/21/17sp…).
 // ═══════════════════════════════════════════════════════════════════════════════
-private val redTypography = Typography(
-    // عناوين كبيرة
-    displayLarge  = TextStyle(fontFamily = PlexArabicFamily, fontSize = 57.sp, lineHeight = 64.sp, fontWeight = FontWeight.Black, letterSpacing = (-0.25).sp),
-    displayMedium = TextStyle(fontFamily = PlexArabicFamily, fontSize = 45.sp, lineHeight = 52.sp, fontWeight = FontWeight.ExtraBold),
-    displaySmall  = TextStyle(fontFamily = PlexArabicFamily, fontSize = 36.sp, lineHeight = 46.sp, fontWeight = FontWeight.Black),
-    headlineLarge = TextStyle(fontFamily = PlexArabicFamily, fontSize = 30.sp, lineHeight = 40.sp, fontWeight = FontWeight.ExtraBold),
-    headlineMedium= TextStyle(fontFamily = PlexArabicFamily, fontSize = 25.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
-    headlineSmall = TextStyle(fontFamily = PlexArabicFamily, fontSize = 22.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold),
-    titleLarge    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 21.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold),
-    titleMedium   = TextStyle(fontFamily = PlexArabicFamily, fontSize = 17.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
-    titleSmall    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
-    // نصوص المحادثات والوصف
-    bodyLarge     = TextStyle(fontFamily = PlexArabicFamily, fontSize = 17.sp, lineHeight = 27.sp, fontWeight = FontWeight.Normal),
-    bodyMedium    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 15.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal),
-    bodySmall     = TextStyle(fontFamily = PlexArabicFamily, fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal),
-    // تسميات وشارات
-    labelLarge    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
-    labelMedium   = TextStyle(fontFamily = PlexArabicFamily, fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium),
-    labelSmall    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
-)
+private val redTypography: Typography get() = RedTypography
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // نظام الأشكال — حواف ناعمة وحديثة
@@ -360,7 +339,7 @@ private val redLightColorScheme = lightColorScheme(
     surfaceContainerLow       = Color(0xFFF7F8FA),
     surfaceContainerHigh      = Color(0xFFE6E8EB),
     surfaceContainerHighest   = Color(0xFFDDE1E6),
-    outline               = Color(0xFF7A8FA3),
+    outline               = Color(0xFF5A6B7D),
     outlineVariant        = Color(0xFFD0D7DE),
     error                 = Color(0xFFD32F2F),
     onError               = Color.White,
@@ -380,52 +359,75 @@ private val redHighContrastLight = redLightColorScheme.copy(
 
 val telegramColorScheme = redColorScheme.copy(
     primary = Color(0xFF2AABEE),
-    onPrimary = Color.White,
+    onPrimary = Color(0xFF06090F), // أبيض عليه 2.57:1 راسب → داكن 7.74:1 AA
     primaryContainer = Color(0xFF1E3A5F),
+    onPrimaryContainer = Color(0xFFBFE6F7),
     secondary = Color(0xFF64B5F6),
+    onSecondary = Color(0xFF06090F), // داكن 9.00:1 بدل أبيض راسب
     background = Color(0xFF0E1621),
+    onBackground = Color(0xFFFFFFFF),
     surface = Color(0xFF17212B),
+    onSurface = Color(0xFFFFFFFF),
     surfaceVariant = Color(0xFF232E3C),
-    outline = Color(0xFF2B5278)
+    onSurfaceVariant = Color(0xFF9FB0C2),
+    outline = Color(0xFF7A8FA3) // 2B5278 كان 2.23:1 راسب → 5.44:1 على 0E1621
 )
 val telegramLightColorScheme = redLightColorScheme.copy(
-    primary = Color(0xFF0A7DBF),
+    primary = Color(0xFF0970AE), // 0A7DBF مع الأبيض 4.47 راسب → 5.33:1 AA
     onPrimary = Color.White,
     primaryContainer = Color(0xFFBFE6F7),
-    secondary = Color(0xFF2AABEE),
+    onPrimaryContainer = Color(0xFF001F2A),
+    secondary = Color(0xFF0B6FA0), // 2AABEE كنص/خلفية 2.57 راسب → 5.53:1
+    onSecondary = Color.White,
     background = Color(0xFFF7F8FA),
     surface = Color(0xFFFFFFFF),
     surfaceVariant = Color(0xFFE6E8EB),
+    onSurfaceVariant = Color(0xFF5A6B7D),
+    outline = Color(0xFF5A6B7D),
 )
 
 val whatsAppColorScheme = redColorScheme.copy(
     primary = Color(0xFF00A884),
-    onPrimary = Color.White,
+    onPrimary = Color(0xFF06090F), // أبيض 3.03 راسب → داكن 6.58:1 AA
     primaryContainer = Color(0xFF005C4B),
+    onPrimaryContainer = Color(0xFFA8F0D8),
     secondary = Color(0xFF25D366),
+    onSecondary = Color(0xFF06090F), // داكن 10.05:1 بدل أبيض 1.98 راسب
     background = Color(0xFF0B141A),
+    onBackground = Color(0xFFFFFFFF),
     surface = Color(0xFF111B21),
+    onSurface = Color(0xFFFFFFFF),
     surfaceVariant = Color(0xFF202C33),
-    outline = Color(0xFF2A3942)
+    onSurfaceVariant = Color(0xFF9FB0C2),
+    outline = Color(0xFF7A8FA3) // 2A3942 كان 1.47 راسب → 5.13:1
 )
 val whatsAppLightColorScheme = redLightColorScheme.copy(
-    primary = Color(0xFF008069),
+    primary = Color(0xFF008069), // أبيض 4.89:1 AA — يُحفظ
     onPrimary = Color.White,
     primaryContainer = Color(0xFFA8F0D8),
-    secondary = Color(0xFF25D366),
+    onPrimaryContainer = Color(0xFF002117),
+    secondary = Color(0xFF1B7A43), // 25D366 مع الأبيض 1.98 راسب → 5.37:1
+    onSecondary = Color.White,
     background = Color(0xFFF7F8FA),
     surface = Color(0xFFFFFFFF),
+    onSurfaceVariant = Color(0xFF5A6B7D),
+    outline = Color(0xFF5A6B7D),
 )
 
 val oledColorScheme = redColorScheme.copy(
     primary = Color(0xFF00E676),
-    onPrimary = Color.Black,
+    onPrimary = Color(0xFF06090F), // داكن 11.94:1 (كان أسود خالص بلا توحيد)
     primaryContainer = Color(0xFF00381C),
+    onPrimaryContainer = Color(0xFFA8F0D8),
     secondary = Color(0xFFFFD54F),
+    onSecondary = Color(0xFF06090F), // 14.12:1
     background = Color(0xFF000000),
+    onBackground = Color(0xFFFFFFFF),
     surface = Color(0xFF0D0D0D),
+    onSurface = Color(0xFFFFFFFF),
     surfaceVariant = Color(0xFF161616),
-    outline = Color(0xFF262626)
+    onSurfaceVariant = Color(0xFF9FB0C2),
+    outline = Color(0xFF7A8FA3) // 262626 كان 1.28 راسب → 6.29:1 على الأسود
 )
 val oledLightColorScheme = redLightColorScheme // الأوليد الفاتح = الفاتح العادي
 
@@ -453,15 +455,23 @@ object AppThemeState {
     var reduceMotion by androidx.compose.runtime.mutableStateOf(false)
     var fontScale by androidx.compose.runtime.mutableStateOf(1.0f)
     var customPrimary by androidx.compose.runtime.mutableStateOf<Color?>(null)
-    // 6 ألوان مقترحة للمخصص تضمن ≥4.5:1
+    // 6 ألوان مقترحة للمخصص تضمن ≥4.5:1 مع حارس التباين أدناه
+    // (E53935 مع الأبيض 4.23 راسب → C62828 ‏5.62؛ 00ACC1 مع الأبيض 2.74
+    // راسب لذا يحمل نصًا داكنًا 7.28 عبر الحارس).
     val customPresets = listOf(
         YounesPrimary to "زمرد يونس",
         YounesAccent to "ذهب إمبراطوري",
         YounesCobalt to "أزرق ملكي",
-        Color(0xFFE53935) to "أحمر حي",
+        Color(0xFFC62828) to "أحمر حي",
         Color(0xFF8E24AA) to "بنفسجي ملكي",
         Color(0xFF00ACC1) to "تركواز"
     )
+
+    /** حارس تباين المخصص: داكن YounesOnBrand على الفاتح (≥4.5)، أبيض على الداكن. */
+    fun onCustomPrimary(custom: Color): Color {
+        val lum = (0.2126f * custom.red + 0.7152f * custom.green + 0.0722f * custom.blue)
+        return if (lum > 0.35f) YounesOnBrand else Color.White
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -30,11 +30,52 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.contacts.DirectoryState
 import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
+import com.red.sovereign.core.YounesId
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
+
+/**
+ * الوجهة الوحيدة لإضافة جهة اتصال: تطبيع + تحقق عبر YounesId ثم إرسال الطلب.
+ * كل مداخل الإضافة (حوار، QR، نتائج الخادم) تمر من هنا — لا POST مباشر متفرق.
+ * الحراس هنا (نفسك/محظور/معروف) يمنعون الطلبات المستحيلة قبل الشبكة.
+ * @return true إن قُبِل المدخل وأُرسل، false إن كانت الصيغة مرفوضة أو محروسة.
+ */
+fun requestContactUnified(
+    directory: DirectoryViewModel,
+    raw: String,
+    selfRedId: String = "",
+    blockedIds: Set<String> = emptySet(),
+    knownRedIds: Set<String> = emptySet(),
+    selfUsername: String = ""
+): Boolean {
+    val trimmed = raw.trim().removePrefix("@")
+    if (trimmed.isBlank()) return false
+    // مقارنة غير حساسة لحالة الأحرف — الخادم RED-ID علوي لكن الإدخال قد يأتي صغيرًا.
+    val blockedLower = blockedIds.map { it.trim().lowercase() }.toSet()
+    val knownLower = knownRedIds.map { it.trim().lowercase() }.toSet()
+    // RED ID رقمي أولًا (تطبيع YounesId يقبل RED-/YNS- واللصق القديم).
+    val normalized = YounesId.normalizeInput(trimmed)
+    if (YounesId.isValid(normalized)) {
+        if (selfRedId.isNotBlank() && normalized.equals(selfRedId.trim(), ignoreCase = true)) return false
+        if (blockedLower.contains(normalized.lowercase())) return false
+        if (knownLower.contains(normalized.lowercase())) return false
+        directory.requestByRedId(normalized)
+        return true
+    }
+    // احتياط username: أحرف/أرقام/._ بطول ≥3 (الخادم يحلّه) — لا نرفضه كـ RED ID.
+    if (trimmed.length >= 3 && Regex("^[A-Za-z0-9_.]+$").matches(trimmed)) {
+        if (selfUsername.isNotBlank() && trimmed.equals(selfUsername.trim().removePrefix("@"), ignoreCase = true)) return false
+        if (blockedLower.contains(trimmed.lowercase())) return false
+        if (knownLower.contains(trimmed.lowercase())) return false
+        directory.requestByRedId(trimmed)
+        return true
+    }
+    return false
+}
 
 /**
  * 📇 جهات اتصال مثل واتساب — لكن بهوية يونس السيادية
@@ -76,8 +117,25 @@ fun ContactsScreen(
     var contactRedId by remember { mutableStateOf("") }
     var showShareSheet by remember { mutableStateOf(false) }
     var searchFocused by remember { mutableStateOf(false) }
+    var addContactError by remember { mutableStateOf<String?>(null) }
+    // الاكتشاف من الخادم: استعلام مستقر ≥3 أحرف يُرسل لـ /api/directory/search
+    // (DirectoryViewModel.search) ويُعرض في directory.results — المحلي أولًا دائمًا.
+    LaunchedEffect(debouncedQuery) {
+        val term = debouncedQuery.trim()
+        if (term.length >= 3) directory.search(term)
+    }
+    val blockedIds = directory.blocked.toSet()
+    val knownRedIds = directory.contacts.map { it.redId }.toSet() + blockedIds
+    val knownLower = (knownRedIds.map { it.trim().lowercase() } + directory.contacts.map { it.username.trim().lowercase() }).toSet()
+    // الاكتشاف من الخادم يُعرض فقط لاستعلام مستقر ≥3 أحرف — وإلا بقيت نتائج
+    // بحث سابق عالقة توحي زورًا بوجود اكتشاف لسؤال أقصر. المقارنة lowerCase
+    // حتى لا يظهر معرّف معروف بصيغة مختلفة كـ "جديد".
+    val serverResults = if (debouncedQuery.trim().length >= 3) directory.results.filter {
+        it.redId.trim().lowercase() !in knownLower && it.username.trim().lowercase() !in knownLower
+    } else emptyList()
     val filtered = directory.contacts.filter {
-        debouncedQuery.isBlank() || it.displayName.contains(debouncedQuery, true) || it.username.contains(debouncedQuery, true) || it.redId.contains(debouncedQuery, true)
+        it.redId !in blockedIds &&
+            (debouncedQuery.isBlank() || it.displayName.contains(debouncedQuery, true) || it.username.contains(debouncedQuery, true) || it.redId.contains(debouncedQuery, true))
     }.sortedWith(compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }.thenBy { it.displayName })
 
     Scaffold(
@@ -109,14 +167,40 @@ fun ContactsScreen(
                 item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("لا توجد نتائج لـ \"$query\"", color = Color.Gray) } }
             } else {
                 items(filtered, key = { it.redId }) { person ->
-                    WhatsAppContactRow(person, isOnline = directory.isOnline(person.redId), lastSeen = directory.lastSeenLabel(person.redId), onChat = { onChat(person) }, onCall = { video -> onCall(person, video) })
+                    WhatsAppContactRow(person, isOnline = directory.isOnline(person.redId), lastSeen = directory.lastSeenLabel(person.redId), onChat = { onChat(person) }, onCall = { video -> onCall(person, video) }, onBlock = { directory.block(person) })
                     HorizontalDivider(Modifier.padding(start = 72.dp), color = Color(0xFF1E293B))
+                }
+            }
+            // الاكتشاف من الخادم — نتائج /api/directory/search بعد استبعاد المعروفين.
+            if (serverResults.isNotEmpty()) {
+                item {
+                    Text("اكتشاف من الخادم • ${serverResults.size}", color = AqyalCyanGlow, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                    serverResults.forEach { person ->
+                        Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF162534))) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(44.dp).clip(CircleShape).background(AqyalCyanGlow), contentAlignment = Alignment.Center) { Text(person.displayName.take(1), color = Color.Black, fontWeight = FontWeight.Bold) }
+                                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(person.displayName, color = Color.White, fontWeight = FontWeight.Bold); Text("@${person.username} • ${person.redId}", color = Color.Gray, fontSize = 12.sp) }
+                                Button(onClick = { requestContactUnified(directory, person.redId, myRedId, blockedIds, knownRedIds, myUsername) }) { Text("إضافة") }
+                            }
+                        }
+                    }
+                }
+            }
+            // حالة الدليل — رسالة/خطأ من آخر عملية (إرسال طلب، بحث خادم).
+            val dirState = directory.state
+            if (dirState is DirectoryState.Message || dirState is DirectoryState.Error) {
+                item {
+                    val isError = dirState is DirectoryState.Error
+                    val text = if (isError) (dirState as DirectoryState.Error).message else (dirState as DirectoryState.Message).text
+                    Text(text, color = if (isError) Color(0xFFF87171) else YounesEmerald, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 }
             }
             if (directory.requests.isNotEmpty()) {
                 item {
-                    Text("طلبات واردة • ${directory.requests.size}", color = AqyalGold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
-                    directory.requests.forEach { req ->
+                    // طلبات من محظورين لا تُعرض للقبول — الحظر يعني لا تواصل.
+                    val visibleRequests = directory.requests.filter { req -> blockedIds.none { it.equals(req.requester.redId, ignoreCase = true) } }
+                    Text("طلبات واردة • ${visibleRequests.size}", color = AqyalGold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                    visibleRequests.forEach { req ->
                         Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.size(44.dp).clip(CircleShape).background(AqyalGold), contentAlignment = Alignment.Center) { Text(req.requester.displayName.take(1), color = Color.Black, fontWeight = FontWeight.Bold) }
@@ -130,8 +214,10 @@ fun ContactsScreen(
             }
             if (directory.outgoingRequests.isNotEmpty()) {
                 item {
-                    Text("طلبات مرسلة • ${directory.outgoingRequests.size}", color = AqyalCyanGlow, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
-                    directory.outgoingRequests.forEach { req ->
+                    // طلبات مرسلة لمعرّف أصبح محظورًا لاحقًا تُخفى حتى فك الحظر أو الإلغاء.
+                    val visibleOutgoing = directory.outgoingRequests.filter { req -> blockedIds.none { it.equals(req.recipient.redId, ignoreCase = true) } }
+                    Text("طلبات مرسلة • ${visibleOutgoing.size}", color = AqyalCyanGlow, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                    visibleOutgoing.forEach { req ->
                         Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF162534))) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.size(44.dp).clip(CircleShape).background(AqyalCyanGlow), contentAlignment = Alignment.Center) { Text(req.recipient.displayName.take(1), color = Color.Black, fontWeight = FontWeight.Bold) }
@@ -145,43 +231,66 @@ fun ContactsScreen(
                     }
                 }
             }
+            // المحظورون — من الخادم (GET /api/contacts/blocked) مع فك حظر مباشر.
+            if (directory.blocked.isNotEmpty()) {
+                item {
+                    Text("محظورون • ${directory.blocked.size}", color = Color(0xFFF87171), fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                    directory.blocked.forEach { redId ->
+                        Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0xFFF87171)), contentAlignment = Alignment.Center) { Text(redId.take(1), color = Color.Black, fontWeight = FontWeight.Bold) }
+                                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(redId, color = Color.White, fontWeight = FontWeight.Bold); Text("محظور — لا رسائل ولا مكالمات", color = Color.Gray, fontSize = 12.sp) }
+                                TextButton({ directory.unblock(PublicRedProfile(redId, "", redId)) }) { Text("فك الحظر") }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
     if (showAddContact) {
         AlertDialog(
-            onDismissRequest = { showAddContact = false },
+            onDismissRequest = { showAddContact = false; addContactError = null },
             title = { Text("إضافة جهة اتصال") },
             text = {
-                OutlinedTextField(
-                    value = contactRedId,
-                    onValueChange = { contactRedId = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("RED ID أو اسم المستخدم") },
-                    singleLine = true
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedTextField(
+                        value = contactRedId,
+                        onValueChange = { contactRedId = it; addContactError = null },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("RED ID أو اسم المستخدم") },
+                        singleLine = true,
+                        isError = addContactError != null,
+                        supportingText = addContactError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } }
+                    )
+                }
             },
             confirmButton = {
                 Button(onClick = {
-                    directory.requestByRedId(contactRedId)
-                    contactRedId = ""
-                    showAddContact = false
+                    if (requestContactUnified(directory, contactRedId, myRedId, blockedIds, knownRedIds, myUsername)) {
+                        contactRedId = ""
+                        addContactError = null
+                        showAddContact = false
+                    } else {
+                        addContactError = YounesId.ERROR_MESSAGE
+                    }
                 }, enabled = contactRedId.isNotBlank()) { Text("إرسال الطلب") }
             },
-            dismissButton = { TextButton(onClick = { showAddContact = false }) { Text("إلغاء") } }
+            dismissButton = { TextButton(onClick = { showAddContact = false; addContactError = null }) { Text("إلغاء") } }
         )
     }
 
-    // QR Scanner Sheet
+    // QR Scanner Sheet — كل المسارات تمر عبر requestContactUnified (تطبيع + تحقق واحد).
     if (showQrScanner) {
         QrScannerSheet(
             onDismiss = { showQrScanner = false },
             onScanned = { redId ->
                 showQrScanner = false
-                // Try to find user in contacts; if found, open chat
-                val found = directory.contacts.firstOrNull { it.redId.equals(redId, ignoreCase = true) }
+                val normalized = YounesId.normalizeInput(redId)
+                val found = directory.contacts.firstOrNull { it.redId.equals(normalized, ignoreCase = true) }
                 if (found != null) onChat(found)
-                else directory.requestByRedId(redId)
+                else requestContactUnified(directory, normalized, myRedId, blockedIds, knownRedIds, myUsername)
             }
         )
     }
@@ -191,12 +300,14 @@ fun ContactsScreen(
         FocusedSearchDialog(
             initialQuery = query,
             contacts = directory.contacts,
+            serverResults = serverResults,
             isOnline = directory::isOnline,
             onDismiss = { searchFocused = false },
             onResultClick = { person ->
                 searchFocused = false
                 onChat(person)
-            }
+            },
+            onAddServerResult = { person -> requestContactUnified(directory, person.redId, myRedId, blockedIds, knownRedIds, myUsername) }
         )
     }
 
@@ -224,7 +335,7 @@ private fun ContactActionRow(icon: androidx.compose.ui.graphics.vector.ImageVect
 }
 
 @Composable
-private fun WhatsAppContactRow(person: PublicRedProfile, isOnline: Boolean, lastSeen: String?, onChat: () -> Unit, onCall: (Boolean) -> Unit) {
+private fun WhatsAppContactRow(person: PublicRedProfile, isOnline: Boolean, lastSeen: String?, onChat: () -> Unit, onCall: (Boolean) -> Unit, onBlock: () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onChat).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(contentAlignment = Alignment.BottomEnd) {
             Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFF0F172A)), contentAlignment = Alignment.Center) { Text(person.displayName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
@@ -239,5 +350,8 @@ private fun WhatsAppContactRow(person: PublicRedProfile, isOnline: Boolean, last
         }
         IconButton(onClick = { onCall(false) }) { Icon(Icons.Default.Call, "صوت", tint = YounesEmerald) }
         IconButton(onClick = { onCall(true) }) { Icon(Icons.Default.Videocam, "فيديو", tint = AqyalGold) }
+        // حظر مباشر من صف الجهة — كان directory.block بلا أي زر عميل، فيُحظر فقط
+        // عبر طلبات واردة غير مرئية. يزيل الخادم الجهة ويضيفها للمحظورين.
+        IconButton(onClick = onBlock) { Icon(Icons.Default.Block, "حظر", tint = Color(0xFFF87171)) }
     }
 }

@@ -2,6 +2,7 @@ package com.red.server.messaging
 
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.social.AudienceGuard
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.Authentication
@@ -126,6 +127,8 @@ class BroadcastController(
             else -> throw IllegalArgumentException("INVALID_MEMBER_REF")
         }
         require(target.status == AccountStatus.APPROVED) { "USER_NOT_APPROVED" }
+        // حارس الجمهور: المحظور ثنائيًا لا يُضاف لقوائم البث
+        require(!AudienceGuard.isBlockedEitherDirection(jdbc, owner, target.id)) { "CONTACT_BLOCKED" }
         jdbc.update(
             "INSERT INTO broadcast_members(list_id, user_id) VALUES (?,?) ON CONFLICT DO NOTHING",
             id, target.id
@@ -145,6 +148,7 @@ class BroadcastController(
     /**
      * مستلمو التوزيع للـ E2EE fan-out من جهاز المالك.
      * يعيد فقط الحسابات المعتمدة (المعلّقة/المحظورة تُستبعد بصمت).
+     * حارس الجمهور: المحظورون ثنائيًا مع المالك يُستبعدون بصمت.
      */
     @PostMapping("/{id}/send")
     fun sendRecipients(@PathVariable id: UUID, auth: Authentication): ResponseEntity<Any> {
@@ -156,8 +160,9 @@ class BroadcastController(
             id
         )
         if (memberIds.isEmpty()) return ResponseEntity.ok(mapOf("recipients" to emptyList<Any>(), "count" to 0))
+        val blocked = AudienceGuard.blockedAuthorIds(jdbc, owner).toSet()
         val recipients = users.findAllById(memberIds)
-            .filter { it.status == AccountStatus.APPROVED && it.id != owner }
+            .filter { it.status == AccountStatus.APPROVED && it.id != owner && it.id.toString() !in blocked }
             .map { mapOf("userId" to it.id.toString(), "redId" to it.redId, "username" to it.username, "displayName" to it.displayName) }
         return ResponseEntity.ok(mapOf("recipients" to recipients, "count" to recipients.size))
     }

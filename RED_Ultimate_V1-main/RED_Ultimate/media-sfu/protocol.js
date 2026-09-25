@@ -46,6 +46,7 @@ const INVALID_REQUEST_MESSAGES = new Set([
   'Invalid rtpParameters: missing codecs',
   'Max 3 encodings for video',
   'Room is full',
+  'Room already exists',
   'Room not found',
   'Peer not found',
   'Peer already in room',

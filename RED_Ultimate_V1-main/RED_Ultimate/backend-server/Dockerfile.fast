@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # Fast local image — consumes the pre-compiled bootJar.
-# Prerequisite: cd backend-server && ./gradlew.bat bootJar -x test
+# Prerequisite: cd backend-server && ./gradlew bootJar -x test
+# Build context MUST be the project root (RED_Ultimate/), because the COPY
+# below references backend-server/build/libs/... relative to that root.
 FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app

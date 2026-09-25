@@ -1,21 +1,32 @@
 package com.red.server.api
 
 import com.red.server.auth.RedApprovalService
-import com.red.server.services.CoreService
+import com.red.server.services.MasterStatsService
 import org.springframework.web.bind.annotation.*
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import java.util.UUID
 
+/**
+ * Compat admin surface (legacy `/api/master/admin` paths).
+ *
+ * Canonical contract: [com.red.server.api.admin.RedMasterController]
+ * (`/api/master/v1`). Approval logic is already centralized in
+ * [RedApprovalService]; stats here delegate to the complete
+ * [MasterStatsService.getLiveMetrics] (users/messages/delivery/health) instead
+ * of the thin groups+stories aggregate, so both surfaces report identical
+ * numbers. Paths are kept only for deployed-dashboard compatibility.
+ */
+@Deprecated("Compat delegates — canonical admin contract lives in RedMasterController (/api/master/v1).")
 @RestController
 @RequestMapping("/api/master/admin")
 class AdminMasterController(
     private val approval: RedApprovalService,
-    private val core: CoreService
+    private val stats: MasterStatsService
 ) {
-    // [System A & C] إحصائيات المرور الحية
+    // [System A & C] إحصائيات المرور الحية — مفوَّضة للمصدر الموحد الكامل.
     @GetMapping("/system/stats")
-    fun getGlobalStats() = ResponseEntity.ok(core.getAggregatedStats())
+    fun getGlobalStats() = ResponseEntity.ok(stats.getLiveMetrics())
 
     // [Security] إدارة الحسابات والسيادة
     @GetMapping("/users/pending")

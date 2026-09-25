@@ -25,6 +25,8 @@ class NotificationService(
         private const val UNREAD_PREFIX = "notifications:unread:"
         private const val PREFS_PREFIX = "notifications:prefs:"
         private const val MAX_NOTIFICATIONS = 500L
+        // TTL التسليم: مفاتيح الإشعارات لا تبقى للأبد للمستخدمين الخاملين
+        private const val NOTIF_TTL_DAYS = 30L
     }
 
     /**
@@ -94,6 +96,13 @@ class NotificationService(
         // إضافة للقائمة (الأحدث أولاً)
         val listKey = NOTIF_LIST_PREFIX + userId
         redis.opsForList().leftPush(listKey, id)
+        // TTL: حتى لا تتسرب مفاتيح الخاملين للأبد
+        runCatching {
+            val ttl = java.util.concurrent.TimeUnit.DAYS.toSeconds(NOTIF_TTL_DAYS)
+            redis.expire(dataKey, ttl, java.util.concurrent.TimeUnit.SECONDS)
+            redis.expire(listKey, ttl, java.util.concurrent.TimeUnit.SECONDS)
+            redis.expire(UNREAD_PREFIX + userId, ttl, java.util.concurrent.TimeUnit.SECONDS)
+        }
 
         // تقليم القائمة
         val size = redis.opsForList().size(listKey) ?: 0
@@ -115,34 +124,58 @@ class NotificationService(
     }
 
     /**
-     * جلب الإشعارات مع ترقيم الصفحات
+     * جلب الإشعارات مع ترقيم الصفحات.
+     * التسليم: الفلترة حسب النوع قبل التقطيع — الفلترة بعد range كانت تُرجع صفحات
+     * ناقصة/فارغة عند تصفية نوع نادر. نمسح نافذة موسعة (حتى 10×) لملء الصفحة.
      */
     fun getNotifications(userId: String, page: Int, size: Int, type: String?): List<NotificationDto> {
+        val safeSize = size.coerceIn(1, 100)
+        val safePage = page.coerceAtLeast(0)
         val listKey = NOTIF_LIST_PREFIX + userId
-        val start = (page * size).toLong()
-        val end = start + size - 1
-
-        val ids = redis.opsForList().range(listKey, start, end) ?: return emptyList()
-
-        return ids.mapNotNull { id ->
-            val data = redis.opsForHash<String, String>().entries(NOTIF_DATA_PREFIX + id)
-            if (data.isEmpty()) return@mapNotNull null
-
-            val notif = NotificationDto(
-                id = data["id"] ?: id,
-                type = data["type"] ?: "UNKNOWN",
-                title = data["title"] ?: "",
-                body = data["body"] ?: "",
-                senderId = data["senderId"]?.takeIf { it.isNotBlank() },
-                senderName = data["senderName"]?.takeIf { it.isNotBlank() },
-                threadId = data["threadId"]?.takeIf { it.isNotBlank() },
-                isRead = data["isRead"] == "true",
-                createdAt = parseInstant(data["createdAt"])
-            )
-
-            // فلتر حسب النوع
-            if (type != null && notif.type != type) null else notif
+        if (type == null) {
+            val start = (safePage * safeSize).toLong()
+            val end = start + safeSize - 1
+            val ids = redis.opsForList().range(listKey, start, end) ?: return emptyList()
+            return ids.mapNotNull { id -> readNotification(id) }
         }
+        // مسار مفلتر: اجمع حتى تملأ الصفحة أو تنفد القائمة (سقف 10× لتجنب مسح لا نهائي)
+        val need = safeSize
+        val skip = safePage * safeSize
+        val found = mutableListOf<NotificationDto>()
+        var scanned = 0L
+        var skipped = 0
+        val batch = 100L
+        while (found.size < need) {
+            val ids = redis.opsForList().range(listKey, scanned, scanned + batch - 1) ?: break
+            if (ids.isEmpty()) break
+            scanned += ids.size
+            for (id in ids) {
+                val notif = readNotification(id) ?: continue
+                if (notif.type != type) continue
+                if (skipped < skip) { skipped++; continue }
+                found.add(notif)
+                if (found.size >= need) break
+            }
+            if (ids.size < batch) break
+            if (scanned > 1000 + skip) break
+        }
+        return found
+    }
+
+    private fun readNotification(id: String): NotificationDto? {
+        val data = redis.opsForHash<String, String>().entries(NOTIF_DATA_PREFIX + id)
+        if (data.isEmpty()) return null
+        return NotificationDto(
+            id = data["id"] ?: id,
+            type = data["type"] ?: "UNKNOWN",
+            title = data["title"] ?: "",
+            body = data["body"] ?: "",
+            senderId = data["senderId"]?.takeIf { it.isNotBlank() },
+            senderName = data["senderName"]?.takeIf { it.isNotBlank() },
+            threadId = data["threadId"]?.takeIf { it.isNotBlank() },
+            isRead = data["isRead"] == "true",
+            createdAt = parseInstant(data["createdAt"])
+        )
     }
 
     fun getUnreadCount(userId: String): Long {
@@ -153,7 +186,9 @@ class NotificationService(
         val data = redis.opsForHash<String, String>().entries(NOTIF_DATA_PREFIX + notificationId)
         if (data.isNotEmpty() && data["userId"] == userId && data["isRead"] != "true") {
             redis.opsForHash<String, String>().put(NOTIF_DATA_PREFIX + notificationId, "isRead", "true")
-            redis.opsForValue().decrement(UNREAD_PREFIX + userId)
+            val left = redis.opsForValue().decrement(UNREAD_PREFIX + userId) ?: 0
+            // التسليم: لا عداد سالب بعد قراءات مكررة/متسابقة
+            if (left < 0) redis.opsForValue().set(UNREAD_PREFIX + userId, "0")
         }
     }
 

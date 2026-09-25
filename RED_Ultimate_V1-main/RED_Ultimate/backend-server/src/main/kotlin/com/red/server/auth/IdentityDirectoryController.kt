@@ -18,11 +18,15 @@ class IdentityDirectoryController(
     private val users: UserAccountRepository,
     private val devices: UserDeviceRepository,
     private val oneTimePreKeys: OneTimePreKeyService,
+    private val limits: RateLimitService,
     private val jdbc: org.springframework.jdbc.core.JdbcTemplate
 ) {
     /** Static directory lookup does not consume scarce keys and is safe for established sessions. */
     @GetMapping("/{redId}")
     fun bundles(@PathVariable redId: String, auth: org.springframework.security.core.Authentication): IdentityDirectoryResponse {
+        // فضاء المعرّفات 90k قابل للتعداد (انظر PublicDirectoryController) —
+        // الحد بهوية المتصل (UUID) لا IP حتى لا يُلتف عليه بتدوير العنوان.
+        limits.check("identity-bundles", auth.name, 60, java.time.Duration.ofMinutes(10))
         val viewerId = java.util.UUID.fromString(auth.name)
         val user = users.findByRedId(redId.trim().uppercase())?.takeIf { it.status == com.red.server.auth.model.AccountStatus.APPROVED }
             ?: throw NoSuchElementException("RED identity not found")
@@ -41,6 +45,9 @@ class IdentityDirectoryController(
     /** Called only when a sender lacks a session. The returned one-time pair is atomically consumed. */
     @GetMapping("/{redId}/{deviceId}/prekey")
     fun consumeBundle(@PathVariable redId: String, @PathVariable deviceId: UUID, auth: org.springframework.security.core.Authentication): PreKeyBundleResponse {
+        // كل نداء يستهلك مفتاحًا لمرة واحدة ذرّيًا — بلا حد يستنزف المهاجم
+        // مخزون أي مستخدم بحلقة بسيطة (تعطيل خدمة يمس السرّية المستقبلية).
+        limits.check("identity-prekey-consume", auth.name, 30, java.time.Duration.ofMinutes(10))
         val viewerId = java.util.UUID.fromString(auth.name)
         val user = users.findByRedId(redId.trim().uppercase())?.takeIf { it.status == com.red.server.auth.model.AccountStatus.APPROVED }
             ?: throw NoSuchElementException("RED identity not found")

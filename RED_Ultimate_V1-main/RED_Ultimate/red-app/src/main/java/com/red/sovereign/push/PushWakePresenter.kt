@@ -33,7 +33,8 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object PushWakePresenter {
     private const val TAG = "PushWakePresenter"
-    private const val DEDUP_TTL_MS = 30_000L
+    // يغطي كامل الرنين (45s) + تأخر OFFER عبر socket — الأقصر كان يكرر الرنين وهمياً.
+    private const val DEDUP_TTL_MS = 60_000L
     private const val RING_TIMEOUT_MS = 45_000L
 
     private val recent = ConcurrentHashMap<String, Long>()
@@ -54,6 +55,32 @@ object PushWakePresenter {
         if (isDuplicate(callId)) {
             Log.i(TAG, "wake de-duplicated callId=$callId")
             return false
+        }
+        // بلا وهم: لا رنين وهمي عند تعطيل إشعارات المكالمات أو نشاط DND.
+        // الإيقاظ يبقى sync فقط عبر RedPushService (socket/mailbox) دون full-screen.
+        runCatching {
+            val s = com.red.sovereign.settings.SettingsRuntime.current
+            if (!s.callNotifications) {
+                Log.i(TAG, "call wake suppressed: callNotifications off callId=$callId")
+                return false
+            }
+            if (com.red.sovereign.settings.DndPolicy.shouldSuppress(s)) {
+                Log.i(TAG, "call wake suppressed: DND active callId=$callId")
+                return false
+            }
+        }
+        // Android 13+: بلا POST_NOTIFICATIONS لا يمكن عرض الرنين — لا ندّعي العرض.
+        // نعيد false قبل الحفظ في dedup حتى تُعاد المحاولة عند وصول OFFER عبر socket.
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val granted = runCatching {
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    context, android.Manifest.permission.POST_NOTIFICATIONS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            }.getOrDefault(false)
+            if (!granted) {
+                Log.i(TAG, "call wake suppressed: POST_NOTIFICATIONS denied callId=$callId")
+                return false
+            }
         }
         remember(callId)
 
@@ -86,10 +113,10 @@ object PushWakePresenter {
 
     private fun isDuplicate(callId: String): Boolean {
         val now = System.currentTimeMillis()
-        val it = recent.entries.iterator()
-        while (it.hasNext()) {
-            if (now - it.next().value > DEDUP_TTL_MS) it.remove()
-        }
+        // ConcurrentHashMap iterator لا يدعم remove() — كان يرمي
+        // UnsupportedOperationException بعد انتهاء TTL ويسقط الإيقاظ.
+        // removeIf ذرّي وآمن على CHM.
+        runCatching { recent.entries.removeIf { now - it.value > DEDUP_TTL_MS } }
         val last = recent[callId] ?: return false
         return now - last <= DEDUP_TTL_MS
     }
@@ -205,6 +232,19 @@ object PushWakePresenter {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "رفض", rejectPi)
             .addAction(android.R.drawable.ic_menu_call, "رد", acceptPi)
 
+        // Android 13+: بلا POST_NOTIFICATIONS يسقط notify باستثناء — لا رنين وهمي،
+        // الإيقاظ يبقى عبر socket/poll في RedPushService.
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val granted = runCatching {
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    context, android.Manifest.permission.POST_NOTIFICATIONS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            }.getOrDefault(false)
+            if (!granted) {
+                Log.i(TAG, "ring skipped: POST_NOTIFICATIONS not granted callId=$callId")
+                return
+            }
+        }
         runCatching { NotificationManagerCompat.from(context).notify(notifId, builder.build()) }
             .onFailure { Log.w(TAG, "post ring notification failed: ${it.message}") }
     }

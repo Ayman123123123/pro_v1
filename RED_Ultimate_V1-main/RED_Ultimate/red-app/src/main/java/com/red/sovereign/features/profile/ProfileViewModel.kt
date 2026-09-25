@@ -67,9 +67,11 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                         displayName = jsonResp.displayName ?: currentDisplayName
                         bio = jsonResp.bio ?: ""
                         avatarUrl = jsonResp.avatarUrl
+                        loadError = null
                         loadAvatar(avatarUrl)
                     } catch (_: Exception) {
-                        // بيانات محلية كافية
+                        // بيانات محلية كافية — لا نحجب التحرير بخطأ تحليل.
+                        loadError = null
                     }
                 }
                 is ApiResult.Error -> {
@@ -84,13 +86,19 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     /** يحدّث الاسم المعروض والبايو عبر PATCH /api/auth/profile. */
     fun updateProfile(newDisplayName: String, newBio: String, done: () -> Unit) = viewModelScope.launch {
         if (isSaving) return@launch
+        val cleanName = newDisplayName.trim().take(50)
+        if (cleanName.isBlank()) {
+            message = "تعذر حفظ البروفايل: الاسم المعروض فارغ"
+            return@launch
+        }
+        val cleanBio = newBio.trim().take(280)
         isSaving = true
         message = null
-        val body = json.encodeToString(UpdateProfileRequest(newDisplayName.trim(), avatarUrl, newBio.trim().takeIf { it.isNotBlank() }))
+        val body = json.encodeToString(UpdateProfileRequest(cleanName, avatarUrl, cleanBio.takeIf { it.isNotBlank() }))
         when (val result = client.request("PATCH", "/api/auth/profile", body)) {
             is ApiResult.Success -> {
-                displayName = newDisplayName.trim()
-                bio = newBio.trim()
+                displayName = cleanName
+                bio = cleanBio
                 message = "تم حفظ البروفايل"
                 done()
             }
