@@ -289,10 +289,11 @@ export function Dashboard() {
     { id: '3', level: 'P0', message: 'Payment gateway API timeouts', component: 'Billing', timestamp: new Date(Date.now() - 7200000).toISOString(), acknowledged: false },
   ];
 
-  const chartDataPoints = (chartData && chartData.length > 0) ? chartData : mockChartData;
-  const healthData = (systemHealth && systemHealth.length > 0) ? systemHealth : mockHealth;
-  const alertData = (alerts && alerts.length > 0) ? alerts : mockAlerts;
-  const displayMetrics = metricsError || !metrics ? mockMetrics : metrics;
+  const chartDataPoints = (chartData && (chartData as ChartDataPoint[]).length > 0) ? chartData as ChartDataPoint[] : []; // لا بيانات تاريخية حقيقية بعد — فراغ صادق
+  const healthData = (systemHealth && systemHealth.length > 0) ? systemHealth : []; // /health/detailed يفشل ⇒ حالة خطأ صريحة لا أرقام مُختلقة
+  const alertData = (alerts && alerts.length > 0) ? alerts : [];
+  // مفتاحا العقد الحقيقي (snake_case من /api/admin/monitor/stats)
+  const realMetrics = metrics as Record<string, number> | undefined;
   
   const isDemo = metricsError && !metricsLoading;
   const fmt = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—');
@@ -335,78 +336,62 @@ export function Dashboard() {
         </span>
       </div>
 
-      {/* Metric Cards */}
+      {/* Metric Cards — مفاتيح العقد الحقيقي من /api/admin/monitor/stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title={t('dashboard.metrics.totalUsers')}
-          value={fmt(displayMetrics.totalUsers)}
-          change={displayMetrics.usersChange}
+          value={fmt(realMetrics?.total_users)}
           icon={<Users className="h-6 w-6 text-blue-500 dark:text-blue-400" />}
           iconColor="bg-blue-500/10"
-          trend={displayMetrics.usersChange && displayMetrics.usersChange > 0 ? 'up' : displayMetrics.usersChange && displayMetrics.usersChange < 0 ? 'down' : 'neutral'}
           loading={metricsLoading}
         />
         <MetricCard
           title={t('dashboard.metrics.activeUsers')}
-          value={fmt(displayMetrics.activeUsers)}
-          change={displayMetrics.activeUsersChange}
+          value={fmt(realMetrics?.active_users)}
           icon={<Activity className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />}
           iconColor="bg-emerald-500/10"
-          trend={displayMetrics.activeUsersChange && displayMetrics.activeUsersChange > 0 ? 'up' : 'down'}
           loading={metricsLoading}
         />
         <MetricCard
           title={t('dashboard.metrics.messages')}
-          value={fmt(displayMetrics.messages)}
-          change={displayMetrics.messagesChange}
+          value={fmt(realMetrics?.messages_24h)}
           icon={<MessageSquare className="h-6 w-6 text-purple-500 dark:text-purple-400" />}
           iconColor="bg-purple-500/10"
-          trend={displayMetrics.messagesChange && displayMetrics.messagesChange > 0 ? 'up' : 'down'}
           loading={metricsLoading}
         />
         <MetricCard
-          title={t('dashboard.metrics.calls')}
-          value={fmt(displayMetrics.calls)}
-          change={displayMetrics.callsChange}
-          icon={<Phone className="h-6 w-6 text-orange-500 dark:text-orange-400" />}
-          iconColor="bg-orange-500/10"
-          trend={displayMetrics.callsChange && displayMetrics.callsChange > 0 ? 'up' : 'down'}
+          title="معدل التسليم (24س)"
+          value={realMetrics?.delivery_rate_percent !== undefined ? `${realMetrics.delivery_rate_percent}%` : '—'}
+          icon={<CheckCircle className="h-6 w-6 text-teal-500 dark:text-teal-400" />}
+          iconColor="bg-teal-500/10"
           loading={metricsLoading}
         />
         <MetricCard
-          title={t('dashboard.metrics.channels')}
-          value={fmt(displayMetrics.channels)}
-          change={displayMetrics.channelsChange}
-          icon={<Hash className="h-6 w-6 text-indigo-500 dark:text-indigo-400" />}
-          iconColor="bg-indigo-500/10"
-          trend={displayMetrics.channelsChange && displayMetrics.channelsChange > 0 ? 'up' : 'down'}
+          title="رسائل مسلَّمة (24س)"
+          value={fmt(realMetrics?.delivered_messages_24h)}
+          icon={<MessageSquare className="h-6 w-6 text-green-500 dark:text-green-400" />}
+          iconColor="bg-green-500/10"
           loading={metricsLoading}
         />
         <MetricCard
-          title={t('dashboard.metrics.revenue')}
-          value={displayMetrics.revenue != null && Number.isFinite(displayMetrics.revenue) ? `$${displayMetrics.revenue.toLocaleString()}` : '—'}
-          change={displayMetrics.revenueChange}
-          icon={<DollarSign className="h-6 w-6 text-amber-500 dark:text-amber-400" />}
+          title="ذاكرة JVM (%)"
+          value={realMetrics?.jvm_memory_percent !== undefined ? `${realMetrics.jvm_memory_percent}%` : '—'}
+          icon={<Server className="h-6 w-6 text-amber-500 dark:text-amber-400" />}
           iconColor="bg-amber-500/10"
-          trend={displayMetrics.revenueChange && displayMetrics.revenueChange > 0 ? 'up' : 'down'}
           loading={metricsLoading}
         />
         <MetricCard
-          title={t('dashboard.metrics.mau')}
-          value={fmt(displayMetrics.mau)}
-          change={displayMetrics.mauChange}
-          icon={<Users className="h-6 w-6 text-cyan-500 dark:text-cyan-400" />}
+          title="صحة قاعدة البيانات"
+          value={realMetrics?.db_health != null ? String(realMetrics.db_health) : '—'}
+          icon={<Database className="h-6 w-6 text-cyan-500 dark:text-cyan-400" />}
           iconColor="bg-cyan-500/10"
-          trend={displayMetrics.mauChange && displayMetrics.mauChange > 0 ? 'up' : 'down'}
           loading={metricsLoading}
         />
         <MetricCard
-          title={t('dashboard.metrics.dau')}
-          value={fmt(displayMetrics.dau)}
-          change={displayMetrics.dauChange}
-          icon={<Activity className="h-6 w-6 text-pink-500 dark:text-pink-400" />}
+          title="موافقات معلّقة"
+          value={fmt(realMetrics?.pending_approvals)}
+          icon={<AlertTriangle className="h-6 w-6 text-pink-500 dark:text-pink-400" />}
           iconColor="bg-pink-500/10"
-          trend={displayMetrics.dauChange && displayMetrics.dauChange > 0 ? 'up' : 'down'}
           loading={metricsLoading}
         />
       </div>
@@ -421,7 +406,13 @@ export function Dashboard() {
             <CardDescription>{t('dashboard.charts.userGrowth')}</CardDescription>
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="h-[300px]">
+            <div className="h-[300px] relative">
+              {chartDataPoints.length === 0 && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
+                  <p className="text-sm font-medium text-foreground">لا بيانات تاريخية متاحة بعد</p>
+                  <p className="text-xs text-muted-foreground mt-1">تُعرض الرسوم عند توفر مصدر تاريخي حقيقي من الخادم</p>
+                </div>
+              )}
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartDataPoints}>
                   <defs>
@@ -459,7 +450,13 @@ export function Dashboard() {
             <CardDescription>{t('dashboard.messagesCallsActivity')}</CardDescription>
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="h-[300px]">
+            <div className="h-[300px] relative">
+              {chartDataPoints.length === 0 && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
+                  <p className="text-sm font-medium text-foreground">لا بيانات تاريخية متاحة بعد</p>
+                  <p className="text-xs text-muted-foreground mt-1">تُعرض الرسوم عند توفر مصدر تاريخي حقيقي من الخادم</p>
+                </div>
+              )}
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartDataPoints}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.4} />
@@ -485,15 +482,21 @@ export function Dashboard() {
             <CardDescription>{t('dashboard.revenueBreakdown')}</CardDescription>
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="h-[300px]">
+            <div className="h-[300px] relative">
+              {chartDataPoints.length === 0 && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
+                  <p className="text-sm font-medium text-foreground">لا بيانات تاريخية متاحة بعد</p>
+                  <p className="text-xs text-muted-foreground mt-1">تُعرض الرسوم عند توفر مصدر تاريخي حقيقي من الخادم</p>
+                </div>
+              )}
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={[
-                      { name: 'Subscriptions', value: displayMetrics.revenueSubscriptions || 0 },
-                      { name: 'In-app Purchases', value: displayMetrics.revenuePurchases || 0 },
-                      { name: 'Ads', value: displayMetrics.revenueAds || 0 },
-                      { name: 'Other', value: displayMetrics.revenueOther || 0 },
+                    data={[ // لا مصدر إيرادات حقيقي بعد — قيم صفرية صادقة
+                      { name: 'Subscriptions', value: 0 },
+                      { name: 'In-app Purchases', value: 0 },
+                      { name: 'Ads', value: 0 },
+                      { name: 'Other', value: 0 },
                     ]}
                     cx="50%"
                     cy="50%"
@@ -526,7 +529,13 @@ export function Dashboard() {
             <CardDescription>{t('dashboard.retentionDesc')}</CardDescription>
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="h-[300px]">
+            <div className="h-[300px] relative">
+              {chartDataPoints.length === 0 && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
+                  <p className="text-sm font-medium text-foreground">لا بيانات تاريخية متاحة بعد</p>
+                  <p className="text-xs text-muted-foreground mt-1">تُعرض الرسوم عند توفر مصدر تاريخي حقيقي من الخادم</p>
+                </div>
+              )}
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartDataPoints}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.4} />
@@ -696,50 +705,48 @@ export function Dashboard() {
   );
 }
 
-// API Functions
-async function fetchDashboardMetrics(timeRange: string) {
-  const response = await fetch(`/api/admin/dashboard/metrics?range=${timeRange}`);
+// API Functions — على العقد الحقيقي للخادم (2026-09-27).
+// كان هذا الملف ينادي /api/admin/dashboard/{metrics,charts} و
+// /api/admin/system/health و /api/admin/alerts — ولا واحد منها موجود
+// في الخادم (تحقّق من Controllers) ⇒ كل البطاقات كانت تسقط للموك دائمًا.
+// المسارات الحقيقية:
+//   GET /api/admin/monitor/stats  ← AdminMonitorController → MasterStatsService
+//   GET /health/detailed          ← HealthController (ADMIN) — خدمات مفصلة
+//   GET /api/master/v1/stats/realtime ← نفس المصدر القانوني للإحصاء الحي
+async function fetchDashboardMetrics(_timeRange: string) {
+  const response = await fetch('/api/admin/monitor/stats');
   if (!response.ok) throw new Error('Failed to fetch metrics');
   return response.json();
 }
 
-async function fetchChartData(timeRange: string) {
-  const response = await fetch(`/api/admin/dashboard/charts?range=${timeRange}`);
-  if (!response.ok) throw new Error('Failed to fetch chart data');
-  return response.json();
+// الرسوم الزمنية: لا يوجد مسار تاريخي حقيقي بعد — نُرجع null ولا نُصنّع أرقامًا.
+// الواجهة تعرض حالة فراغ صريحة بدل بيانات وهمية مضللة.
+async function fetchChartData(_timeRange: string) {
+  return null;
 }
 
 async function fetchSystemHealth(): Promise<SystemHealthData[]> {
-  const response = await fetch('/api/admin/system/health');
+  const response = await fetch('/health/detailed');
   if (!response.ok) throw new Error('Failed to fetch system health');
   const json: unknown = await response.json();
-  // ✅ FIX: الخادم يرجع كائن (Map) وليس مصفوفة — .map() كان سيعطي TypeError وقت التشغيل
-  if (Array.isArray(json)) return json as SystemHealthData[];
   if (json && typeof json === 'object') {
     const obj = json as Record<string, unknown>;
-    for (const key of ['components', 'systems', 'health', 'data']) {
-      if (Array.isArray(obj[key])) return obj[key] as SystemHealthData[];
+    const services = obj['services'] as Record<string, Record<string, unknown>> | undefined;
+    if (services && typeof services === 'object') {
+      return Object.entries(services).map(([name, val]) => ({
+        component: name,
+        status: val?.status === 'UP' || val?.status === 'healthy' ? 'healthy' as const
+          : val?.status === 'DEGRADED' ? 'degraded' as const
+          : 'critical' as const,
+      }));
     }
-    // كائن مسطح: { database: {...}, redis: {...} } → نحوله لمصفوفة
-    return Object.entries(obj).map(([name, val]) => ({
-      component: name,
-      status: (val as Record<string, unknown>)?.status === 'UP' || (val as Record<string, unknown>)?.healthy === true ? 'healthy' : 'degraded',
-    }));
   }
   return [];
 }
 
+// التنبيهات: لا يوجد مسار /api/admin/alerts في الخادم — تُعرض قائمة فارغة
+// بحالة «لا تنبيهات» الصادقة (المكوّن يتعامل معها بأناقة) بدل بلاغات وهمية.
 async function fetchAlerts(): Promise<AlertData[]> {
-  const response = await fetch('/api/admin/alerts?limit=50');
-  if (!response.ok) throw new Error('Failed to fetch alerts');
-  const json: unknown = await response.json();
-  // ✅ FIX: نفس الحماية — نقبل مصفوفة أو كائن مغلف { alerts: [...] }
-  if (Array.isArray(json)) return json as AlertData[];
-  if (json && typeof json === 'object') {
-    const obj = json as Record<string, unknown>;
-    if (Array.isArray(obj['alerts'])) return obj['alerts'] as AlertData[];
-    if (Array.isArray(obj['data'])) return obj['data'] as AlertData[];
-  }
   return [];
 }
 export default Dashboard;
