@@ -261,6 +261,8 @@ import com.red.sovereign.stories.StoryViewModel
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.AqyalRoyalBlue
+import com.red.sovereign.ui.theme.senderNameColor
+import com.red.sovereign.ui.theme.senderNameColorIndex
 import com.red.sovereign.ui.theme.AqyalSurfaceNavy
 import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.SovereignGradients
@@ -2205,18 +2207,13 @@ private fun ChatHubScreen(
                                 ) {
                                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                     if (!message.outgoing) {
-                                        // ألوان هادئة ومتناسقة مع الهوية (لا مهرجان ألوان)
-                                        val nameColors = listOf(
-                                            Color(0xFF6FD8B0), Color(0xFF7FB5E0), Color(0xFFF0C674), Color(0xFFC9A7E8),
-                                            Color(0xFF8FC7E8), Color(0xFFB5D8A0), Color(0xFFE0B8A0)
-                                        )
-                                        val colorIndex = kotlin.math.abs(message.senderRedId.hashCode()) % nameColors.size
+                                        // ألوان هادئة ومتناسقة مع الهوية (لا مهرجان ألوان) — المصدر المركزي (NameColors)
+                                        val colorIndex = senderNameColorIndex(message.senderRedId)
                                         // G3: اسم + Red ID ظاهر — الاسم من عضوية المجموعة أو جهات الاتصال، وRed ID الكامل تحته.
                                         val memberName = openGroup.members.firstOrNull { it.redId == message.senderRedId }?.username?.takeIf { it.isNotBlank() }
                                             ?: directory.contacts.firstOrNull { it.redId == message.senderRedId }?.displayName.orEmpty()
                                         Text(
-                                            memberName.ifBlank { message.senderRedId },
-                                            color = nameColors[colorIndex], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                            memberName.ifBlank { message.senderRedId },                                             color = senderNameColor(colorIndex), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis
                                         )
                                         if (memberName.isNotBlank()) {
                                             Text(
@@ -3720,7 +3717,7 @@ private fun MoreOption(icon: ImageVector, title: String, detail: String, color: 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CreateSheet(
+internal fun CreateSheet(
     publishing: Boolean,
     onDismiss: () -> Unit,
     onPost: (String) -> Unit,

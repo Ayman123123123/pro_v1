@@ -71,6 +71,16 @@
     <color name="younes_sovereign_gold">#E0B551</color>
     <color name="younes_gold">#E0B551</color>
 
+    <!-- Chat Bubbles -->
+    <color name="yns_bubble_sent">#DDF5EA</color>
+    <color name="yns_bubble_received">#FFFFFF</color>
+
+    <!-- Gradients & Shimmer -->
+    <color name="yns_gradient_start">#0A7A5E</color>
+    <color name="yns_gradient_end">#A8F0D8</color>
+    <color name="yns_shimmer_base">#E6E8EB</color>
+    <color name="yns_shimmer_highlight">#F0F2F5</color>
+
     <!-- الشفافية -->
     <color name="yns_overlay_dark">#99000000</color>
     <color name="yns_overlay_light">#66FFFFFF</color>

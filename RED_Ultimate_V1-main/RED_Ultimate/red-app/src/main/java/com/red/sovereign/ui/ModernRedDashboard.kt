@@ -45,6 +45,9 @@ import com.red.sovereign.media.VoiceMessageViewModel
 import com.red.sovereign.settings.SettingsPage
 import com.red.sovereign.settings.SettingsViewModel
 import com.red.sovereign.settings.YounesSettingsSheet
+import com.red.sovereign.social.FeedState
+import com.red.sovereign.social.FeedViewModel
+import com.red.sovereign.stories.StoryViewModel
 import com.red.sovereign.ui.components.*
 import com.red.sovereign.ui.screens.*
 import com.red.sovereign.ui.theme.*
@@ -63,6 +66,7 @@ import com.red.sovereign.ui.theme.*
  */
 
 enum class ModernSection(val icon: ImageVector, val label: String, val description: String) {
+    HOME(Icons.Default.DynamicFeed, "الرئيسية", "الحالات والقصص والمنشورات"),
     CHATS(Icons.Default.Chat, "الدردشات", "محادثات فردية مشفرة E2EE"),
     GROUPS(Icons.Default.Groups, "المجموعات", "مجموعات مشفرة بـ Sender Keys"),
     CALLS(Icons.Default.Call, "المكالمات", "مركز المكالمات السيادي"),
@@ -205,6 +209,14 @@ fun ModernRedDashboard(
     val safety: com.red.sovereign.crypto.SafetyViewModel = viewModel()
     val attachments: AttachmentViewModel = viewModel()
     val voiceMessages: VoiceMessageViewModel = viewModel()
+    val feed: FeedViewModel = viewModel()
+    val stories: StoryViewModel = viewModel()
+    
+    // إنشاء الحالات والمنشورات
+    var showCreate by remember { mutableStateOf(false) }
+    val createStoryPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        uris.firstOrNull()?.let { uri -> stories.upload(uri) }
+    }
     
     // شبكة موحدة - كل الشبكات: WiFi/Ethernet/USB/VPN/Hotspot/BT/Mobile + P2P
     val networkInfo by UnifiedNetworkManager.currentNetwork.collectAsState()
@@ -240,6 +252,7 @@ fun ModernRedDashboard(
         floatingActionButton = {
             ModernFabForSection(
                 section = currentSection,
+                onHomeClick = { showCreate = true },
                 // RedDashboard: زر الدردشة يفتح جهات الاتصال الحقيقية (CONTACTS).
                 onChatClick = { showContacts = true },
                 onGroupClick = { showCreateGroup = true },
@@ -276,6 +289,13 @@ fun ModernRedDashboard(
                 
                 // محتوى التبويب الحالي
                 when (currentSection) {
+                    ModernSection.HOME -> FeedScreen(
+                        account = account,
+                        feed = feed,
+                        stories = stories,
+                        directory = directory,
+                        onCreate = { showCreate = true }
+                    )
                     ModernSection.CHATS -> ModernChatsScreen(
                         account = account,
                         groups = groups,
@@ -325,6 +345,33 @@ fun ModernRedDashboard(
         }
     }
     
+    // إنشاء الحالات والمنشورات والاستطلاعات
+    if (showCreate) {
+        CreateSheet(
+            publishing = feed.state == FeedState.Publishing,
+            onDismiss = { showCreate = false },
+            onPost = { text -> feed.create(text) { showCreate = false } },
+            onPoll = { question, options, hours, images ->
+                feed.createPoll(question, options, hours, optionImages = images) { showCreate = false }
+            },
+            onStory = {
+                showCreate = false
+                createStoryPicker.launch(arrayOf("image/*", "video/*"))
+            },
+            onLive = {
+                showCreate = false
+                liveTitle = ""
+                liveIsPrivate = false
+                livePassword = ""
+                showLiveCreate = true
+            },
+            onExplore = {
+                showCreate = false
+                currentSection = ModernSection.EXPLORE
+            }
+        )
+    }
+
     // Overlays للمكالمات — الموحدة الحقيقية (1:1 + جماعية + مؤتمر + بث) فوق كل التبويبات (RedDashboard 549/658).
     UnifiedCallOverlaysModern()
     UnifiedCallOverlays()
@@ -495,22 +542,23 @@ fun ModernTopBar(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // أفاتار وشعار
+        // Profile Avatar with Click to open settings
         Box(
             Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Brush.linearGradient(listOf(YounesPrimary, YounesCobalt))),
+                .size(44.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(Brush.linearGradient(listOf(YounesPrimary, YounesCobalt)))
+                .clickable { onSettings() },
             contentAlignment = Alignment.Center
         ) {
-            Text("ي", color = YounesOnPrimary, fontWeight = FontWeight.Black, fontSize = 20.sp)
+            Text(username.take(1).uppercase(), color = YounesOnPrimary, fontWeight = FontWeight.Black, fontSize = 20.sp)
         }
         
-        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+        Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     "يونس • @$username",
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
@@ -520,7 +568,7 @@ fun ModernTopBar(
                     isLan = isLan
                 )
             }
-            // مؤشر حالة السيرفر الحقيقية (حالة المقبس لا الشبكة): أخضر=متصل، ذهبي=جارٍ الاتصال، أحمر=طافي مع العد التنازلي.
+            // Server Status Indicator
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 val serverStatus by com.red.sovereign.core.ConnectionStatusRepository.status.collectAsState()
                 val (serverDot, serverLabel, serverColor) = when (serverStatus.state) {
@@ -544,17 +592,19 @@ fun ModernTopBar(
                 Text(
                     serverLabel,
                     color = serverColor,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     maxLines = 1
                 )
             }
         }
         
-        IconButton(onClick = onSearch) {
-            Icon(Icons.Default.Search, "بحث", tint = Color.White)
-        }
-        IconButton(onClick = onSettings) {
-            Icon(Icons.Default.Settings, "إعدادات", tint = Color.White)
+        // Search Button
+        FilledIconButton(
+            onClick = onSearch,
+            colors = IconButtonDefaults.filledIconButtonColors(containerColor = YounesSurface2, contentColor = YounesPrimary),
+            modifier = Modifier.size(44.dp)
+        ) {
+            Icon(Icons.Default.Search, "بحث")
         }
     }
 }
@@ -567,10 +617,11 @@ fun ModernBottomBar(
     missedCalls: Int,
     hazeState: dev.chrisbanes.haze.HazeState
 ) {
-    // سيتم تنفيذ شريط سفلي حديث مع Haze
     NavigationBar(
-        containerColor = YounesSurface1.copy(alpha = 0.9f),
-        contentColor = Color.White
+        containerColor = YounesSurface1.copy(alpha = 0.85f),
+        contentColor = Color.White,
+        tonalElevation = 8.dp,
+        modifier = Modifier.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
     ) {
         ModernSection.values().forEach { section ->
             val isSelected = currentSection == section
@@ -583,27 +634,30 @@ fun ModernBottomBar(
             NavigationBarItem(
                 selected = isSelected,
                 onClick = { onSectionSelected(section) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = YounesOnPrimary,
+                    unselectedIconColor = YounesMuted,
+                    selectedTextColor = YounesPrimary,
+                    unselectedTextColor = YounesMuted,
+                    indicatorColor = YounesPrimary
+                ),
+                alwaysShowLabel = true,
                 icon = {
-                    BadgedBox(
-                        badge = {
-                            if (badgeCount > 0) {
-                                Badge { Text("$badgeCount") }
-                            }
+                    if (badgeCount > 0) {
+                        BadgedBox(badge = { Badge { Text("$badgeCount") } }) {
+                            Icon(section.icon, section.label)
                         }
-                    ) {
-                        Icon(
-                            section.icon,
-                            section.label,
-                            tint = if (isSelected) YounesPrimary else YounesMuted
-                        )
+                    } else {
+                        Icon(section.icon, section.label)
                     }
                 },
                 label = {
                     Text(
                         section.label,
                         fontSize = 11.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) YounesPrimary else YounesMuted
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             )
@@ -614,12 +668,18 @@ fun ModernBottomBar(
 @Composable
 fun ModernFabForSection(
     section: ModernSection,
+    onHomeClick: () -> Unit = {},
     onChatClick: () -> Unit,
     onGroupClick: () -> Unit,
     onCallClick: () -> Unit,
     onExploreClick: () -> Unit
 ) {
     when (section) {
+        ModernSection.HOME -> ModernFab(
+            icon = Icons.Default.Add,
+            text = "نشر / حالة",
+            onClick = onHomeClick
+        )
         ModernSection.CHATS -> ModernFab(
             icon = Icons.Default.Chat,
             text = "دردشة",

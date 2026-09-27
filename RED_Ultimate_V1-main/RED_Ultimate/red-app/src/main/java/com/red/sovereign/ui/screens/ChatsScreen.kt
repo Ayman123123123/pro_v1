@@ -151,6 +151,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.cancel
+import com.red.sovereign.ui.theme.senderNameColor
+import com.red.sovereign.ui.theme.senderNameColorIndex
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
 
@@ -1491,12 +1493,9 @@ fun ChatHubScreen(
                             ) {
                                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                 if (!message.outgoing) {
-                                    val nameColors = listOf(
-                                        Color(0xFF6FD8B0), Color(0xFF7FB5E0), Color(0xFFF0C674), Color(0xFFC9A7E8),
-                                        Color(0xFF8FC7E8), Color(0xFFB5D8A0), Color(0xFFE0B8A0)
-                                    )
-                                    val colorIndex = kotlin.math.abs(message.senderRedId.hashCode()) % nameColors.size
-                                    Text(message.senderRedId.take(12) + "...", color = nameColors[colorIndex], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
+                                    // لون اسم المرسل — المصدر المركزي الوحيد (NameColors)
+                                    val colorIndex = senderNameColorIndex(message.senderRedId)
+                                    Text(message.senderRedId.take(12) + "...", color = senderNameColor(colorIndex), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
                                 }
                                 when (message.type) {
                                     "RICH_TEXT" -> com.red.sovereign.ui.RichTextMessage(

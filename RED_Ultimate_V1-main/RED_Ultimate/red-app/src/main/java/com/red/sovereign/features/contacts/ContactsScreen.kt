@@ -336,22 +336,36 @@ private fun ContactActionRow(icon: androidx.compose.ui.graphics.vector.ImageVect
 
 @Composable
 private fun WhatsAppContactRow(person: PublicRedProfile, isOnline: Boolean, lastSeen: String?, onChat: () -> Unit, onCall: (Boolean) -> Unit, onBlock: () -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onChat).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onChat).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(contentAlignment = Alignment.BottomEnd) {
-            Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFF0F172A)), contentAlignment = Alignment.Center) { Text(person.displayName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
-            if (isOnline) Box(Modifier.size(14.dp).clip(CircleShape).background(Color(0xFF00C98C)).padding(2.dp).background(Color(0xFF0F172A), CircleShape).padding(1.dp).background(Color(0xFF00C98C), CircleShape)) {}
+            Box(
+                Modifier.size(56.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF14C79A), Color(0xFF0F172A)))), 
+                contentAlignment = Alignment.Center
+            ) { 
+                Text(person.displayName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) 
+            }
+            if (isOnline) {
+                Box(Modifier.size(16.dp).clip(CircleShape).background(Color(0xFF0F172A)), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(12.dp).clip(CircleShape).background(Color(0xFF00C98C)))
+                }
+            }
         }
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(person.displayName, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1)
-            // آخر ظهور حقيقي من الخادم بدل النص الثابت المضلل (كان "منذ قليل" دائماً).
+        Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+            Text(person.displayName, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             val subtitle = if (isOnline) "متصل الآن" else lastSeen ?: "@${person.username}"
-            Text(subtitle, color = if (isOnline) Color(0xFF00C98C) else Color.Gray, fontSize = 13.sp, maxLines = 1)
-            Text(person.redId, color = Color(0xFF64748B), fontSize = 11.sp, maxLines = 1)
+            Text(subtitle, color = if (isOnline) Color(0xFF00C98C) else Color.Gray, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(person.redId, color = Color(0xFF64748B), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
-        IconButton(onClick = { onCall(false) }) { Icon(Icons.Default.Call, "صوت", tint = YounesEmerald) }
-        IconButton(onClick = { onCall(true) }) { Icon(Icons.Default.Videocam, "فيديو", tint = AqyalGold) }
-        // حظر مباشر من صف الجهة — كان directory.block بلا أي زر عميل، فيُحظر فقط
-        // عبر طلبات واردة غير مرئية. يزيل الخادم الجهة ويضيفها للمحظورين.
-        IconButton(onClick = onBlock) { Icon(Icons.Default.Block, "حظر", tint = Color(0xFFF87171)) }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            IconButton(onClick = { onCall(false) }, modifier = Modifier.size(36.dp).background(Color(0xFF14C79A).copy(alpha = 0.1f), CircleShape)) { 
+                Icon(Icons.Default.Call, "صوت", tint = Color(0xFF14C79A), modifier = Modifier.size(20.dp)) 
+            }
+            IconButton(onClick = { onCall(true) }, modifier = Modifier.size(36.dp).background(Color(0xFFE0B551).copy(alpha = 0.1f), CircleShape)) { 
+                Icon(Icons.Default.Videocam, "فيديو", tint = Color(0xFFE0B551), modifier = Modifier.size(20.dp)) 
+            }
+            IconButton(onClick = onBlock, modifier = Modifier.size(36.dp).background(Color(0xFFF87171).copy(alpha = 0.1f), CircleShape)) { 
+                Icon(Icons.Default.Block, "حظر", tint = Color(0xFFF87171), modifier = Modifier.size(20.dp)) 
+            }
+        }
     }
 }

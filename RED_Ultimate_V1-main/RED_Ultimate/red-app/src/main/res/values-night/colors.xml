@@ -67,7 +67,18 @@
     <color name="younes_launcher_background">#0A0F18</color>
     <color name="younes_obsidian">#0A0F18</color>
     <color name="younes_emerald">#14C79A</color>
+    <color name="younes_sovereign_gold">#E0B551</color>
     <color name="younes_gold">#E0B551</color>
+
+    <!-- Chat Bubbles -->
+    <color name="yns_bubble_sent">#14304F</color>
+    <color name="yns_bubble_received">#182533</color>
+
+    <!-- Gradients & Shimmer -->
+    <color name="yns_gradient_start">#14C79A</color>
+    <color name="yns_gradient_end">#3DE8BC</color>
+    <color name="yns_shimmer_base">#1B2635</color>
+    <color name="yns_shimmer_highlight">#2A394A</color>
 
     <!-- الشفافية -->
     <color name="yns_overlay_dark">#99000000</color>

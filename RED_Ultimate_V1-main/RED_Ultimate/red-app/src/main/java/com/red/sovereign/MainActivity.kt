@@ -113,10 +113,14 @@ class MainActivity : FragmentActivity() {
                         if (state is AuthState.Authenticated) {
                             if (appLocked && SettingsRuntime.current.appLockEnabled) {
                                 AppLockScreen(onUnlocked = { appLocked = false })
+                            } else if (SettingsRuntime.current.classicDashboard) {
+                                // الواجهة الأولى الكلاسيكية (RedDashboard): تبويب HOME
+                                // بالمنشورات والستوريات والحالات + بانر الطابور دون اتصال
+                                // + 5 ميزات مكالمات موثقة في الكود. اختيار افتراضي.
+                                com.red.sovereign.ui.RedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation)
                             } else {
-                                // لوحة تحكم موحدة حديثة - أفضل من واتساب وتيليجرام
-                                // ModernRedDashboard هو الأحدث والأفضل بدون تكرارات
-                                // يدعم كل الهواتف، ألوان AAA مقروءة، Liquid Glass 2026
+                                // الواجهة الثانية الحديثة (ModernRedDashboard): ألوان AAA،
+                                // Liquid Glass 2026، شريط سفلي تكيفي — تبقى خياراً من الإعدادات.
                                 com.red.sovereign.ui.ModernRedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation)
                             }
                         } else AuthFlow(authViewModel)

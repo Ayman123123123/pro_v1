@@ -150,6 +150,13 @@ object SovereignColors {
     // ألوان الزجاج الفاتح
     val GlassBgLight = Color(0xB3FFFFFF) // 70% أبيض شفاف
     val GlassBorderLight = Color(0x330F1B2D)
+
+    // ── ألوان الوضع الفاتح الأساسية — مرادفات يحتاجها SovereignGlass.recipe ────
+    // كانت مفقودة فكانت كسرًا ترجمةً؛ قيم محسوبة على أساس GlassBgLight/Fallback.
+    /** سطح الوضع الفاتح الأساسي — أبيض مائل للزمرد مطابق لهوية الفقاعات. */
+    val LightBase = Color(0xFFF7FBF9)
+    /** سطح الوضع الفاتح الثانوي (بطاقات/أوراق) — رمادي زمردي فاتح. */
+    val LightSurface = Color(0xFFEDF4F0)
 }
 
 object SovereignGradients {

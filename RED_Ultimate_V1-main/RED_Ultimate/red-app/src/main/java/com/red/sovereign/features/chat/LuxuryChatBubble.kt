@@ -84,7 +84,7 @@ fun LuxuryChatBubble(
     val hasReply: Boolean = resolvedReplyText != null || resolvedReplyId != null
     val resolvedEdited: Boolean = isEdited || (richMessage?.editOf != null)
     val resolvedFont = fontFamily ?: PlexArabicFamily
-    val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+    val bubbleColor = if (isMe) androidx.compose.ui.res.colorResource(com.red.sovereign.R.color.yns_bubble_sent) else androidx.compose.ui.res.colorResource(com.red.sovereign.R.color.yns_bubble_received)
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     // وقت ≥11sp بعتامة 0.85 قابلة للقياس (كان 0.70).
     val timeColor = textColor.copy(alpha = BubbleDimAlpha)

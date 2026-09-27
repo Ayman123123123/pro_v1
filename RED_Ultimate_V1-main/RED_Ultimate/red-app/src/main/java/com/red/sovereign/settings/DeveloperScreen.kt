@@ -118,6 +118,7 @@ fun DeveloperScreen(
             DevSwitch("تفعيل Telemetry", "إرسال إحصاءات المكالمات المجمعة (بلا PII)", s.devTelemetryEnabled, viewModel::setDevTelemetryEnabled)
             DevSwitch("وضع التصحيح", "سجلات مفصلة في Logcat لمسارات الاتصال", s.devDebugMode, viewModel::setDevDebugMode)
             DevSwitch("تسجيل WebRTC", "تتبع ICE/SDP الموسّع عند التشخيص", s.devWebrtcLogging, viewModel::setDevWebrtcLogging)
+            DevSwitch("الواجهة الكلاسيكية", "اللوحة الأولى بتبويب الرئيسية (منشورات/ستوريات) — إيقافها يعيد الحديثة", s.classicDashboard, viewModel::setClassicDashboard)
             Text("Flags", fontWeight = FontWeight.Bold)
             DevSwitch("فرض TURN", "تجاوز المرشحات المباشرة وإجبار الترحيل عبر TURN", s.devForceTurn, viewModel::setDevForceTurn)
             DevSwitch("إشارات مطوّلة", "طباعة عروض SDP الكاملة في السجلات", s.devVerboseSignaling, viewModel::setDevVerboseSignaling)

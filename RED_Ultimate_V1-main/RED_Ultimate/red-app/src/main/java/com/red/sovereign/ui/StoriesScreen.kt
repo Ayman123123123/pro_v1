@@ -159,10 +159,11 @@ fun StoryFullscreen(
         }
         
         Column(Modifier.fillMaxSize()) {
+            val animatedProgress by androidx.compose.animation.core.animateFloatAsState(targetValue = progress, animationSpec = androidx.compose.animation.core.tween(durationMillis = 50))
             Row(Modifier.fillMaxWidth().padding(top = 40.dp, start = 8.dp, end = 8.dp, bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.weight(1f).height(2.dp).clip(RoundedCornerShape(1.dp)),
+                    progress = { animatedProgress },
+                    modifier = Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(1.5.dp)),
                     color = Color.White, trackColor = Color.White.copy(alpha = 0.3f)
                 )
             }
@@ -171,15 +172,16 @@ fun StoryFullscreen(
                 // عارض الوسائط ستارة سوداء معيارية (مثل يوتيوب) في الوضعين —
                 // الأبيض على الأسود 21:1، والأفاتار من colorScheme لا Gray مثبت.
                 Box(
-                    Modifier.size(40.dp).clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    Modifier.size(44.dp).clip(CircleShape)
+                        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF14C79A), Color(0xFF0F172A)))),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        story.ownerDisplayName.take(1),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        story.ownerDisplayName.take(1).uppercase(),
+                        color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontFamily = com.red.sovereign.ui.theme.PlexArabicFamily
+                        fontFamily = com.red.sovereign.ui.theme.PlexArabicFamily,
+                        fontSize = 18.sp
                     )
                 }
                 Spacer(Modifier.width(12.dp))

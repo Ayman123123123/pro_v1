@@ -108,6 +108,9 @@ private object Keys {
     const val DEV_WEBRTC_LOGGING = "dev_webrtc_logging"
     const val DEV_FORCE_TURN = "dev_force_turn"
     const val DEV_VERBOSE_SIGNALING = "dev_verbose_signaling"
+    // اختيار واجهة اللوحة الرئيسية: false = الحديثة (ModernRedDashboard)،
+    // true = الكلاسيكية الأولى (RedDashboard بتبويب HOME للمنشورات والستوريات).
+    const val CLASSIC_DASHBOARD = "classic_dashboard"
 }
 
 /**
@@ -183,7 +186,8 @@ internal fun SharedPreferences.readSettings(): YounesSettings {
         callHistoryRetentionDays = getInt(Keys.CALL_HISTORY_RETENTION, defaults.callHistoryRetentionDays),
         callHistorySync = getBoolean(Keys.CALL_HISTORY_SYNC, defaults.callHistorySync),
         maxCallDurationSeconds = getInt(Keys.MAX_CALL_DURATION, defaults.maxCallDurationSeconds),
-        callAutoRecord = getBoolean(Keys.CALL_AUTO_RECORD, defaults.callAutoRecord)
+        callAutoRecord = getBoolean(Keys.CALL_AUTO_RECORD, defaults.callAutoRecord),
+        classicDashboard = getBoolean(Keys.CLASSIC_DASHBOARD, defaults.classicDashboard)
     )
 }
 
@@ -247,6 +251,7 @@ internal fun SharedPreferences.writeSettings(value: YounesSettings) {
         .putBoolean(Keys.CALL_HISTORY_SYNC, value.callHistorySync)
         .putInt(Keys.MAX_CALL_DURATION, value.maxCallDurationSeconds)
         .putBoolean(Keys.CALL_AUTO_RECORD, value.callAutoRecord)
+        .putBoolean(Keys.CLASSIC_DASHBOARD, value.classicDashboard)
         .apply()
 }
 
@@ -333,6 +338,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setDevWebrtcLogging(value: Boolean) = update(state.copy(devWebrtcLogging = value))
     fun setDevForceTurn(value: Boolean) = update(state.copy(devForceTurn = value))
     fun setDevVerboseSignaling(value: Boolean) = update(state.copy(devVerboseSignaling = value))
+    /** تبديل واجهة اللوحة الرئيسية: true = الكلاسيكية الأولى، false = الحديثة. */
+    fun setClassicDashboard(value: Boolean) = update(state.copy(classicDashboard = value))
 
     private fun sanitizeMediaQuality(value: String) =
         value.takeIf { it in MEDIA_QUALITIES }.orEmpty().ifBlank { "HIGH" }
@@ -491,7 +498,9 @@ data class YounesSettings(
     // حد مدة المكالمة بالثواني (يُقرأ عبر CallLimitsPolicy أثناء المكالمة).
     val maxCallDurationSeconds: Int = 1800,
     // التسجيل التلقائي الدائم — يُقرأ في RecordingConsentDialog وقبل CallRecordingManager.start.
-    val callAutoRecord: Boolean = false
+    val callAutoRecord: Boolean = false,
+    // واجهة اللوحة الرئيسية: false = الحديثة (افتراضي)، true = الكلاسيكية الأولى.
+    val classicDashboard: Boolean = true
 ) {
     val notificationEnabled: Boolean get() = messageNotifications
 }

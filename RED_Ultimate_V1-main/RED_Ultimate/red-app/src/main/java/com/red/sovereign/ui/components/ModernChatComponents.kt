@@ -71,16 +71,12 @@ fun ModernMessageBubble(
             .combinedClickable(onClick = {}, onLongClick = onLongClick)
             .padding(12.dp)
     ) {
-        // اسم المرسل في المجموعات
+        // اسم المرسل في المجموعات — المصدر المركزي (NameColors)
         if (!isMe && senderName.isNotBlank()) {
-            val colors = listOf(
-                Color(0xFF6FD8B0), Color(0xFF7FB5E0), Color(0xFFF0C674),
-                Color(0xFFC9A7E8), Color(0xFF8FC7E8), Color(0xFFB5D8A0)
-            )
-            val colorIndex = kotlin.math.abs(senderRedId.hashCode()) % colors.size
+            val colorIndex = senderNameColorIndex(senderRedId)
             Text(
                 text = senderName,
-                color = colors[colorIndex],
+                color = senderNameColor(colorIndex),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,

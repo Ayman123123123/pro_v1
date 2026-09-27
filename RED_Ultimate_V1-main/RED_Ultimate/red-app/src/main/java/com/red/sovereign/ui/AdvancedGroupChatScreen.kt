@@ -95,11 +95,12 @@ fun AdvancedGroupChatScreen(
 
                 // Message input bar superior to WhatsApp
                 Surface(
-                    tonalElevation = 6.dp,
-                    modifier = Modifier.fillMaxWidth()
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(32.dp)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = { /* Attach Media / Vault */ }) {
@@ -108,14 +109,18 @@ fun AdvancedGroupChatScreen(
                         IconButton(onClick = { /* Encrypted Poll */ }) {
                             Icon(Icons.Default.Poll, contentDescription = "Poll", tint = MaterialTheme.colorScheme.primary)
                         }
-                        OutlinedTextField(
+                        TextField(
                             value = messageInput,
                             onValueChange = { messageInput = it },
-                            placeholder = { Text("Message ($selectedSubChannel)... or type /summarize") },
-                            modifier = Modifier.weight(1.0f).heightIn(min = 50.dp),
-                            shape = RoundedCornerShape(24.dp)
+                            placeholder = { Text("Message ($selectedSubChannel)...") },
+                            modifier = Modifier.weight(1.0f).heightIn(min = 48.dp),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            )
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
                         FloatingActionButton(
                             onClick = {
                                 if (messageInput.isNotBlank()) {
@@ -130,11 +135,13 @@ fun AdvancedGroupChatScreen(
                                     messageInput = ""
                                 }
                             },
-                            modifier = Modifier.size(48.dp),
-                            shape = CircleShape
+                            modifier = Modifier.size(44.dp),
+                            shape = CircleShape,
+                            containerColor = MaterialTheme.colorScheme.primary
                         ) {
-                            Icon(Icons.Default.Send, contentDescription = "Send")
+                            Icon(Icons.Default.Send, contentDescription = "Send", tint = Color.White, modifier = Modifier.size(20.dp))
                         }
+                        Spacer(Modifier.width(4.dp))
                     }
                 }
             }

@@ -151,7 +151,6 @@ fun YounesSettingsSheet(
 @Composable
 private fun SettingsRoot(account: AuthState.Authenticated, cacheBytes: Long, onPage: (SettingsPage) -> Unit, onLogout: () -> Unit) {
     val rows = listOf(
-        SettingDestination(SettingsPage.ACCOUNT, Icons.Default.Person, "الحساب والهوية", "@${account.username} · ${account.redId}", YounesEmerald),
         SettingDestination(SettingsPage.PRIVACY, Icons.Default.Security, "الخصوصية والأمان", "إيصالات القراءة والكتابة والروابط", Color(0xFF65D7E7)),
         SettingDestination(SettingsPage.APPEARANCE, Icons.Default.Palette, "المظهر والوصولية", "الخط والتباين والحركة والكثافة", Color(0xFFA78BFA)),
         SettingDestination(SettingsPage.CHATS, Icons.AutoMirrored.Filled.Chat, "الدردشات والوسائط", "التنزيل وسرعة الصوت وسلوك المحادثة", Color(0xFF5CC8FF)),
@@ -167,9 +166,33 @@ private fun SettingsRoot(account: AuthState.Authenticated, cacheBytes: Long, onP
         SettingDestination(SettingsPage.NETWORK_DIAG, Icons.Default.Wifi, "تشخيص الشبكة", "Ping وDNS وزمن HTTP وWebRTC", Color(0xFF4DD0E1)),
         SettingDestination(SettingsPage.DEVELOPER, Icons.Default.Build, "خيارات المطور", "Telemetry وسجلات وFlags دائمة", Color(0xFFFF8A65))
     )
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.height(570.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.height(600.dp)) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onPage(SettingsPage.ACCOUNT) },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.size(96.dp).clip(CircleShape).background(Brush.linearGradient(listOf(YounesEmerald, AqyalCyanGlow, AqyalGold))), contentAlignment = Alignment.Center) {
+                        Text(account.username.take(1).uppercase(), color = Color(0xFF03120E), fontSize = 40.sp, fontWeight = FontWeight.Black)
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(account.username, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text("@${account.username} • ${account.redId}", color = AqyalCyanGlow, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        item { HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) }
         items(rows, key = { it.page }) { row -> DestinationRow(row) { onPage(row.page) } }
-        item { OutlinedButton(onLogout, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("تسجيل الخروج من هذا الجهاز") } }
+        item { OutlinedButton(onLogout, Modifier.fillMaxWidth().padding(vertical = 16.dp)) { Text("تسجيل الخروج من هذا الجهاز", color = Color(0xFFE57373)) } }
+        item {
+            Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("YOUNES Sovereign", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("الإصدار ${com.red.sovereign.BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            }
+        }
     }
 }
 
@@ -195,19 +218,6 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     var msgUsername by remember { mutableStateOf<String?>(null) }
     var msgName by remember { mutableStateOf<String?>(null) }
     SettingsList {
-        item {
-            // رأس البروفايل
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.size(76.dp).clip(CircleShape).background(Brush.linearGradient(listOf(YounesEmerald, AqyalCyanGlow, AqyalGold))), contentAlignment = Alignment.Center) {
-                        Text(account.username.take(1), color = Color(0xFF03120E), fontSize = 30.sp, fontWeight = FontWeight.Black)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text("يونس • @${account.username}", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text(account.redId, color = AqyalCyanGlow, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
         item {
             Text("اسم المستخدم", fontWeight = FontWeight.SemiBold)
             OutlinedTextField(username, { username = it.take(20) }, Modifier.fillMaxWidth(), singleLine = true)

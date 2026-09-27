@@ -115,7 +115,7 @@ private fun LoadingScreen() = Centered {
 
 @Composable
 private fun WelcomeScreen(server: ServerState, discover: () -> Unit, register: () -> Unit, login: () -> Unit, setServerUrl: (String) -> String?) = Column(
-    Modifier.fillMaxSize().background(TelegramDarkBg).padding(horizontal = 24.dp, vertical = 18.dp).widthIn(max = 520.dp).verticalScroll(rememberScrollState()),
+    Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(TelegramDarkBg, Color(0xFF131C29)))).padding(horizontal = 24.dp, vertical = 18.dp).widthIn(max = 520.dp).verticalScroll(rememberScrollState()),
     Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
     Alignment.CenterHorizontally
 ) {
@@ -229,13 +229,19 @@ private fun RegisterTabScreen(
 
         Spacer(Modifier.height(14.dp))
 
-        Text(
-            text = "لا نطلب رقم هاتف أو شريحة. يتم توليد مفاتيح التشفير الخاصة بك محلياً بداخل هاتفك.",
-            color = TextSilver,
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 19.sp
-        )
+        AnimatedVisibility(
+            visible = true,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "لا نطلب رقم هاتف أو شريحة. يتم توليد مفاتيح التشفير الخاصة بك محلياً بداخل هاتفك.",
+                    color = TextSilver,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 19.sp
+                )
 
         Spacer(Modifier.height(12.dp))
 
@@ -286,7 +292,9 @@ private fun RegisterTabScreen(
         ) {
             Text("رجوع للشاشة الرئيسية", color = TextSilver, fontSize = 14.sp)
         }
-    }
+            } // Close Column
+        } // Close AnimatedVisibility
+    } // Close FormColumn
 }
 
 /**
@@ -513,7 +521,7 @@ private fun Centered(content: @Composable ColumnScope.() -> Unit) = Column(
 
 @Composable
 private fun FormColumn(title: String, content: @Composable ColumnScope.() -> Unit) = Column(
-    Modifier.fillMaxSize().background(TelegramDarkBg).padding(horizontal = 16.dp, vertical = 16.dp).widthIn(max = 520.dp).verticalScroll(rememberScrollState()),
+    Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(TelegramDarkBg, Color(0xFF131C29)))).padding(horizontal = 16.dp, vertical = 16.dp).widthIn(max = 520.dp).verticalScroll(rememberScrollState()),
     Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
     Alignment.CenterHorizontally
 ) {

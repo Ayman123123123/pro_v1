@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.CallMade
+import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
@@ -356,10 +358,13 @@ fun CallHistoryItemCard(
     onDelete: () -> Unit
 ) {
     val context = LocalContext.current
+    val isMissed = call.status.equals("MISSED", ignoreCase = true) || call.status.equals("NO_ANSWER", ignoreCase = true) || call.status.equals("REJECTED", ignoreCase = true) || call.status.equals("DECLINED", ignoreCase = true)
+    
     val icon = when {
         call.type.equals("VIDEO", ignoreCase = true) -> Icons.Default.VideoCall
+        isMissed -> Icons.Default.CallMissed
         call.direction.equals("INCOMING", ignoreCase = true) -> Icons.Default.CallReceived
-        call.direction.equals("OUTGOING", ignoreCase = true) -> Icons.Default.Call
+        call.direction.equals("OUTGOING", ignoreCase = true) -> Icons.Default.CallMade
         else -> Icons.Default.CallEnd
     }
     // UX يتفوق على واتساب: ENDED تُحسب ناجحة (كانت رمادية مجهولة)، وحالات
