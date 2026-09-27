@@ -247,48 +247,6 @@ export function Dashboard() {
     return format(d, 'MMM d');
   };
 
-  const mockMetrics = {
-    totalUsers: 145020, usersChange: 12.5,
-    activeUsers: 84300, activeUsersChange: 5.2,
-    messages: 15420390, messagesChange: 18.4,
-    calls: 893400, callsChange: -2.1,
-    channels: 1250, channelsChange: 4.8,
-    revenue: 345000, revenueChange: 22.4,
-    mau: 120500, mauChange: 8.9,
-    dau: 82000, dauChange: 11.2,
-    revenueSubscriptions: 150000, revenuePurchases: 80000, revenueAds: 65000, revenueOther: 50000
-  };
-
-  const mockChartData = Array.from({ length: 14 }).map((_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (13 - i));
-    return {
-      date: d.toISOString(),
-      users: 100000 + i * 3000 + Math.random() * 2000,
-      newUsers: 2000 + Math.random() * 1000,
-      messages: 500000 + Math.random() * 50000,
-      calls: 30000 + Math.random() * 5000,
-      revenue: 15000 + Math.random() * 3000,
-      dauMauRatio: 65 + Math.random() * 10,
-      retentionDay1: 40 + Math.random() * 5,
-      retentionDay7: 20 + Math.random() * 3
-    };
-  });
-
-  const mockHealth: SystemHealthData[] = [
-    { component: 'API Server', status: 'healthy', cpu: 45, memory: 60, network: 1200, latency: 45 },
-    { component: 'Database (Primary)', status: 'healthy', cpu: 65, memory: 80, disk: 45, connections: 1250 },
-    { component: 'Redis Cache', status: 'healthy', cpu: 20, memory: 45, network: 800 },
-    { component: 'WebRTC SFU', status: 'degraded', cpu: 85, memory: 70, network: 4500, connections: 850 },
-    { component: 'Storage Cluster', status: 'healthy', disk: 75, network: 600 }
-  ];
-
-  const mockAlerts: AlertData[] = [
-    { id: '1', level: 'P1', message: 'High CPU usage on WebRTC SFU node-3', component: 'WebRTC', timestamp: new Date().toISOString(), acknowledged: false },
-    { id: '2', level: 'P2', message: 'Database replication lag > 5s', component: 'Database', timestamp: new Date(Date.now() - 3600000).toISOString(), acknowledged: true },
-    { id: '3', level: 'P0', message: 'Payment gateway API timeouts', component: 'Billing', timestamp: new Date(Date.now() - 7200000).toISOString(), acknowledged: false },
-  ];
-
   const chartDataPoints = (chartData && (chartData as ChartDataPoint[]).length > 0) ? chartData as ChartDataPoint[] : []; // لا بيانات تاريخية حقيقية بعد — فراغ صادق
   const healthData = (systemHealth && systemHealth.length > 0) ? systemHealth : []; // /health/detailed يفشل ⇒ حالة خطأ صريحة لا أرقام مُختلقة
   const alertData = (alerts && alerts.length > 0) ? alerts : [];

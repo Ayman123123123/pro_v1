@@ -29,20 +29,6 @@ const SEVERITY_OPTIONS = [
   { value: 'CRITICAL', label: 'Critical' },
 ];
 
-const mockAuditLogs = Array.from({ length: 50 }, (_, i) => ({
-  id: `audit-${i}`,
-  adminId: `admin-${i % 5}`,
-  adminUsername: `admin${i % 5}`,
-  action: ['CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'REJECT', 'BAN', 'UNBAN'][i % 7],
-  category: ['USER_MANAGEMENT', 'CONTENT_MODERATION', 'SYSTEM_CONFIG', 'SECURITY'][i % 4],
-  severity: ['INFO', 'WARNING', 'ERROR', 'CRITICAL'][i % 4],
-  targetType: ['User', 'Channel', 'Config', 'FeatureFlag'][i % 4],
-  targetId: `target-${i}`,
-  details: { reason: 'Test reason', metadata: {} },
-  ipAddress: `192.168.1.${i % 255}`,
-  userAgent: 'Mozilla/5.0 (Admin Dashboard)',
-  createdAt: new Date(Date.now() - i * 3600000).toISOString(),
-}));
 
 export function AuditLogPage() {
   const { t } = useTranslation();

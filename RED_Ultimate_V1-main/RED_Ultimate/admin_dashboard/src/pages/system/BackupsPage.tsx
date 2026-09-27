@@ -26,16 +26,6 @@ const STATUS_OPTIONS = [
   { value: 'FAILED', label: 'Failed' },
 ];
 
-const mockBackups = Array.from({ length: 20 }, (_, i) => ({
-  id: `backup-${i}`,
-  name: `backup-${new Date(Date.now() - i * 86400000).toISOString().split('T')[0]}`,
-  type: ['FULL', 'INCREMENTAL', 'CONFIG_ONLY', 'USER_DATA'][i % 4],
-  status: ['COMPLETED', 'COMPLETED', 'COMPLETED', 'IN_PROGRESS', 'FAILED'][i % 5],
-  size: Math.floor(Math.random() * 10000000000) + 1000000000,
-  startedAt: new Date(Date.now() - i * 86400000).toISOString(),
-  completedAt: i % 5 !== 3 ? new Date(Date.now() - i * 86400000 + 3600000).toISOString() : undefined,
-  notes: i % 3 === 0 ? 'Scheduled backup' : undefined,
-}));
 
 export function BackupsPage() {
   const { t } = useTranslation();

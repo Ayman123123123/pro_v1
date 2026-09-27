@@ -21,6 +21,9 @@ export function SSOPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [oidcEnabled, setOidcEnabled] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [testResult, setTestResult] = useState<string>('');
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +50,57 @@ export function SSOPage() {
     void load();
     return () => { cancelled = true; };
   }, []);
+
+  // حفظ فعلي عبر PUT /api/admin/security/sso (clientSecret يُكتب فقط ولا يُعاد)
+  async function saveOidc(data: any) {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const res = await apiFetch('/api/admin/security/sso', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: oidcEnabled,
+          issuer: data.issuer,
+          clientId: data.clientId,
+          clientSecret: data.clientSecret,
+          scopes: String(data.scopes || '').split(/[\n,]/).map((s: string) => s.trim()).filter(Boolean),
+          redirectUri: data.redirectUri,
+          logoutUri: data.logoutUri,
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((body as any)?.error || `HTTP ${res.status}`);
+      setConfig(body && typeof body === 'object' ? body : config);
+      setSaveMsg('تم حفظ إعدادات SSO على الخادم ✅');
+    } catch (e: any) {
+      setSaveMsg(`فشل الحفظ: ${e?.message || 'خطأ غير معروف'}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // اختبار اكتشاف OIDC حقيقي عبر PUT /api/admin/security/sso/test/{issuer}
+  async function testOidc(data: any) {
+    setTestResult('جارٍ الاختبار...');
+    try {
+      const issuer = String(data.url || '').trim().replace(/\/+$/, '');
+      if (!issuer) throw new Error('أدخل Issuer URL أولاً');
+      const res = await apiFetch(`/api/admin/security/sso/test/${encodeURIComponent(issuer)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issuer }),
+      });
+      const body = await res.json().catch(() => null);
+      if (body?.success) {
+        setTestResult(`نجاح ✅ — authorization: ${body.authorizationEndpoint}`);
+      } else {
+        setTestResult(`فشل: ${body?.error || 'غير معروف'}${body?.detail ? ` (${body.detail})` : ''}`);
+      }
+    } catch (e: any) {
+      setTestResult(`خطأ: ${e?.message || 'غير معروف'}`);
+    }
+  }
 
   const tabs = [
     { value: 'oidc', label: t('security.sso.oidc') },
@@ -91,7 +145,8 @@ export function SSOPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <Card title="OIDC Configuration" subtitle="OpenID Connect settings (Keycloak/Auth0)">
-              <Form onSubmit={() => { /* يحفظ عبر POST /api/admin/security/sso/oidc */ }} initialValues={{ issuer: oidc.issuer || '', clientId: oidc.clientId || '', redirectUri: oidc.redirectUri || '', logoutUri: oidc.logoutUri || '' }}>
+              <Form onSubmit={saveOidc} initialValues={{ issuer: oidc.issuer || '', clientId: oidc.clientId || '', redirectUri: oidc.redirectUri || '', logoutUri: oidc.logoutUri || '' }}>
+              {saveMsg && <p className={cn('text-sm mb-3', saveMsg.includes('✅') ? 'text-yn-green' : 'text-yn-error')}>{saveMsg}</p>}
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="font-medium text-yn-text">OIDC Provider</p>
@@ -114,11 +169,11 @@ export function SSOPage() {
                 <FormField name="logoutUri" label="Logout URI" placeholder="https://admin.example.com/logout" />
 
                 <div className="flex gap-3 pt-4 border-t border-yn-border">
-                  <Button variant="primary" type="submit">
+                  <Button variant="primary" type="submit" disabled={saving}>
                     <Save className="w-4 h-4 mr-2" />
-                    Save Configuration
+                    {saving ? 'Saving...' : 'Save Configuration'}
                   </Button>
-                  <Button variant="secondary">
+                  <Button variant="secondary" type="button" onClick={() => testOidc({ url: oidc.issuer })}>
                     <TestTube className="w-4 h-4 mr-2" />
                     Test Connection
                   </Button>
@@ -192,16 +247,14 @@ export function SSOPage() {
         <div className="yn-card yn-card-liquid yn-glass p-6">
           <div className="max-w-xl mx-auto">
             <h3 className="font-medium text-yn-text mb-4">Test SSO Connection</h3>
-            <Form onSubmit={() => { /* test عبر POST /api/admin/security/sso/test */ }} initialValues={{ testType: 'oidc', url: '' }}>
-              <FormField name="testType" label="Test Type" type="select" options={[
-                { value: 'oidc', label: 'OIDC Discovery' },
-                { value: 'saml', label: 'SAML Metadata' },
-              ]} />
-              <FormField name="url" label="Test URL" placeholder="https://keycloak.example.com/realms/master" />
+            <Form onSubmit={testOidc} initialValues={{ url: config?.oidc?.issuer || '' }}>
+              <FormField name="url" label="Issuer URL" placeholder="https://keycloak.example.com/realms/master" />
               <Button variant="primary" type="submit" className="w-full">
                 <TestTube className="w-4 h-4 mr-2" />
                 Run Test
               </Button>
+              {testResult && <p className={cn('text-sm mt-4 break-all', testResult.includes('نجاح') ? 'text-yn-green' : 'text-yn-error')}>{testResult}</p>}
+              <p className="text-xs text-yn-text-muted mt-3">الاختبار حقيقي: يجلب الخادم <span className="font-mono">.well-known/openid-configuration</span> ويتحقق من الحقول — لا ادعاء نجاح.</p>
             </Form>
           </div>
         </div>
