@@ -26,7 +26,9 @@ class CallsV1Controller(
     private val callHistory: CallHistoryService,
     private val users: UserAccountRepository,
     private val notifications: NotificationService,
-    private val scheduledCallController: ScheduledCallController
+    private val scheduledCallController: ScheduledCallController,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val contacts: com.red.server.auth.ContactService? = null
 ) {
 
     @PostMapping("/initiate")
@@ -39,10 +41,10 @@ class CallsV1Controller(
             .orElseThrow { NoSuchElementException("User not found") }
         
         val target = users.findByRedId(request.targetRedId)
-            .orElseThrow { NoSuchElementException("Target user not found") }
+            ?: throw NoSuchElementException("Target user not found")
         
         // Check if blocked
-        val blocked = users.isBlocked(caller.redId, target.redId)
+        val blocked = contacts?.isBlocked(caller.redId, target.redId) ?: false
         if (blocked) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(InitiateCallResponse(
                 success = false,
@@ -90,7 +92,7 @@ class CallsV1Controller(
         val groupId = request.groupId
         val members = callSignaling.getGroupCallMembers(groupId)
         val validInvitees = request.inviteeIds.filter { id ->
-            users.findByRedId(id) != null && !users.isBlocked(caller.redId, id)
+            users.findByRedId(id) != null && !(contacts?.isBlocked(caller.redId, id) ?: false)
         }
         
         val callId = "group_call_${UUID.randomUUID().toString().replace("-", "").take(12)}"

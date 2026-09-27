@@ -125,3 +125,26 @@ interface BackupHistoryRepository : JpaRepository<BackupHistory, UUID> {
     fun findByBackupTypeOrderByStartedAtDesc(backupType: String, pageable: Pageable): Page<BackupHistory>
     fun findTop20ByOrderByStartedAtDesc(): List<BackupHistory>
 }
+
+/**
+ * ⚙️ V68: مخازن لوحة الإدارة — إعدادات النظام / الأدوار / مفاتيح API.
+ * تُغذّي صفحات Config / Roles / ApiKeys ببيانات حقيقية بدل البيانات الوهمية.
+ */
+interface AdminSystemConfigRepository : JpaRepository<AdminSystemConfig, UUID> {
+    fun findByConfigKey(configKey: String): AdminSystemConfig?
+    fun findAllByOrderByUpdatedAtDesc(pageable: Pageable): Page<AdminSystemConfig>
+    fun findByConfigKeyContainingIgnoreCaseOrDescriptionContainingIgnoreCaseOrderByUpdatedAtDesc(
+        keyPart: String, descPart: String, pageable: Pageable
+    ): Page<AdminSystemConfig>
+}
+
+interface AdminRoleRepository : JpaRepository<AdminRole, UUID> {
+    fun findByRoleName(roleName: String): AdminRole?
+    fun findAllByOrderByCreatedAtAsc(): List<AdminRole>
+}
+
+interface AdminApiKeyRepository : JpaRepository<AdminApiKey, UUID> {
+    fun findAllByOrderByCreatedAtDesc(): List<AdminApiKey>
+    fun findByKeyHash(keyHash: String): AdminApiKey?
+    fun findByKeyPrefixAndIsActive(keyPrefix: String, isActive: Boolean): AdminApiKey?
+}

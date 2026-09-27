@@ -430,6 +430,20 @@ class ConferenceWebSocketHandler(
         room.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(msg)) } }
     }
 
+    fun notifyLobbyWaiting(roomId: String) {
+        broadcastLobbyCount(roomId)
+    }
+
+    fun notifyLobbyAdmitted(roomId: String, admittedAccountIds: List<String>) {
+        admittedAccountIds.forEach { uid -> announceLobbyDecision(roomId, "LOBBY_APPROVED", uid) }
+        broadcastLobbyCount(roomId)
+    }
+
+    fun notifyLobbyDenied(roomId: String, deniedAccountIds: List<String>) {
+        deniedAccountIds.forEach { uid -> announceLobbyDecision(roomId, "LOBBY_DENIED", uid) }
+        broadcastLobbyCount(roomId)
+    }
+
     /** بلّغ مضيفي الغرفة (وألاحق المضيف لاحقاً عبر ROOM_STATE) بمنتظر جديد. */
     private fun notifyHostsOfWaiting(roomId: String, waitingUserId: String) {
         val room = rooms[roomId] ?: return
@@ -674,15 +688,15 @@ class ConferenceWebSocketHandler(
             "roomId" to roomId,
             "payload" to mapOf("userId" to userId)
         ))
-        room.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
+        room?.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
         if (roomHosts[roomId] == userId) {
-            val remaining = room.firstOrNull()?.attributes?.get("userId") as? String
+            val remaining = room?.firstOrNull()?.attributes?.get("userId") as? String
             if (remaining != null) {
                 roomHosts[roomId] = remaining
                 roomRoles[roomId]?.set(remaining, "HOST")
                 // تعميم انتخاب المضيف الجديد (كان في مسار LEAVE وحده) — وإلا فانقطاع
                 // سوكت المضيف يترك غرفةً بلا مضيف معروف لدى بقية العملاء أبدياً.
-                val remainingSessions = room.toList()
+                val remainingSessions = room?.toList().orEmpty()
                 val hostMsg = objectMapper.writeValueAsString(mapOf(
                     "type" to "HOST_CHANGED",
                     "roomId" to roomId,
@@ -696,7 +710,7 @@ class ConferenceWebSocketHandler(
                 roomMuted.remove(roomId)
             }
         }
-        if (room.isEmpty()) {
+        if (room == null || room.isEmpty()) {
             rooms.remove(roomId)
             roomRoles.remove(roomId)
             roomHosts.remove(roomId)

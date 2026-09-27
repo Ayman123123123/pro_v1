@@ -396,9 +396,10 @@ class ConferenceController(
     private val users: UserAccountRepository,
     private val notifications: NotificationService,
     private val history: CallHistoryService,
-    private val callSignaling: com.red.server.websocket.CallWebSocketHandler,
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private val aliases: RoomAliasService? = null
+    private val aliases: RoomAliasService? = null,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val signaling: com.red.server.websocket.ConferenceWebSocketHandler? = null
 ) {
 
     @PostMapping("/create")
@@ -692,7 +693,7 @@ class ConferenceController(
             viaLink = true
         )
         if (pending != null) {
-            signaling.notifyLobbyWaiting(record.roomId)
+            signaling?.notifyLobbyWaiting(record.roomId)
             return ResponseEntity.accepted().body(JoinRoomResponse(
                 authorized = false,
                 waiting = true,
@@ -750,7 +751,7 @@ class ConferenceController(
         val record = hostOnly(roomId, authentication.name)
         val targets = request.accountIds.ifEmpty { roomService.lobbyQueue(record.roomId).map { it.accountId } }
         val admitted = roomService.admitFromLobby(record.roomId, targets)
-        if (admitted.isNotEmpty()) signaling.notifyLobbyAdmitted(record.roomId, admitted)
+        if (admitted.isNotEmpty()) signaling?.notifyLobbyAdmitted(record.roomId, admitted)
         return ResponseEntity.ok(mapOf(
             "roomId" to record.roomId,
             "admitted" to admitted,
@@ -766,7 +767,7 @@ class ConferenceController(
     ): ResponseEntity<Map<String, Any?>> {
         val record = hostOnly(roomId, authentication.name)
         val denied = roomService.denyFromLobby(record.roomId, request.accountIds, block = request.block)
-        if (denied.isNotEmpty()) signaling.notifyLobbyDenied(record.roomId, denied)
+        if (denied.isNotEmpty()) signaling?.notifyLobbyDenied(record.roomId, denied)
         return ResponseEntity.ok(mapOf(
             "roomId" to record.roomId,
             "denied" to denied,

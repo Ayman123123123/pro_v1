@@ -43,8 +43,13 @@ class RedMasterHandler(
     // Per-connection fixed-window guard: bounds CPU/DB work a single socket can demand
     // before a distributed gateway-level limit is applied.
     private val frameLimiter = WebSocketRateLimiter(maxMessages = 120, windowMillis = 60_000)
+    
+    private val messageCount = java.util.concurrent.atomic.AtomicLong(0)
+    private var lastMessageCount = 0L
+    private val lastPongTime = ConcurrentHashMap<String, Long>()
 
     override fun handleBinaryMessage(session: WebSocketSession, frame: BinaryMessage) {
+        messageCount.incrementAndGet()
         // Revalidate the long-lived socket on every frame: rate-limit first (cheap, in-memory),
         // then confirm the account + device are still APPROVED so a revoked/disabled device is
         // dropped immediately with POLICY_VIOLATION rather than after token expiry.
@@ -66,6 +71,15 @@ class RedMasterHandler(
         }
         // 🛡️ أي فشل في معالجة المغلف (تحقق/عضوية/تسلسل) لا يقتل المقبس — نسجّل ونكمل.
         handleEnvelopeSafely(session, envelope)
+    }
+
+    override fun handlePongMessage(session: WebSocketSession, message: org.springframework.web.socket.PongMessage) {
+        lastPongTime[session.id] = System.currentTimeMillis()
+    }
+
+    override fun handleTransportError(session: WebSocketSession, exception: Throwable) {
+        log.error("Transport error on session {}: {}", session.id, exception.message)
+        runCatching { session.close(CloseStatus.SERVER_ERROR) }
     }
 
     /** تحديث حضور خفيف عند كل إطار: Redis فقط (ZSet + Set).
@@ -249,6 +263,7 @@ class RedMasterHandler(
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
         frameLimiter.remove(session.id)
+        lastPongTime.remove(session.id)
         val redId = session.attributes["userId"] as? String ?: return
         val removed = sessions[redId]?.let { userSessions ->
             userSessions.remove(session.id)
@@ -263,6 +278,34 @@ class RedMasterHandler(
             runCatching { redis.opsForSet().remove("red:online", redId) }
             runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
             log.debug("Presence OFFLINE for {}", redId)
+        }
+    }
+
+    @Scheduled(fixedRate = 10_000)
+    fun connectionMetricsTracker() {
+        val currentCount = messageCount.get()
+        val msgsSec = (currentCount - lastMessageCount) / 10
+        lastMessageCount = currentCount
+        val activeConns = sessions.values.sumOf { it.size }
+        log.info("WebSocket Metrics - Active Connections: {}, Messages/sec: {}", activeConns, msgsSec)
+    }
+
+    @Scheduled(fixedRate = 30_000)
+    fun pingPongHeartbeat() {
+        val now = System.currentTimeMillis()
+        val pingMessage = org.springframework.web.socket.PingMessage()
+        sessions.values.forEach { userSessions ->
+            userSessions.values.forEach { session ->
+                if (session.isOpen) {
+                    val lastPong = lastPongTime[session.id] ?: now
+                    if (now - lastPong > 90_000) {
+                        log.warn("Session {} timed out", session.id)
+                        runCatching { session.close(CloseStatus.SESSION_NOT_RELIABLE) }
+                    } else {
+                        runCatching { session.sendMessage(pingMessage) }
+                    }
+                }
+            }
         }
     }
 

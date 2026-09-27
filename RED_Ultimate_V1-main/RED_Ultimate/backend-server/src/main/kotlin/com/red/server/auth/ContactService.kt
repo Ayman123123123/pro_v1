@@ -234,6 +234,12 @@ class ContactService(
         ?.takeIf { it.status == AccountStatus.APPROVED }
         ?: throw NoSuchElementException("Approved RED identity not found")
 
+    fun isBlocked(aRedId: String, bRedId: String): Boolean {
+        val a = users.findByRedId(aRedId.trim().uppercase()) ?: return false
+        val b = users.findByRedId(bRedId.trim().uppercase()) ?: return false
+        return blockedEitherDirection(a.id, b.id)
+    }
+
     private fun blockedEitherDirection(first: UUID, second: UUID): Boolean =
         (jdbc.queryForObject("SELECT COUNT(*) FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", Int::class.java, first, second, second, first) ?: 0) > 0
 

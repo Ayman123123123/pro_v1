@@ -192,7 +192,7 @@ class MediaV1Controller(
         if (fileSize <= 0) {
             return ResponseEntity.status(HttpStatus.NO_CONTENT)
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .build()
+                .build<Any>()
         }
 
         var start = 0L
@@ -205,7 +205,7 @@ class MediaV1Controller(
                 return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
                     .header(HttpHeaders.CONTENT_RANGE, "bytes */$fileSize")
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .build()
+                    .build<Any>()
             }
             start = parsed.first
             end = parsed.second

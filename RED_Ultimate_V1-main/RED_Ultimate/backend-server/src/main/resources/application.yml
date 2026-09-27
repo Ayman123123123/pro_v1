@@ -29,8 +29,12 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 100MB
-      max-request-size: 105MB
+      max-file-size: 500MB
+      max-request-size: 510MB
+
+  tomcat:
+    max-connections: 10000
+    accept-count: 1000
 
   datasource:
     url: jdbc:postgresql://db-postgres:5432/red_sovereign
@@ -38,8 +42,8 @@ spring:
     password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+      maximum-pool-size: 50
+      minimum-idle: 10
       idle-timeout: 300000
       connection-timeout: 20000
       max-lifetime: 1200000
@@ -86,9 +90,10 @@ red:
   # Enable only behind a proxy that discards client-supplied X-Forwarded-For.
   trust-x-forwarded-for: ${RED_TRUST_X_FORWARDED_FOR:false}
   security:
-    allowed-origins: ${ALLOWED_ORIGINS:http://localhost,http://127.0.0.1}
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost,http://127.0.0.1,app://*,capacitor://*,http://192.168.*:*}
   jwt:
-    secret: ${JWT_SECRET:}
+    secret: ${JWT_SECRET:}
+
     sfu-secret: ${SFU_TICKET_SECRET:}
     access-expiration-minutes: 15
     refresh-expiration-days: ${REFRESH_EXPIRATION_DAYS:30}

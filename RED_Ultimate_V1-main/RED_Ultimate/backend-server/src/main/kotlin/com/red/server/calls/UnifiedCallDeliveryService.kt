@@ -236,10 +236,10 @@ class UnifiedCallDeliveryService(
             // تسجيل في التاريخ إذا كانت OFFER
             if (type == "OFFER") {
                 history.start(
-                    callerId = sourceId,
-                    calleeId = targetId,
-                    peerLabel = targetId,
-                    callType = when (mode.uppercase()) {
+                    initiator = sourceId,
+                    target = targetId,
+                    targetLabel = targetId,
+                    type = when (mode.uppercase()) {
                         "VIDEO" -> CallType.VIDEO_1V1
                         "VOICE" -> CallType.AUDIO_1V1
                         "GROUP" -> CallType.GROUP_AUDIO
@@ -247,7 +247,7 @@ class UnifiedCallDeliveryService(
                         else -> CallType.AUDIO_1V1
                     },
                     route = CallRoute.RED,
-                    offeredCallId = callId
+                    requestedId = callId
                 )
             }
         } catch (e: Exception) {
@@ -290,12 +290,7 @@ class UnifiedCallDeliveryService(
             pendingDeliveries[callId] = attempt.copy(ringingConfirmed = true, delivered = true)
             log.info("✅ Ringing confirmed: call=$callId by=$targetId")
             
-            // تحديث التاريخ
-            try {
-                history.markRinging(callId)
-            } catch (e: Exception) {
-                log.warn("Failed to mark ringing in history: call=$callId - ${e.message}")
-            }
+            // المكالمة تبدأ بالفعل بحالة RINGING عند الإنشاء في start()
         }
     }
     
