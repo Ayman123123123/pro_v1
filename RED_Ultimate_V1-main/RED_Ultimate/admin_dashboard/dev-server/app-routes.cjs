@@ -793,16 +793,8 @@ module.exports = function registerAppRoutes(on) {
     return ok({ eventId: p.eventId, checkedIn: true, at: nowIso() });
   });
 
-  /** إرسال SMS عبر بوابة DINSTAR — مسار PSTN منفصل يتحكم به المسؤول. */
-  on('POST', '/api/admin/dinstar/sms/send', (_p, _q, b, ctx) => {
-    const me = currentUser(ctx);
-    if (!me) return unauthorized();
-    if (!me.pstn_enabled) return { status: 403, data: { error: 'PSTN_NOT_AUTHORIZED' } };
-    const id = uuid();
-    recordAudit({ adminId: me.id, adminUsername: me.username, action: 'DINSTAR_SMS_SENT',
-      category: 'SYSTEM', targetId: id, description: `${me.red_id} → ${b?.number || '—'}` });
-    return ok({ messageId: id, status: 'QUEUED', port: b?.port ?? 0 });
-  });
+  // مسار /api/admin/dinstar/sms/send أُزيل (2026-09-27) — نطاق
+  // البوابات/PSTN ملغى (المرحلة 8) ولا مستهلك له في واجهة اللوحة.
 
   // ═══ التغذية الاجتماعية (ليست E2EE — محتوى عام) ═══
   on('GET', '/api/feed', (_p, q, _b, ctx) => {

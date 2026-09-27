@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/utils/cn';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -70,7 +70,10 @@ export const Route = createFileRoute('/_layout')({
       throw redirect({ to: '/login' });
     }
   },
-  component: () => {
+  component: LayoutComponent,
+});
+
+function LayoutComponent() {
     const { user, isAuthenticated, isLoading, logout } = useAuth();
     const { isOpen, isCollapsed, toggleSidebar, setSidebarOpen, toggleCollapse } = useSidebar();
     const { theme, resolvedTheme, setTheme } = useTheme();
@@ -302,5 +305,4 @@ export const Route = createFileRoute('/_layout')({
         </div>
       </TooltipProvider>
     );
-  },
-});
+}

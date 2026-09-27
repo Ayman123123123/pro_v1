@@ -85,7 +85,7 @@ export default defineConfig({
     // فبانتشار الشاشة الفارغة، ثم حُذف المكوّن عن طريق الخطأ فماتت النسخ الجديدة)
     tanstackRouter({
       target: 'react',
-      autoRouteDirectory: './src/routes',
+      routesDirectory: './src/routes',
       generatedRouteTree: './src/routeTree.gen.ts',
     }),
     react(),

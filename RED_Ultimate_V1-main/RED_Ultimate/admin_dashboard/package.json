@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "start": "vite --host 0.0.0.0 --port 5173",
-    "build": "tsc --noEmit --skipLibCheck && vite build",
+    "build": "tsc --noEmit --skipLibCheck && node build_runner.cjs",
     "build:check": "tsc --noEmit --skipLibCheck",
-    "build:fast": "vite build",
-    "build:strict": "tsc --noEmit --skipLibCheck && vite build",
+    "build:fast": "node build_runner.cjs",
+    "build:strict": "tsc --noEmit --skipLibCheck && node build_runner.cjs",
     "preview": "vite preview --host 0.0.0.0 --port 5173",
     "lint": "eslint src --report-unused-disable-directives --max-warnings 0",
     "check": "tsc --noEmit --skipLibCheck",
@@ -99,5 +99,8 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.63.4"
   }
 }

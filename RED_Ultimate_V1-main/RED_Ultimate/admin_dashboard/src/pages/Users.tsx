@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/utils/cn';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/hooks/useToast';

@@ -30,6 +30,8 @@ import {
   LaptopOutlined,
   DownOutlined,
   UserOutlined,
+  PhoneOutlined,
+  HeartOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals, probeBackend } from './api';
 import Login from './pages/Login';
@@ -39,6 +41,8 @@ import './styles.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const MasterOverview = lazy(() => import('./pages/MasterOverview'));
+const CallsMonitor = lazy(() => import('./pages/CallsMonitor'));
+const SystemHealth = lazy(() => import('./pages/SystemHealth'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
 const Diagnostics = lazy(() => import('./pages/Diagnostics'));
 const Reports = lazy(() => import('./pages/Reports'));
@@ -107,6 +111,8 @@ type PageKey =
   | 'media'
   | 'infrastructure'
   | 'calls'
+  | 'calls-monitor'
+  | 'system-health'
   | 'monitor'
   | 'diagnostics'
   | 'data-overview'
@@ -150,7 +156,9 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'media', icon: <VideoCameraOutlined />, label: 'مركز الوسائط', group: 'system' },
   { key: 'infrastructure', icon: <CloudServerOutlined />, label: 'البنية التحتية', group: 'system' },
   { key: 'calls', icon: <BarChartOutlined />, label: 'سجل المكالمات', group: 'sovereign' },
+  { key: 'calls-monitor', icon: <PhoneOutlined />, label: 'مراقبة المكالمات', group: 'sovereign' },
   { key: 'monitor', icon: <MonitorOutlined />, label: 'المراقبة الحية', group: 'sovereign' },
+  { key: 'system-health', icon: <HeartOutlined />, label: 'صحة النظام', group: 'system' },
   { key: 'diagnostics', icon: <SettingOutlined />, label: 'التشخيص', group: 'sovereign' },
   { key: 'browser-settings', icon: <GlobalOutlined />, label: 'إعدادات المتصفح', group: 'sovereign' },
 ];
@@ -308,6 +316,8 @@ export default function App() {
       case 'media': return <MediaCenter />;
       case 'infrastructure': return <InfrastructureCenter />;
       case 'calls': return <CallHistory />;
+      case 'calls-monitor': return <CallsMonitor />;
+      case 'system-health': return <SystemHealth />;
       case 'monitor': return <MasterOverview />;
       case 'diagnostics': return <Diagnostics />;
       case 'browser-settings': return <BrowserSettings />;
@@ -323,10 +333,14 @@ export default function App() {
       key: m.key,
       icon: m.icon,
       label: m.key === 'approvals' && pendingCount > 0
-        ? <span>{m.label} <Badge count={pendingCount} size="small" color="#E0A83C" /></span>
+        ? <span>{m.label} <Badge count={pendingCount} size="small" color="#E0A83C" offset={[10, 0]} /></span>
+        : m.key === 'notifications'
+        ? <span>{m.label} <Badge dot color="red" offset={[10, 0]} /></span>
         : m.label,
     })),
   }));
+
+  const activeMenu = menuItems.find(m => m.key === currentPage);
 
   return (
     <ConfigProvider
@@ -334,14 +348,28 @@ export default function App() {
       theme={buildYounesTheme(resolvedTheme)}
     >
       <Layout style={{ minHeight: '100vh', background: resolvedTheme === 'dark' ? '#06110D' : '#F7F8FA' }}>
-        <Sider theme="dark" collapsible width={248} className="yns-sider">
-          <div className="yns-brand">
-            <span className="admin-brand-icon admin-brand-icon--image">
-              <img src="/admin-master-icon.svg" alt="شعار يونس" />
+        <Sider 
+          theme="dark" 
+          collapsible 
+          breakpoint="lg"
+          collapsedWidth={80}
+          width={260} 
+          className="yns-sider"
+          style={{
+            position: 'sticky',
+            top: 0,
+            height: '100vh',
+            overflow: 'auto',
+            boxShadow: '2px 0 8px rgba(0,0,0,0.15)'
+          }}
+        >
+          <div className="yns-brand" style={{ padding: '20px 16px' }}>
+            <span className="admin-brand-icon admin-brand-icon--image" style={{ width: 40, height: 40 }}>
+              <img src="/admin-master-icon.svg" alt="شعار يونس" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </span>
-            <span className="yns-brand-text">
-              <strong>يونس ماستر</strong>
-              <small>الإدارة السيادية</small>
+            <span className="yns-brand-text" style={{ display: 'flex', flexDirection: 'column' }}>
+              <strong style={{ fontSize: '18px', lineHeight: '1.2' }}>يونس ماستر</strong>
+              <small style={{ color: '#D4B16A', fontSize: '12px' }}>الإدارة السيادية</small>
             </span>
           </div>
           <Menu
@@ -353,22 +381,23 @@ export default function App() {
             style={{ borderRight: 0, background: 'transparent' }}
             className="yns-menu"
           />
-          <div className="yns-sider-footer">
+          <div className="yns-sider-footer" style={{ marginTop: 'auto', padding: '16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
             <span className={apiUp ? 'yns-dot up' : 'yns-dot down'} />
-            {apiUp ? 'النظام يعمل' : 'النظام متوقف'}
+            <span style={{ marginLeft: 8, color: 'rgba(255,255,255,0.65)' }}>{apiUp ? 'النظام يعمل' : 'النظام متوقف'}</span>
           </div>
         </Sider>
-        <Layout>
-          <Header className="yns-header">
-            <div className="yns-header-titles">
-              <span className="yns-header-group">
-                {groupLabels[menuItems.find(m => m.key === currentPage)?.group || 'main']}
-              </span>
-              <span className="yns-header-page">
-                {menuItems.find(m => m.key === currentPage)?.label || 'يونس'}
-              </span>
+        <Layout style={{ transition: 'all 0.2s' }}>
+          <Header className="yns-header" style={{ padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: resolvedTheme === 'dark' ? '#141C24' : '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 10, height: 64 }}>
+            <div className="yns-header-titles" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ color: resolvedTheme === 'dark' ? '#9AAEBB' : '#5A6B7D', fontSize: 14 }}>
+                {activeMenu ? groupLabels[activeMenu.group] : 'العمليات'}
+              </div>
+              <span style={{ color: '#D4B16A' }}>/</span>
+              <div style={{ fontWeight: 600, fontSize: 18, color: resolvedTheme === 'dark' ? '#fff' : '#0F1B2D' }}>
+                {activeMenu?.label || 'يونس'}
+              </div>
             </div>
-            <Space size={8} align="center" style={{ flexWrap: 'nowrap' }}>
+            <Space size={16} align="center" style={{ flexWrap: 'nowrap' }}>
               {/* مجموعة التحكم — ترويسة مرتبة بأزرار حبوب فاخرة */}
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -405,9 +434,9 @@ export default function App() {
                 </Tooltip>
               </div>
 
-              <Divider type="vertical" style={{ height: 24, margin: '0 4px', borderColor: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB' }} />
+              <Divider type="vertical" style={{ height: 24, margin: 0, borderColor: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB' }} />
 
-              <span className={apiUp ? 'yns-status up' : 'yns-status down'} style={{ height: 28, borderRadius: 9999, padding: '0 10px', fontSize: 12 }}>
+              <span className={apiUp ? 'yns-status up' : 'yns-status down'} style={{ height: 28, borderRadius: 9999, padding: '0 12px', fontSize: 13, background: apiUp ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: `1px solid ${apiUp ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
                 <span className={apiUp ? 'yns-dot up' : 'yns-dot down'} />
                 {apiUp ? 'متصل' : 'غير متصل'}
               </span>
@@ -420,14 +449,21 @@ export default function App() {
                 </Badge>
               )}
 
-              <Divider type="vertical" style={{ height: 24, margin: '0 4px', borderColor: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB' }} />
+              <Tooltip title="الإشعارات">
+                <Badge dot color="red">
+                  <Button shape="circle" type="text" icon={<BellOutlined style={{ fontSize: 18 }} />} onClick={() => setCurrentPage('notifications')} />
+                </Badge>
+              </Tooltip>
+
+              <Divider type="vertical" style={{ height: 24, margin: 0, borderColor: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB' }} />
+              
               {adminUser?.username && (
                 <Dropdown
                   trigger={['click']}
                   placement="bottomLeft"
                   dropdownRender={() => (
                     <div style={{
-                      width: 280,
+                      width: 300,
                       background: resolvedTheme === 'dark' ? '#141C24' : '#fff',
                       border: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}`,
                       borderRadius: 16,
@@ -436,68 +472,65 @@ export default function App() {
                     }}>
                       {/* رأس المستخدم — تدرج ذهبي/كحلي فاخر */}
                       <div style={{
-                        padding: '18px 16px 14px',
+                        padding: '24px 20px 20px',
                         background: 'linear-gradient(135deg, #0F1B2D 0%, #1E2936 50%, #2C3A4A 100%)',
                         color: '#fff',
                         position: 'relative',
                         overflow: 'hidden',
                       }}>
                         <div style={{
-                          position: 'absolute', top: -20, left: -20, width: 80, height: 80,
+                          position: 'absolute', top: -20, left: -20, width: 100, height: 100,
                           background: 'radial-gradient(circle, rgba(183,138,46,0.25) 0%, transparent 70%)',
                           borderRadius: '50%',
                         }} />
-                        <Space size={12} align="start">
-                          <Avatar size={48} style={{
+                        <Space size={16} align="center">
+                          <Avatar size={56} style={{
                             background: 'linear-gradient(135deg, #B78A2E 0%, #D4B16A 100%)',
-                            color: '#0A0F14', fontWeight: 800, fontSize: 20, flexShrink: 0,
-                            border: '2px solid rgba(255,255,255,0.2)',
+                            color: '#0A0F14', fontWeight: 800, fontSize: 24, flexShrink: 0,
+                            border: '3px solid rgba(255,255,255,0.2)',
                           }}>
                             {(adminUser.displayName || adminUser.username || '؟').trim().charAt(0).toUpperCase()}
                           </Avatar>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 800, fontSize: 14, lineHeight: 1.2, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontWeight: 800, fontSize: 16, lineHeight: 1.2, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {adminUser.displayName || adminUser.username}
                             </div>
-                            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                              <Tag color="gold" style={{ margin: 0, fontSize: 10, lineHeight: '16px', border: 'none', color: '#0A0F14', fontWeight: 700 }}>
+                            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <Tag color="gold" style={{ margin: 0, fontSize: 11, lineHeight: '18px', border: 'none', color: '#0A0F14', fontWeight: 700 }}>
                                 {(adminUser as any).role || 'ADMIN'}
                               </Tag>
-                              <span style={{ fontFamily: 'monospace', fontSize: 11 }}>#{ (adminUser as any).redId || '—'}</span>
-                            </div>
-                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4, wordBreak: 'break-all' }}>
-                              @{adminUser.username}
+                              <span style={{ fontFamily: 'monospace' }}>#{ (adminUser as any).redId || '—'}</span>
                             </div>
                           </div>
                         </Space>
                       </div>
                       {/* إحصائيات سريعة */}
                       <div style={{
-                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
-                        padding: 12, background: resolvedTheme === 'dark' ? 'rgba(255,255,255,0.03)' : '#F7F8FA',
+                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12,
+                        padding: 16, background: resolvedTheme === 'dark' ? 'rgba(255,255,255,0.02)' : '#F7F8FA',
                         borderBottom: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}`,
                       }}>
-                        <div style={{ textAlign: 'center', padding: '8px 4px', background: resolvedTheme === 'dark' ? '#1E2936' : '#fff', borderRadius: 10, border: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}` }}>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: '#B78A2E' }}>{pendingCount}</div>
-                          <div style={{ fontSize: 10, color: resolvedTheme === 'dark' ? '#9AAEBB' : '#5A6B7D' }}>موافقات معلقة</div>
+                        <div style={{ textAlign: 'center', padding: '12px 8px', background: resolvedTheme === 'dark' ? '#1E2936' : '#fff', borderRadius: 12, border: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}`, transition: 'all 0.2s', cursor: 'pointer' }} onClick={() => setCurrentPage('approvals')}>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: '#B78A2E' }}>{pendingCount}</div>
+                          <div style={{ fontSize: 12, color: resolvedTheme === 'dark' ? '#9AAEBB' : '#5A6B7D', marginTop: 4 }}>موافقات معلقة</div>
                         </div>
-                        <div style={{ textAlign: 'center', padding: '8px 4px', background: resolvedTheme === 'dark' ? '#1E2936' : '#fff', borderRadius: 10, border: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}` }}>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: apiUp ? '#B78A2E' : '#B91C1C' }}>{apiUp ? 'متصل' : 'غير متصل'}</div>
-                          <div style={{ fontSize: 10, color: resolvedTheme === 'dark' ? '#9AAEBB' : '#5A6B7D' }}>حالة الخادم</div>
+                        <div style={{ textAlign: 'center', padding: '12px 8px', background: resolvedTheme === 'dark' ? '#1E2936' : '#fff', borderRadius: 12, border: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}` }}>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: apiUp ? '#10b981' : '#B91C1C' }}>{apiUp ? 'متصل' : 'مقطوع'}</div>
+                          <div style={{ fontSize: 12, color: resolvedTheme === 'dark' ? '#9AAEBB' : '#5A6B7D', marginTop: 4 }}>حالة الخادم</div>
                         </div>
                       </div>
                       {/* إجراءات */}
-                      <div style={{ padding: 8 }}>
-                        <Button type="text" block icon={<UserOutlined />} style={{ textAlign: 'right', justifyContent: 'flex-start', height: 36 }}
+                      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <Button type="text" block icon={<UserOutlined />} style={{ textAlign: 'right', justifyContent: 'flex-start', height: 40, borderRadius: 8 }}
                           onClick={() => setCurrentPage('users')}>
                           إدارة المستخدمين
                         </Button>
-                        <Button type="text" block icon={<SettingOutlined />} style={{ textAlign: 'right', justifyContent: 'flex-start', height: 36 }}
+                        <Button type="text" block icon={<SettingOutlined />} style={{ textAlign: 'right', justifyContent: 'flex-start', height: 40, borderRadius: 8 }}
                           onClick={() => setCurrentPage('browser-settings')}>
                           إعدادات المتصفح
                         </Button>
-                        <div style={{ height: 1, background: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB', margin: '6px 0' }} />
-                        <Button danger block icon={<LogoutOutlined />} onClick={logout} style={{ height: 36, fontWeight: 600 }}>
+                        <div style={{ height: 1, background: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB', margin: '8px 0' }} />
+                        <Button danger block icon={<LogoutOutlined />} onClick={logout} style={{ height: 40, borderRadius: 8, fontWeight: 600 }}>
                           تسجيل الخروج
                         </Button>
                       </div>
@@ -507,15 +540,16 @@ export default function App() {
                   <Button
                     shape="round"
                     style={{
-                      height: 34, padding: '0 10px 0 6px', gap: 8,
-                      background: resolvedTheme === 'dark' ? '#141C24' : '#fff',
-                      borderColor: '#B78A2E', color: resolvedTheme === 'dark' ? '#F1F5F9' : '#0F1B2D',
+                      height: 40, padding: '0 12px 0 8px', gap: 10,
+                      background: resolvedTheme === 'dark' ? '#1E2936' : '#fff',
+                      borderColor: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB', color: resolvedTheme === 'dark' ? '#F1F5F9' : '#0F1B2D',
                       fontWeight: 600, display: 'inline-flex', alignItems: 'center',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
                     }}
                   >
-                    <Avatar size={24} style={{
+                    <Avatar size={28} style={{
                       background: 'linear-gradient(135deg, #B78A2E 0%, #D4B16A 100%)',
-                      color: '#0A0F14', fontWeight: 800, fontSize: 12, flexShrink: 0,
+                      color: '#0A0F14', fontWeight: 800, fontSize: 14, flexShrink: 0,
                     }}>
                       {(adminUser.displayName || adminUser.username || '؟').trim().charAt(0).toUpperCase()}
                     </Avatar>
@@ -528,15 +562,16 @@ export default function App() {
               )}
             </Space>
           </Header>
-          <Content className="yns-content">
+          <Content className="yns-content" style={{ padding: '24px', margin: 0, minHeight: 280 }}>
             {/* حد أخطاء لكل صفحة: عطل في قسم واحد لا يُسقط اللوحة كلها */}
             <ErrorBoundary resetKey={currentPage}>
               <Suspense fallback={
-                <div style={{ display: 'grid', placeItems: 'center', minHeight: 320 }}>
-                  <Spin size="large" tip="جاري التحميل..." />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 16 }}>
+                  <Spin size="large" />
+                  <div style={{ color: resolvedTheme === 'dark' ? '#9AAEBB' : '#5A6B7D' }}>جاري التحميل...</div>
                 </div>
               }>
-                <div className="yns-page" key={currentPage}>
+                <div className="yns-page" key={currentPage} style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
                   {renderPage()}
                 </div>
               </Suspense>
