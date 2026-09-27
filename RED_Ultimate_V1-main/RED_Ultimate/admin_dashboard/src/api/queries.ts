@@ -368,8 +368,12 @@ export function useAuditLog(
   );
 }
 
+// GET /api/admin/backups (AdminV2Controller) يعيد صفحة {content:[...]} لا مصفوفة
 export function useBackups() {
-  return useApiQuery<Backup[]>(() => api.get<Backup[]>('/system/backups'), []);
+  return useApiQuery<{ content: Backup[] }>(
+    () => api.get<{ content: Backup[] }>('/admin/backups?page=0&size=50'),
+    [],
+  );
 }
 
 export function useRoles() {

@@ -51,7 +51,7 @@ export function BackupsPage() {
   const deleteMutation = mutations.useDeleteBackup();
   
   // البيانات الحقيقية من الخادم أولاً، والوهمية احتياط فقط عند غيابها
-  const source = Array.isArray(backups) && backups.length > 0 ? backups : mockBackups;
+  const source = Array.isArray(backups?.content) ? backups.content : []; // فراغ صادق بدل نسخ احتياطية وهمية
   const logs = source.slice(page * size, (page + 1) * size);
   const totalPages = Math.ceil(source.length / size);
   

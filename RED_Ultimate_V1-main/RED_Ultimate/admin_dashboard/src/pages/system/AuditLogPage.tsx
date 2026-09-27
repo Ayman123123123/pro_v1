@@ -57,7 +57,7 @@ export function AuditLogPage() {
   const { data, isLoading } = useAuditLog({ page, size, category, severity, startDate, endDate });
   
   // البيانات الحقيقية من الخادم أولاً، والوهمية احتياط فقط عند غيابها
-  const source = data?.content && data.content.length > 0 ? data.content : mockAuditLogs;
+  const source = data?.content && data.content.length > 0 ? data.content : []; // فراغ صادق بدل سجلات وهمية
   const logs = source.slice(page * size, (page + 1) * size);
   const totalPages = Math.ceil(source.length / size);
   
