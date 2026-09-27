@@ -52,17 +52,28 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
         load()
         viewModelScope.launch {
             repository.getGroups().collectLatest { entities ->
-                // ⚠️ القائمة المحلية تُستخدم فقط كـ cache عند غياب الشبكة؛ لا نُنشئ أعضاء وهميين
-                // بـ redId فارغ لأنها تُسمم حساب العضوية وتُفشل تشفير المجموعة (directory.get(""))
-                if (state == GroupState.Loading || state is GroupState.Error) {
-                    val known = groups.map { it.id }.toSet()
-                    groups.clear()
-                    groups.addAll(entities.mapNotNull { entity ->
-                        if (entity.id in known) null else {
-                            // نحتفظ بالعدد للعرض فقط، لكن قائمة الأعضاء الفعلية تُجلب من الخادم عند الاتصال
-                            Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, createdAt = entity.createdAt.toString(), members = emptyList())
-                        }
-                    })
+                // 🔄 التحديث الذري للكاش المحلي — لا استبعاد للمجموعات المعروفة
+                val localGroups = entities.map { entity ->
+                    Group(
+                        id = entity.id,
+                        name = entity.name,
+                        description = entity.description,
+                        myRole = entity.myRole ?: "MEMBER",
+                        avatarUrl = entity.avatarUrl,
+                        createdAt = entity.createdAt.toString(),
+                        members = emptyList()
+                    )
+                }
+                if (localGroups.isNotEmpty()) {
+                    val currentIds = groups.map { it.id }.toSet()
+                    val newIds = localGroups.map { it.id }.toSet()
+                    if (state !is GroupState.Ready || currentIds != newIds) {
+                        groups.clear()
+                        groups.addAll(localGroups.sortedByDescending { it.createdAt })
+                    }
+                    if (state is GroupState.Loading) {
+                        state = GroupState.Ready
+                    }
                 }
             }
         }

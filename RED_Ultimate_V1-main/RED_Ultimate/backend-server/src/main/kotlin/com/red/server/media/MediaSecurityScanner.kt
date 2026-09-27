@@ -28,10 +28,10 @@ class MediaSecurityScanner {
         // 2. النوع المسموح فقط
         if (mime !in MediaService.ALLOWED) return ScanResult(false, "Unsupported type: $mime")
 
-        // 3. الامتداد يطابق النوع
+        // 3. الامتداد يطابق النوع — مع استثناء application/octet-stream للملفات العامة والمستندات
         val ext = name.substringAfterLast('.', "")
         val expectedExt = MediaService.EXTENSIONS[mime]
-        if (expectedExt != null && ext != expectedExt && ext !in setOf("jpg", "jpeg", "png", "webp", "gif", "mp4", "webm", "mov", "ogg", "m4a", "mp3", "wav", "pdf")) {
+        if (mime != "application/octet-stream" && expectedExt != null && ext != expectedExt && ext !in setOf("jpg", "jpeg", "png", "webp", "gif", "mp4", "webm", "mov", "ogg", "m4a", "mp3", "wav", "pdf")) {
             if (!((ext == "jpg" && expectedExt == "jpg") || (ext == "jpeg" && expectedExt == "jpg"))) {
                 return ScanResult(false, "Extension .$ext does not match mime $mime")
             }

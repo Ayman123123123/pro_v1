@@ -52,7 +52,8 @@ class MediaService(
         val mime = file.contentType?.lowercase()?.substringBefore(';') ?: ""
         require(mime in ALLOWED) { "Unsupported media type" }
         ensureBucket()
-        val extension = EXTENSIONS[mime] ?: "bin"
+        val originalExt = file.originalFilename?.substringAfterLast('.', "")?.lowercase()?.filter { it.isLetterOrDigit() }?.take(10).orEmpty()
+        val extension = if (originalExt.isNotBlank() && (mime == "application/octet-stream" || originalExt == EXTENSIONS[mime])) originalExt else (EXTENSIONS[mime] ?: "bin")
         val key = "users/$userId/${UuidV7.next()}.$extension"
         file.inputStream.use { input ->
             minio.putObject(PutObjectArgs.builder().bucket(bucket).`object`(key)

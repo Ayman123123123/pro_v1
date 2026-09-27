@@ -1866,7 +1866,7 @@ private fun ChatHubScreen(
                         cameraPicker.launch(providerUri)
                     },
                     onGallery = { filePicker.launch(arrayOf("image/*", "video/*")) },
-                    onDocument = { filePicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
+                    onDocument = { filePicker.launch(arrayOf("*/*")) },
                     onDismiss = { showAttachmentSheet = false }
                 )
 
@@ -2328,7 +2328,7 @@ private fun ChatHubScreen(
                         groupCameraPicker.launch(providerUri)
                     },
                     onGallery = { groupFilePicker.launch(arrayOf("image/*", "video/*")) },
-                    onDocument = { groupFilePicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
+                    onDocument = { groupFilePicker.launch(arrayOf("*/*")) },
                     onDismiss = { showGroupAttachmentSheet = false }
                 )
 
