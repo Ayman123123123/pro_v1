@@ -194,11 +194,12 @@ export interface Backup {
   notes?: string;
 }
 
+/** الدور الإداري — العقد الحقيقي (AdminOpsStoresController): permissions مصفوفة نصوص "resource:action" */
 export interface Role {
   id: string;
   name: string;
   description?: string;
-  permissions: Permission[];
+  permissions: string[];
   isSystem: boolean;
   createdAt: string;
   updatedAt: string;
@@ -221,19 +222,23 @@ export interface ApiKey {
   isActive: boolean;
 }
 
+/**
+ * جلسة أدمن نشطة — مطابقة لكيان AdminSession على الخادم (AdminV2Controller /sessions).
+ * الحقول الحقيقية من الكيان؛ أسماء العرض القديمة (userId/deviceName/isTrusted/riskScore) لم تكن موجودة في العقد.
+ */
 export interface Session {
   id: string;
-  userId: string;
-  deviceId: string;
-  deviceName: string;
-  ipAddress: string;
-  location?: string;
-  userAgent: string;
-  createdAt: string;
-  lastActivityAt: string;
-  isCurrent: boolean;
-  isTrusted: boolean;
-  riskScore: number;
+  adminId: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  location?: string | null;
+  deviceInfo?: string | null;
+  startedAt: string;
+  lastActiveAt: string;
+  expiresAt: string;
+  isActive: boolean;
+  terminatedAt?: string | null;
+  terminationReason?: string | null;
 }
 
 export interface Notification {

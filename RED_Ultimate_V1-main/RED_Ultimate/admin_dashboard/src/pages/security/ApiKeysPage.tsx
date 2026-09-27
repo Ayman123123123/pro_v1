@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Key, Plus, Trash2, Copy, Eye, MoreVertical, AlertTriangle, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
+import { Key, Plus, Copy, MoreVertical, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { useApiKeys, mutations } from '@/api/queries';
 import { cn, formatRelativeTime } from '@/utils';
 import { useTranslation } from 'react-i18next';
@@ -11,20 +11,6 @@ import { Badge } from '@/components/ui/badge';
 import { DropdownMenu } from '@/components/ui/simple-dropdown-menu';
 import { Dialog } from '@/components/ui/dialog';
 import { Form, FormField } from '@/components/ui/form';
-
-const mockApiKeys = Array.from({ length: 20 }, (_, i) => ({
-  id: `key-${i}`,
-  name: `API Key ${i + 1}`,
-  keyPrefix: `rd_${Math.random().toString(36).substring(2, 10)}`,
-  fullKey: i === 0 ? `rd_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 20)}` : undefined,
-  scopes: ['users:read', 'content:read', 'analytics:read'].slice(0, (i % 3) + 1),
-  expiresAt: i % 4 === 0 ? undefined : new Date(Date.now() + (30 + i) * 86400000).toISOString(),
-  lastUsedAt: i % 3 === 0 ? new Date(Date.now() - i * 86400000).toISOString() : undefined,
-  createdAt: new Date(Date.now() - i * 86400000).toISOString(),
-  createdBy: 'admin',
-  isActive: i % 5 !== 0,
-  usageCount: Math.floor(Math.random() * 10000),
-}));
 
 const ALL_SCOPES = [
   'users:read', 'users:write', 'users:delete',
@@ -40,17 +26,24 @@ export function ApiKeysPage() {
   const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<any>(null);
-  const [showKeyDialogOpen, setShowKeyDialogOpen] = useState(false);
-  const [showingKey, setShowingKey] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   
-  const { data: keys, isLoading } = useApiKeys();
+  const { data: keys, isLoading, error, refetch } = useApiKeys();
   const createMutation = mutations.useCreateApiKey();
   const revokeMutation = mutations.useRevokeApiKey();
-  
-  // البيانات الحقيقية من الخادم أولاً، والوهمية احتياط فقط عند غيابها
-  const displayKeys = Array.isArray(keys) && keys.length > 0 ? keys : mockApiKeys;
+
+  // العقد الحقيقي: مفتاح خام يُعاد مرة واحدة فقط عند الإنشاء (secret)
+  const [freshSecret, setFreshSecret] = useState<{ name: string; secret: string } | null>(null);
+
+  const list = Array.isArray(keys) ? keys : [];
+  const filteredKeys = list.filter((k: any) => {
+    if (status === 'active' && !k.isActive) return false;
+    if (status === 'revoked' && k.isActive) return false;
+    if (status === 'expired' && !(k.expiresAt && new Date(k.expiresAt) < new Date())) return false;
+    if (search && !`${k.name} ${k.keyPrefix}`.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
   
   const columns = [
     {
@@ -101,11 +94,6 @@ export function ApiKeysPage() {
       cell: (key: any) => key.lastUsedAt ? <span className="text-yn-text-secondary">{formatRelativeTime(key.lastUsedAt)}</span> : <span className="text-yn-text-muted">Never</span>,
     },
     {
-      key: 'usageCount',
-      title: 'Usage',
-      cell: (key: any) => <span className="text-yn-text-secondary font-mono">{key.usageCount.toLocaleString()}</span>,
-    },
-    {
       key: 'createdAt',
       title: 'Created',
       cell: (key: any) => <span className="text-yn-text-secondary">{formatRelativeTime(key.createdAt)}</span>,
@@ -121,37 +109,16 @@ export function ApiKeysPage() {
             </Button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="end">
-            {key.fullKey && (
-              <DropdownMenu.Item onClick={() => { setShowingKey(key); setShowKeyDialogOpen(true); }}>
-                <Eye className="w-4 h-4 mr-2" />
-                Show Full Key
-              </DropdownMenu.Item>
-            )}
-            <DropdownMenu.Item onClick={() => { /* copy prefix */ }}>
+            <DropdownMenu.Item onClick={() => navigator.clipboard?.writeText(key.keyPrefix)}>
               <Copy className="w-4 h-4 mr-2" />
               Copy Prefix
             </DropdownMenu.Item>
-            <DropdownMenu.Item onClick={() => { /* regenerate */ }}>
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Rotate Key
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onClick={() => revokeMutation.mutate(key.id)}>
-              {key.isActive ? (
-                <>
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Revoke
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Restore
-                </>
-              )}
-            </DropdownMenu.Item>
-            <DropdownMenu.Item>
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
-            </DropdownMenu.Item>
+            {key.isActive && (
+              <DropdownMenu.Item onClick={() => revokeMutation.mutate(key.id)}>
+                <XCircle className="w-4 h-4 mr-2" />
+                Revoke
+              </DropdownMenu.Item>
+            )}
           </DropdownMenu.Content>
         </DropdownMenu>
       ),
@@ -173,10 +140,10 @@ export function ApiKeysPage() {
       
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard label="Total Keys" value={displayKeys.length} icon={Key} color="blue" />
-        <StatCard label="Active" value={displayKeys.filter(k => k.isActive).length} icon={CheckCircle} color="green" />
-        <StatCard label="Revoked" value={displayKeys.filter(k => !k.isActive).length} icon={XCircle} color="danger" />
-        <StatCard label="Expiring Soon" value={displayKeys.filter(k => k.expiresAt && new Date(k.expiresAt) < new Date(Date.now() + 7 * 86400000)).length} icon={AlertTriangle} color="gold" />
+        <StatCard label="Total Keys" value={list.length} icon={Key} color="blue" />
+        <StatCard label="Active" value={list.filter((k: any) => k.isActive).length} icon={CheckCircle} color="green" />
+        <StatCard label="Revoked" value={list.filter((k: any) => !k.isActive).length} icon={XCircle} color="danger" />
+        <StatCard label="Expiring Soon" value={list.filter((k: any) => k.expiresAt && new Date(k.expiresAt) < new Date(Date.now() + 7 * 86400000)).length} icon={AlertTriangle} color="gold" />
       </div>
       
       <div className="yn-card yn-card-liquid yn-glass">
@@ -192,32 +159,39 @@ export function ApiKeysPage() {
           </div>
         </div>
         
-        <DataTable columns={columns} data={displayKeys} isLoading={isLoading} rowKey="id" emptyMessage="No API keys found" />
+        <DataTable columns={columns} data={filteredKeys} isLoading={isLoading} rowKey="id" emptyMessage="No API keys found" />
       </div>
       
       <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditingKey(null); }} title={editingKey ? 'Edit API Key' : 'Create API Key'} size="lg">
-        <Form onSubmit={(data: any) => { createMutation.mutate(data); setDialogOpen(false); setEditingKey(null); }}>
+        <Form onSubmit={(data: any) => {
+          const scopes = String(data.scopes || '').split(/[\n,]/).map((s: string) => s.trim()).filter(Boolean);
+          const payload = { name: data.name, scopes, expiresAt: data.expiresAt ? new Date(data.expiresAt).toISOString() : undefined };
+          createMutation.mutateAsync(payload).then((created: any) => {
+            if (created?.secret) setFreshSecret({ name: created.name || data.name, secret: created.secret });
+          }).catch(() => { /* الخطأ يظهر عبر useApiMutation.error في القائمة العليا */ });
+          setDialogOpen(false);
+          setEditingKey(null);
+        }}>
           <FormField name="name" label="Key Name" placeholder="Production API Key" required />
-          <FormField name="scopes" label="Scopes" type="textarea" placeholder="Enter scopes (one per line): users:read, content:read..." required />
-          <FormField name="expiresAt" label="Expiration Date" type="text" />
+          <FormField name="scopes" label="Scopes" type="textarea" placeholder="users:read\ncontent:read\nanalytics:read" required />
+          <FormField name="expiresAt" label="Expiration Date (optional)" type="text" placeholder="2027-01-01" />
           <div className="pt-4 border-t border-yn-border">
             <p className="text-sm text-yn-text-secondary mb-3">The full API key will only be shown once after creation. Make sure to copy and store it securely.</p>
           </div>
         </Form>
       </Dialog>
-      
-      <Dialog open={showKeyDialogOpen} onClose={() => { setShowKeyDialogOpen(false); setShowingKey(null); }} title="API Key">
-        <p className="text-sm text-yn-text-secondary mb-4">This is the only time the full key will be displayed. Copy it now and store it securely.</p>
-        {showingKey && (
+
+      <Dialog open={!!freshSecret} onClose={() => setFreshSecret(null)} title="Your New API Key">
+        {freshSecret && (
           <div className="space-y-4">
+            <p className="text-sm text-yn-text-secondary mb-2">Key <span className="text-yn-text font-medium">{freshSecret.name}</span> created. This is the only time the full key is shown.</p>
             <div className="p-4 bg-yn-navy rounded-lg border border-yn-border font-mono text-sm break-all">
-              {showingKey.fullKey}
+              {freshSecret.secret}
             </div>
-            <Button variant="primary" onClick={() => { navigator.clipboard.writeText(showingKey.fullKey); setShowKeyDialogOpen(false); setShowingKey(null); }} className="w-full">
+            <Button variant="primary" onClick={() => { navigator.clipboard?.writeText(freshSecret.secret); setFreshSecret(null); }} className="w-full">
               <Copy className="w-4 h-4 mr-2" />
-              Copy to Clipboard
+              Copy and Close
             </Button>
-            <p className="text-sm text-yn-error text-center">This key will not be shown again.</p>
           </div>
         )}
       </Dialog>

@@ -385,7 +385,8 @@ export function useApiKeys() {
 }
 
 export function useAllSessions() {
-  return useApiQuery<Session[]>(() => api.get<Session[]>('/security/sessions'), [], {
+  // العقد الحقيقي: GET /api/admin/sessions (AdminV2Controller) — كيان AdminSession مباشرة
+  return useApiQuery<Session[]>(() => api.get<Session[]>('/sessions'), [], {
     intervalMs: 30000,
   });
 }
@@ -482,11 +483,12 @@ export const mutations = {
 
   useRevokeSession: () =>
     useApiMutation(({ sessionId, reason }: { sessionId: string; reason: string }) =>
-      api.post(`/security/sessions/${sessionId}/revoke`, { reason })
+      api.post(`/sessions/${sessionId}/terminate`, { reason })
     ),
 
   useRevokeAllSessions: () =>
-    useApiMutation((userId: string) => api.post(`/security/sessions/revoke-all/${userId}`)),
+    // العقد الحقيقي: تنظيف الجلسات المنتهية (POST /api/admin/sessions/cleanup) — لا يوجد revoke-all لكل مستخدم
+    useApiMutation((_userId: string) => api.post('/sessions/cleanup')),
 
   useMarkNotificationRead: () =>
     useApiMutation((id: string) => api.put(`/notifications/${id}/read`)),

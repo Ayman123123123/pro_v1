@@ -10,15 +10,6 @@ import { DropdownMenu } from '@/components/ui/simple-dropdown-menu';
 import { Dialog } from '@/components/ui/dialog';
 import { Form, FormField } from '@/components/ui/form';
 
-const mockRoles = [
-  { id: 'role-super-admin', name: 'Super Admin', description: 'Full system access', permissions: ['*'], isSystem: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
-  { id: 'role-admin', name: 'Admin', description: 'Administrative access', permissions: ['users:*', 'content:*', 'system:*'], isSystem: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
-  { id: 'role-moderator', name: 'Moderator', description: 'Content moderation', permissions: ['content:read', 'content:moderate', 'users:read'], isSystem: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
-  { id: 'role-support', name: 'Support', description: 'Customer support access', permissions: ['users:read', 'tickets:*'], isSystem: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
-  { id: 'role-viewer', name: 'Viewer', description: 'Read-only access', permissions: ['*:read'], isSystem: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
-  { id: 'role-custom-1', name: 'Content Manager', description: 'Manage content only', permissions: ['content:*', 'channels:read'], isSystem: false, createdAt: '2024-06-15T00:00:00Z', updatedAt: '2024-06-15T00:00:00Z' },
-];
-
 const ALL_PERMISSIONS = [
   'users:create', 'users:read', 'users:update', 'users:delete',
   'users:approve', 'users:ban', 'users:impersonate',
@@ -38,7 +29,7 @@ export function RolesPage() {
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
   const [permissionRole, setPermissionRole] = useState<any>(null);
   
-  const { data: roles, isLoading } = useRoles();
+  const { data: roles, isLoading, error } = useRoles();
   const createMutation = mutations.useCreateRole();
   const updateMutation = mutations.useUpdateRole();
   const deleteMutation = mutations.useDeleteRole();
@@ -112,8 +103,10 @@ export function RolesPage() {
   if (isLoading && !roles) {
     return <div className="yn-loading"><div className="yn-spinner" /></div>;
   }
-  
-  const displayRoles = roles || mockRoles;
+
+  const list = Array.isArray(roles) ? roles : [];
+  const displayRoles = list;
+  const errorText = String((error as any)?.message ?? '');
   
   return (
     <div className="yn-page space-y-6">
@@ -127,7 +120,12 @@ export function RolesPage() {
           Create Role
         </Button>
       </div>
-      
+      {errorText.length > 0 && (
+        <div className="yn-card yn-glass p-4 text-sm text-yn-error border border-yn-error/30">
+          تعذر جلب الأدوار من الخادم عبر <span className="font-mono">GET /api/admin/security/roles</span>: {errorText}
+        </div>
+      )}
+
       <div className="yn-card yn-card-liquid yn-glass overflow-hidden">
         <DataTable columns={columns} data={displayRoles} isLoading={isLoading} rowKey="id" emptyMessage="No roles found" />
       </div>
@@ -150,19 +148,31 @@ export function RolesPage() {
       <Dialog open={permissionDialogOpen} onClose={() => { setPermissionDialogOpen(false); setPermissionRole(null); }} title="Manage Permissions" size="xl">
         {permissionRole && (
           <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-            <p className="text-sm text-yn-text-secondary">Role: <span className="font-medium text-yn-text">{permissionRole.name}</span></p>
+            <p className="text-sm text-yn-text-secondary">Role: <span className="font-medium text-yn-text">{permissionRole.name}</span>{permissionRole.isSystem && <span className="text-xs text-yn-gold"> (نظامي — للعرض فقط، الخادم يرفض التعديل)</span>}</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[400px] overflow-y-auto">
               {ALL_PERMISSIONS.map((perm) => (
                 <label key={perm} className="flex items-center gap-2 p-2 bg-yn-navy rounded-lg hover:bg-yn-surface transition-colors cursor-pointer">
                   <input
                     type="checkbox"
                     defaultChecked={permissionRole.permissions.includes('*') || permissionRole.permissions.includes(perm)}
+                    onChange={(e) => {
+                      // تحديث محلي فوري + حفظ فعلي عبر PUT /security/roles/{id} (الخادم يرفض الأدوار النظامية)
+                      const el = e.target as HTMLInputElement;
+                      const current = new Set<string>(permissionRole.permissions);
+                      if (el.checked) current.add(perm); else current.delete(perm);
+                      setPermissionRole((r: any) => ({ ...r, permissions: Array.from(current) }));
+                      if (!permissionRole.isSystem) {
+                        updateMutation.mutate({ id: permissionRole.id, data: { permissions: Array.from(current) } });
+                      }
+                    }}
+                    disabled={permissionRole.isSystem}
                     className="w-4 h-4 rounded border-yn-border bg-yn-navy text-yn-green focus:ring-yn-green"
                   />
                   <span className="text-yn-text font-mono text-xs">{perm}</span>
                 </label>
               ))}
             </div>
+            <p className="text-xs text-yn-text-muted">يُحفظ كل تغيير فوراً على الخادم ويُسجّل في سجل التدقيق.</p>
           </div>
         )}
       </Dialog>
