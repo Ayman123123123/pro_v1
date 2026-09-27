@@ -201,11 +201,15 @@ class MediaSecurityScannerTest {
 
     @Test
     fun `accepts octet-stream without magic check`() {
-        // application/octet-stream is for already-encrypted files, no magic check
+        // application/octet-stream is for already-encrypted files and general documents
         val content = ByteArray(100) { 1 }
         val file = MockMultipartFile("file", "encrypted.bin", "application/octet-stream", content)
         val result = scanner.scan(file)
         assertTrue(result.allowed, result.reason)
+
+        val apkFile = MockMultipartFile("file", "update.apk", "application/octet-stream", content)
+        val apkResult = scanner.scan(apkFile)
+        assertTrue(apkResult.allowed, apkResult.reason)
     }
 
     @Test

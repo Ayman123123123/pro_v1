@@ -120,32 +120,35 @@ fun SovereignChatInputBar(
             }
         }
 
-        // 🎙️ 2. لوحة التسجيل الصوتي المتطورة (تظهر فقط أثناء التسجيل أو المعاينة)
-        VoiceRecorderPanel(
-            state = voiceState,
-            elapsedSeconds = voiceMessages.elapsedSeconds,
-            waveform = voiceMessages.waveform,
-            isLocked = voiceMessages.isLocked,
-            cancelProgress = voiceMessages.cancelProgress,
-            hasPermission = hasRecordPermission,
-            previewPath = voiceMessages.previewPath,
-            onPress = onVoicePress,
-            onRelease = onVoiceRelease,
-            onLockRequest = { voiceMessages.lockRecording() },
-            onCancel = { voiceMessages.cancel() },
-            onUpdateCancelProgress = { voiceMessages.updateCancelProgress(it) },
-            onStopAndPreview = onStopAndPreview,
-            onSend = { if (voiceState is VoiceMessageState.Preview) onVoiceClick() else onSend() },
-            onDiscard = { voiceMessages.discardPreview() },
-            onClick = onVoiceClick
-        )
+        // 🎙️ 2. لوحة التسجيل الصوتي المتطورة أو شريط الكتابة الذكي (حالتان منفصلتان تماماً كمعيار واتساب)
+        val isVoiceActive = voiceState !is VoiceMessageState.Idle
 
-        // 💬 3. شريط الكتابة العصري وزر الإجراء الذكي (Smart Dock & Action Button)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+        if (isVoiceActive) {
+            VoiceRecorderPanel(
+                state = voiceState,
+                elapsedSeconds = voiceMessages.elapsedSeconds,
+                waveform = voiceMessages.waveform,
+                isLocked = voiceMessages.isLocked,
+                cancelProgress = voiceMessages.cancelProgress,
+                hasPermission = hasRecordPermission,
+                previewPath = voiceMessages.previewPath,
+                onPress = onVoicePress,
+                onRelease = onVoiceRelease,
+                onLockRequest = { voiceMessages.lockRecording() },
+                onCancel = { voiceMessages.cancel() },
+                onUpdateCancelProgress = { voiceMessages.updateCancelProgress(it) },
+                onStopAndPreview = onStopAndPreview,
+                onSend = { if (voiceState is VoiceMessageState.Preview) onVoiceClick() else onSend() },
+                onDiscard = { voiceMessages.discardPreview() },
+                onClick = onVoiceClick
+            )
+        } else {
+            // 💬 3. شريط الكتابة العصري وزر الإجراء الذكي (Smart Dock & Action Button)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
             // كبسولة الإدخال الرئيسية (Main Input Capsule)
             Surface(
                 modifier = Modifier
@@ -289,6 +292,7 @@ fun SovereignChatInputBar(
                     )
                 }
             }
+        }
         }
     }
 }
