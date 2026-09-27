@@ -1,151 +1,155 @@
-import { GitBranch, AlertTriangle, CheckCircle, XCircle, RefreshCw, Download, MoreVertical, Eye, Play } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import { cn } from '@/utils';
+import { useQuery } from '@tanstack/react-query';
+import { GitBranch, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
-import { DropdownMenu } from '@/components/ui/simple-dropdown-menu';
+import { apiFetch } from '../../api';
+import { LoadingState, ErrorState, EmptyState } from '../_shared';
 
-const mockMigrations = Array.from({ length: 15 }, (_, i) => ({
-  id: `migration-${i}`,
-  version: `V${String(100 + i).padStart(4, '0')}`,
-  description: `Migration ${i + 1}: ${['Add users table', 'Add indexes', 'Update schema', 'Add foreign keys', 'Create views'][i % 5]}`,
-  type: ['SQL', 'JAVA', 'SHELL'][i % 3],
-  status: ['SUCCESS', 'SUCCESS', 'SUCCESS', 'PENDING', 'FAILED'][i % 5],
-  checksum: `abc123${i}`,
-  executedBy: `system`,
-  executedAt: new Date(Date.now() - i * 3600000).toISOString(),
-  executionTime: Math.floor(Math.random() * 5000) + 100,
-}));
+/**
+ * هجرات Flyway — على العقد الحقيقي للخادم (2026-09-27).
+ *
+ * كانت الصفحة تعرض 15 هجرة وهمية (V0100+) بأرقام عشوائية — الآن تقرأ
+ * GET /api/admin/system/migrations (AdminSystemOpsController) الذي يقرأ
+ * flyway_schema_history مباشرة. فشل الوصول يعني قاعدة غير مُهاجَرة
+ * ويُعرض كحالة صريحة لا كجدول مُختلق.
+ */
+
+interface MigrationRow {
+  id: string;
+  version: string;
+  description: string;
+  type: string;
+  status: 'SUCCESS' | 'FAILED';
+  checksum: string;
+  executedBy: string;
+  executedAt: string;
+  executionTime: number;
+  script?: string;
+}
+
+interface MigrationsResponse {
+  available: boolean;
+  migrations: MigrationRow[];
+  total: number;
+  failed: number;
+  currentVersion?: string;
+  reason?: string;
+}
+
+async function fetchMigrations(): Promise<MigrationsResponse> {
+  const res = await apiFetch('/api/admin/system/migrations');
+  if (!res.ok) throw new Error(`HTTP ${res.status} — /api/admin/system/migrations`);
+  return (await res.json()) as MigrationsResponse;
+}
 
 export function MigrationsPage() {
-  const { t } = useTranslation();
-  
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['system', 'migrations'],
+    queryFn: fetchMigrations,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+
+  if (isLoading) return <LoadingState label="تحميل هجرات Flyway…" />;
+  if (isError) return <ErrorState onRetry={refetch} message="تعذر قراءة سجل الهجرات من الخادم" />;
+  if (!data?.available) {
+    return (
+      <EmptyState
+        message={`سجل الهجرات غير متاح — ${data?.reason || 'القاعدة ليست مُهاجَرة بـ Flyway'}`}
+      />
+    );
+  }
+
+  const migrations = data.migrations;
+
   const columns = [
     {
       key: 'version',
       title: 'Version',
-      cell: (m: any) => <span className="font-mono font-medium text-yn-text">{m.version}</span>,
+      cell: (m: MigrationRow) => <span className="font-mono font-medium text-yn-text">{m.version}</span>,
     },
     {
       key: 'description',
       title: 'Description',
-      cell: (m: any) => <span className="text-yn-text-secondary">{m.description}</span>,
+      cell: (m: MigrationRow) => <span className="text-yn-text-secondary">{m.description}</span>,
     },
     {
       key: 'type',
       title: 'Type',
-      cell: (m: any) => <Badge variant="blue">{m.type}</Badge>,
+      cell: (m: MigrationRow) => <Badge variant="blue">{m.type}</Badge>,
     },
     {
       key: 'status',
       title: 'Status',
-      cell: (m: any) => <Badge variant={getStatusVariant(m.status)}>{m.status}</Badge>,
-    },
-    {
-      key: 'checksum',
-      title: 'Checksum',
-      cell: (m: any) => <span className="font-mono text-yn-text-secondary text-sm">{m.checksum}</span>,
+      cell: (m: MigrationRow) => (
+        <Badge variant={m.status === 'SUCCESS' ? 'green' : 'danger'}>
+          {m.status === 'SUCCESS' ? 'ناجحة' : 'فاشلة'}
+        </Badge>
+      ),
     },
     {
       key: 'executedBy',
       title: 'Executed By',
-      cell: (m: any) => <span className="text-yn-text-secondary">{m.executedBy}</span>,
-    },
-    {
-      key: 'executedAt',
-      title: 'Executed At',
-      cell: (m: any) => m.executedAt ? <span className="text-yn-text-secondary">{new Date(m.executedAt).toLocaleString()}</span> : <span className="text-yn-text-muted">—</span>,
+      cell: (m: MigrationRow) => <span className="text-yn-text-secondary">{m.executedBy || 'system'}</span>,
     },
     {
       key: 'executionTime',
       title: 'Duration',
-      cell: (m: any) => <span className="text-yn-text-secondary font-mono">{m.executionTime}ms</span>,
+      cell: (m: MigrationRow) => <span className="font-mono text-xs">{m.executionTime}ms</span>,
     },
     {
-      key: 'actions',
-      title: 'Actions',
-      cell: (m: any) => (
-        <DropdownMenu>
-          <DropdownMenu.Trigger asChild>
-            <Button variant="ghost" size="icon">
-              <MoreVertical className="w-4 h-4" />
-            </Button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end">
-            <DropdownMenu.Item>
-              <Eye className="w-4 h-4 mr-2" />
-              View SQL
-            </DropdownMenu.Item>
-            {m.status === 'PENDING' && (
-              <DropdownMenu.Item>
-                <Play className="w-4 h-4 mr-2" />
-                Execute
-              </DropdownMenu.Item>
-            )}
-          </DropdownMenu.Content>
-        </DropdownMenu>
-      ),
+      key: 'executedAt',
+      title: 'Executed At',
+      cell: (m: MigrationRow) => <span className="text-xs text-yn-text-secondary">{m.executedAt?.replace('T', ' ').slice(0, 19) || '—'}</span>,
     },
   ];
-  
+
   return (
-    <div className="yn-page space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold text-yn-text">{t('system.migrations.title')}</h1>
-          <p className="text-yn-text-secondary">{t('system.migrations.subtitle')}</p>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <GitBranch className="h-6 w-6 text-sovereign-gold" />
+            هجرات قاعدة البيانات (Flyway)
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {data.currentVersion ? `الإصدار الحالي: ${data.currentVersion}` : 'من سجل flyway_schema_history مباشرة'}
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" size="sm">
-            <Download className="w-4 h-4 mr-2" />
-            Export Report
-          </Button>
-          <Button variant="secondary" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Check for Pending
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4" />
+          تحديث
+        </Button>
       </div>
-      
-      {/* Status Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard label="Total Migrations" value={mockMigrations.length} icon={GitBranch} color="blue" />
-        <StatCard label="Applied" value={mockMigrations.filter(m => m.status === 'SUCCESS').length} icon={CheckCircle} color="green" />
-        <StatCard label="Pending" value={mockMigrations.filter(m => m.status === 'PENDING').length} icon={AlertTriangle} color="gold" />
-        <StatCard label="Failed" value={mockMigrations.filter(m => m.status === 'FAILED').length} icon={XCircle} color="danger" />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard label="إجمالي الهجرات" value={data.total} icon={GitBranch} color="blue" />
+        <StatCard label="ناجحة" value={data.total - data.failed} icon={CheckCircle} color="green" />
+        <StatCard label="فاشلة" value={data.failed} icon={XCircle} color="danger" />
       </div>
-      
-      <div className="yn-card yn-card-liquid yn-glass overflow-hidden">
-        <DataTable columns={columns} data={mockMigrations} rowKey="id" emptyMessage="No migrations found" />
-      </div>
+
+      <DataTable columns={columns} data={migrations} rowKey="id" emptyMessage="لا هجرات مسجلة" />
     </div>
   );
 }
 
 function StatCard({ label, value, icon: Icon, color }: { label: string; value: number; icon: React.ComponentType<{ className?: string }>; color: string }) {
+  const colorMap: Record<string, string> = {
+    blue: 'text-blue-500 bg-blue-500/10',
+    green: 'text-emerald-500 bg-emerald-500/10',
+    danger: 'text-red-500 bg-red-500/10',
+  };
   return (
-    <div className="yn-card yn-card-liquid yn-glass p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-yn-text-secondary">{label}</p>
-          <p className="text-2xl font-bold text-yn-text mt-1">{value}</p>
-        </div>
-        <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center', `bg-yn-${color}/15`)} >
-          <Icon className={cn('w-5 h-5', `text-yn-${color}`)} aria-hidden="true" />
-        </div>
+    <div className="rounded-xl border border-border/60 bg-card p-4 flex items-center gap-4">
+      <div className={`p-3 rounded-xl ${colorMap[color] || colorMap.blue}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div>
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="text-2xl font-bold text-foreground">{value.toLocaleString()}</p>
       </div>
     </div>
   );
 }
-
-function getStatusVariant(status: string): 'green' | 'gold' | 'blue' | 'danger' {
-  switch (status) {
-    case 'SUCCESS': return 'green';
-    case 'PENDING': return 'gold';
-    case 'FAILED': return 'danger';
-    default: return 'gold';
-  }
-}
-
-export default MigrationsPage;
